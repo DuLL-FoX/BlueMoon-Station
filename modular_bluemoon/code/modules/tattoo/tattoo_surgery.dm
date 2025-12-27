@@ -13,6 +13,11 @@
 	possible_locs = list(
 		BODY_ZONE_HEAD,
 		BODY_ZONE_CHEST,
+		BODY_ZONE_PRECISE_GROIN,
+		TATTOO_ZONE_BREASTS,
+		TATTOO_ZONE_BUTT,
+		TATTOO_ZONE_PUSSY,
+		TATTOO_ZONE_TESTICLES,
 		BODY_ZONE_L_ARM,
 		BODY_ZONE_R_ARM,
 		BODY_ZONE_L_LEG,
@@ -28,12 +33,20 @@
 	if(!.)
 		return FALSE
 
-	// Проверяем, есть ли татуировки на выбранной части тела
-	var/obj/item/bodypart/BP = target.get_bodypart(user.zone_selected)
+	// Проверка на кататоника (SSD/отключённого игрока)
+	if(!target.client && user != target)
+		return FALSE
+
+	var/target_zone = user.zone_selected
+	var/intimate_zone = zone_to_intimate_zone(target_zone)
+	var/actual_zone = intimate_zone ? BODY_ZONE_CHEST : target_zone
+
+	var/obj/item/bodypart/BP = target.get_bodypart(actual_zone)
 	if(!BP)
 		return FALSE
 
-	if(!BP.tattoo_text || BP.tattoo_text == "")
+	var/tattoo_text = get_tattoo_text_for_zone(BP, intimate_zone)
+	if(!tattoo_text || tattoo_text == "")
 		return FALSE
 
 	return TRUE
@@ -49,43 +62,62 @@
 	time = 80
 
 /datum/surgery_step/remove_tattoo/preop(mob/user, mob/living/carbon/target, target_zone, obj/item/tool, datum/surgery/surgery)
-	var/obj/item/bodypart/BP = target.get_bodypart(target_zone)
-	if(!BP || !BP.tattoo_text)
+	var/intimate_zone = zone_to_intimate_zone(target_zone)
+	var/actual_zone = intimate_zone ? BODY_ZONE_CHEST : target_zone
+
+	var/obj/item/bodypart/BP = target.get_bodypart(actual_zone)
+	if(!BP)
 		to_chat(user, span_warning("На этой части тела нет татуировок!"))
 		return -1
 
+	var/tattoo_text = get_tattoo_text_for_zone(BP, intimate_zone)
+	if(!tattoo_text)
+		to_chat(user, span_warning("На этой части тела нет татуировок!"))
+		return -1
+
+	var/zone_name = get_tattoo_zone_name(target_zone, BP)
 	display_results(
 		user,
 		target,
-		span_notice("Вы начинаете аккуратно срезать слои кожи с татуировкой на [BP.ru_name_v] [target]..."),
-		span_notice("[user] начинает аккуратно срезать кожу на [BP.ru_name_v] [target]."),
-		span_notice("[user] делает надрезы на [BP.ru_name_v] [target].")
+		span_notice("Вы начинаете аккуратно срезать слои кожи с татуировкой на [zone_name] [target]..."),
+		span_notice("[user] начинает аккуратно срезать кожу на [zone_name] [target]."),
+		span_notice("[user] делает надрезы на [zone_name] [target].")
 	)
 
 /datum/surgery_step/remove_tattoo/success(mob/user, mob/living/carbon/target, target_zone, obj/item/tool, datum/surgery/surgery)
-	var/obj/item/bodypart/BP = target.get_bodypart(target_zone)
+	var/intimate_zone = zone_to_intimate_zone(target_zone)
+	var/actual_zone = intimate_zone ? BODY_ZONE_CHEST : target_zone
+
+	var/obj/item/bodypart/BP = target.get_bodypart(actual_zone)
 	if(!BP)
 		return FALSE
 
-	// Удаляем все татуировки с этой части тела
-	BP.tattoo_text = ""
+	set_tattoo_text_for_zone(BP, intimate_zone, "")
 
+	var/zone_name = get_tattoo_zone_name(target_zone, BP)
 	display_results(
 		user,
 		target,
-		span_notice("Вы успешно удалили татуировку с [BP.ru_name_v] [target]."),
-		span_notice("[user] успешно удаляет татуировку с [BP.ru_name_v] [target]."),
-		span_notice("[user] заканчивает работу на [BP.ru_name_v] [target].")
+		span_notice("Вы успешно удалили татуировку с [zone_name] [target]."),
+		span_notice("[user] успешно удаляет татуировку с [zone_name] [target]."),
+		span_notice("[user] заканчивает работу на [zone_name] [target].")
 	)
 
-	// Небольшой урон от процедуры
 	target.apply_damage(5, BRUTE, BP)
+
+	// Немедленное сохранение
+	if(ishuman(target))
+		var/mob/living/carbon/human/H = target
+		H.save_tattoos_now()
 
 	return TRUE
 
 /datum/surgery_step/remove_tattoo/failure(mob/user, mob/living/carbon/target, target_zone, obj/item/tool, datum/surgery/surgery)
 	. = ..()
-	var/obj/item/bodypart/BP = target.get_bodypart(target_zone)
+	var/intimate_zone = zone_to_intimate_zone(target_zone)
+	var/actual_zone = intimate_zone ? BODY_ZONE_CHEST : target_zone
+
+	var/obj/item/bodypart/BP = target.get_bodypart(actual_zone)
 	if(!BP)
 		return
 
@@ -97,7 +129,6 @@
 		span_warning("[user] делает резкое движение скальпелем!")
 	)
 
-	// Урон при неудаче
 	target.apply_damage(15, BRUTE, BP)
 
 // Операция по частичному удалению татуировки (выбор конкретной)
@@ -113,6 +144,11 @@
 	possible_locs = list(
 		BODY_ZONE_HEAD,
 		BODY_ZONE_CHEST,
+		BODY_ZONE_PRECISE_GROIN,
+		TATTOO_ZONE_BREASTS,
+		TATTOO_ZONE_BUTT,
+		TATTOO_ZONE_PUSSY,
+		TATTOO_ZONE_TESTICLES,
 		BODY_ZONE_L_ARM,
 		BODY_ZONE_R_ARM,
 		BODY_ZONE_L_LEG,
@@ -128,16 +164,25 @@
 	if(!.)
 		return FALSE
 
-	var/obj/item/bodypart/BP = target.get_bodypart(user.zone_selected)
+	// Проверка на кататоника (SSD/отключённого игрока)
+	if(!target.client && user != target)
+		return FALSE
+
+	var/target_zone = user.zone_selected
+	var/intimate_zone = zone_to_intimate_zone(target_zone)
+	var/actual_zone = intimate_zone ? BODY_ZONE_CHEST : target_zone
+
+	var/obj/item/bodypart/BP = target.get_bodypart(actual_zone)
 	if(!BP)
 		return FALSE
 
 	// Проверяем, есть ли несколько татуировок
-	if(!BP.tattoo_text || BP.tattoo_text == "")
+	var/tattoo_text_to_check = get_tattoo_text_for_zone(BP, intimate_zone)
+	if(!tattoo_text_to_check || tattoo_text_to_check == "")
 		return FALSE
 
 	// Показываем эту операцию только если есть несколько татуировок
-	if(!findtext(BP.tattoo_text, ";"))
+	if(!findtext(tattoo_text_to_check, ";"))
 		return FALSE
 
 	return TRUE
@@ -152,51 +197,68 @@
 	time = 60
 
 /datum/surgery_step/remove_tattoo_selective/preop(mob/user, mob/living/carbon/target, target_zone, obj/item/tool, datum/surgery/surgery)
-	var/obj/item/bodypart/BP = target.get_bodypart(target_zone)
-	if(!BP || !BP.tattoo_text)
+	var/intimate_zone = zone_to_intimate_zone(target_zone)
+	var/actual_zone = intimate_zone ? BODY_ZONE_CHEST : target_zone
+
+	var/obj/item/bodypart/BP = target.get_bodypart(actual_zone)
+	if(!BP)
 		to_chat(user, span_warning("На этой части тела нет татуировок!"))
 		return -1
 
-	// Получаем список татуировок
-	var/list/tattoos = splittext(BP.tattoo_text, "; ")
+	var/tattoo_text_to_use = get_tattoo_text_for_zone(BP, intimate_zone)
+	if(!tattoo_text_to_use)
+		to_chat(user, span_warning("На этой части тела нет татуировок!"))
+		return -1
+
+	var/list/tattoos = splittext(tattoo_text_to_use, "; ")
 	if(!length(tattoos) || length(tattoos) < 2)
 		to_chat(user, span_warning("Недостаточно татуировок для выборочного удаления!"))
 		return -1
 
-	// Даём выбрать какую удалить
 	var/choice = input(user, "Выберите татуировку для удаления:", "Удаление татуировки") as null|anything in tattoos
 	if(!choice)
 		return -1
 
 	surgery.tattoo_to_remove = choice
 
+	var/zone_name = get_tattoo_zone_name(target_zone, BP)
 	display_results(
 		user,
 		target,
-		span_notice("Вы начинаете аккуратно удалять выбранную татуировку с [BP.ru_name_v] [target]..."),
-		span_notice("[user] начинает аккуратно работать над кожей [BP.ru_name_v] [target]."),
-		span_notice("[user] делает надрезы на [BP.ru_name_v] [target].")
+		span_notice("Вы начинаете аккуратно удалять выбранную татуировку с [zone_name] [target]..."),
+		span_notice("[user] начинает аккуратно работать над кожей [zone_name] [target]."),
+		span_notice("[user] делает надрезы на [zone_name] [target].")
 	)
 
 /datum/surgery_step/remove_tattoo_selective/success(mob/user, mob/living/carbon/target, target_zone, obj/item/tool, datum/surgery/surgery)
-	var/obj/item/bodypart/BP = target.get_bodypart(target_zone)
+	var/intimate_zone = zone_to_intimate_zone(target_zone)
+	var/actual_zone = intimate_zone ? BODY_ZONE_CHEST : target_zone
+
+	var/obj/item/bodypart/BP = target.get_bodypart(actual_zone)
 	if(!BP)
 		return FALSE
 
-	// Удаляем выбранную татуировку
-	var/list/tattoos = splittext(BP.tattoo_text, "; ")
+	var/tattoo_text = get_tattoo_text_for_zone(BP, intimate_zone)
+	var/list/tattoos = splittext(tattoo_text, "; ")
 	tattoos -= surgery.tattoo_to_remove
-	BP.tattoo_text = jointext(tattoos, "; ")
+	set_tattoo_text_for_zone(BP, intimate_zone, jointext(tattoos, "; "))
 
+	var/zone_name = get_tattoo_zone_name(target_zone, BP)
 	display_results(
 		user,
 		target,
-		span_notice("Вы успешно удалили выбранную татуировку с [BP.ru_name_v] [target]."),
-		span_notice("[user] успешно удаляет татуировку с [BP.ru_name_v] [target]."),
-		span_notice("[user] заканчивает работу на [BP.ru_name_v] [target].")
+		span_notice("Вы успешно удалили выбранную татуировку с [zone_name] [target]."),
+		span_notice("[user] успешно удаляет татуировку с [zone_name] [target]."),
+		span_notice("[user] заканчивает работу на [zone_name] [target].")
 	)
 
 	target.apply_damage(3, BRUTE, BP)
+
+	// Немедленное сохранение (защита от краша сервера)
+	if(ishuman(target))
+		var/mob/living/carbon/human/H = target
+		H.save_tattoos_now()
+
 	return TRUE
 
 // Расширение датума хирургии для хранения выбранной татуировки

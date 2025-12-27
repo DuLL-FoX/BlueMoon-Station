@@ -91,7 +91,6 @@ SUBSYSTEM_DEF(persistence)
 	SavePhotoPersistence()						//THIS IS PERSISTENCE, NOT THE LOGGING PORTION.
 	SavePaintings()
 	SaveScars()
-	SaveTattoos() // BLUEMOON ADD - сохранение татуировок
 
 /**
  * Loads persistent data relevant to the current map: Objects, etc.

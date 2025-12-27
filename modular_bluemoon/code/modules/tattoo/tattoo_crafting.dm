@@ -1,7 +1,7 @@
 // Крафт тату-машинки
 
 /datum/crafting_recipe/tattoo_gun
-	name = "Тату-машинка"
+	name = "Tattoo Gun"
 	result = /obj/item/tattoo_gun
 	time = 60
 	reqs = list(
