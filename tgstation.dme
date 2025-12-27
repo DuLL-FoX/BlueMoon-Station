@@ -39,6 +39,7 @@
 #include "code\__BLUEMOONCODE\_DEFINES\slimes.dm"
 #include "code\__BLUEMOONCODE\_DEFINES\slowdowns.dm"
 #include "code\__BLUEMOONCODE\_DEFINES\surgery.dm"
+#include "code\__BLUEMOONCODE\_DEFINES\tattoo.dm"
 #include "code\__BLUEMOONCODE\_DEFINES\time.dm"
 #include "code\__BLUEMOONCODE\_DEFINES\traits.dm"
 #include "code\__BLUEMOONCODE\_DEFINES\vote.dm"
