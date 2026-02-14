@@ -11,8 +11,6 @@
  * @license MIT
  */
 
-import { defer } from 'common/defer';
-import { perf } from 'common/perf';
 import { createAction } from 'common/redux';
 
 import { setupDrag } from './drag';
@@ -157,10 +155,13 @@ export const backendMiddleware = store => {
       suspendRenderer();
       clearInterval(suspendInterval);
       suspendInterval = undefined;
+      // Сжимаем окно в 1x1 и прячем его в угол, чтобы избежать проблем с перерисовкой
       Byond.winset(window.__windowId__, {
+        size: '1x1',
+        pos: '1,1',
         'is-visible': false,
       });
-      defer(() => focusMap());
+      setTimeout(() => focusMap());
     }
 
     if (type === 'backend/update') {
@@ -188,24 +189,7 @@ export const backendMiddleware = store => {
       resumeRenderer();
       // Setup drag
       setupDrag();
-      // We schedule this for the next tick here because resizing and unhiding
-      // during the same tick will flash with a white background.
-      defer(() => {
-        perf.mark('resume/start');
-        // Doublecheck if we are not re-suspended.
-        const { suspended } = selectBackend(store.getState());
-        if (suspended) {
-          return;
-        }
-        Byond.winset(window.__windowId__, {
-          'is-visible': true,
-        });
-        perf.mark('resume/finish');
-        if (process.env.NODE_ENV !== 'production') {
-          logger.log('visible in',
-            perf.measure('render/finish', 'resume/finish'));
-        }
-      });
+      // Видимость окна будет восстановлена в момент, когда tgui_window получит новый payload и отрисуется
     }
 
     return next(action);

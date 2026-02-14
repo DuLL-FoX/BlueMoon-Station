@@ -11,6 +11,7 @@
 	var/is_browser = FALSE
 	var/status = TGUI_WINDOW_CLOSED
 	var/locked = FALSE
+	var/visible = FALSE
 	var/datum/tgui/locked_by
 	var/datum/subscriber_object
 	var/subscriber_delegate
@@ -245,6 +246,7 @@
 			log_tgui(client, "[id]/close: suspending")
 		#endif
 		status = TGUI_WINDOW_READY
+		visible = FALSE
 		send_message("suspend")
 		// You would think that BYOND would null out client or make it stop passing istypes or, y'know, ANYTHING during
 		// logout, but nope! It appears to be perfectly valid to call winset by every means we can measure in Logout,
@@ -255,6 +257,7 @@
 		return
 	log_tgui(client, "[id]/close")
 	release_lock()
+	visible = FALSE
 	status = TGUI_WINDOW_CLOSED
 	message_queue = null
 	// Do not close the window to give user some time
@@ -381,6 +384,8 @@
 	switch(type)
 		if("ping")
 			send_message("pingReply", payload)
+		if("visible")
+			visible = TRUE
 		if("suspend")
 			close(can_be_suspended = TRUE)
 		if("close")
