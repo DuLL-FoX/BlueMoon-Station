@@ -34,6 +34,7 @@ GLOBAL_PROTECT(admin_verbs_admin)
 	/client/proc/game_panel,			/*game panel, allows to change game-mode etc*/
 	/client/proc/mail_panel,			/*BLUEMOON ADD - панель управления почтой*/
 	/client/proc/show_admin_ticket_stats, /*BLUEMOON ADD - панель статистики тикетов*/
+	/client/proc/open_server_profiler,	/*BLUEMOON ADD - панель профилирования сервера*/
 	/client/proc/check_ai_laws,			/*shows AI and borg laws*/
 	// /client/proc/ghost_pool_protection,	/*opens a menu for toggling ghost roles*/
 	/datum/admins/proc/toggleooc,		/*toggles ooc on/off for everyone*/

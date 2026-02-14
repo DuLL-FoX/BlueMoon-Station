@@ -55,6 +55,14 @@ GLOBAL_PROTECT(world_econ_log)
 GLOBAL_VAR(perf_log)
 GLOBAL_PROTECT(perf_log)
 
+GLOBAL_VAR(profiler_spike_log)
+GLOBAL_PROTECT(profiler_spike_log)
+GLOBAL_VAR(profiler_summary_log)
+GLOBAL_PROTECT(profiler_summary_log)
+
+/// Global cache for proc name -> category mapping (proc paths never change during a round)
+GLOBAL_LIST_EMPTY(profiler_category_cache)
+
 // GLOBAL_VAR(demo_log)
 // GLOBAL_PROTECT(demo_log)
 
