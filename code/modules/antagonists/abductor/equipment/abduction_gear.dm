@@ -788,8 +788,8 @@
 	frame = /obj/structure/table_frame/abductor
 
 /obj/structure/table/optable/abductor
-	name = "Alien Operating Table"
-	desc = "Used for alien medical procedures. The surface is covered in tiny spines."
+	name = "Инопланетный операционный стол"
+	desc = "Используется для инопланетных медицинских процедур. Поверхность покрыта мелкими иглами, вводящими обезболивающее и стабилизатор кровообращения. Как и на обычном столе, сбоку можно закрепить маску и баллон с анестезией."
 	frame = /obj/structure/table_frame/abductor
 	buildstack = /obj/item/stack/sheet/mineral/silver
 	framestack = /obj/item/stack/sheet/mineral/abductor
@@ -799,13 +799,29 @@
 	icon_state = "bed"
 	can_buckle = 1
 
-	var/static/list/injected_reagents = list(/datum/reagent/medicine/corazone)
+	var/static/list/injected_reagents = list(/datum/reagent/medicine/corazone, /datum/reagent/medicine/morphine)
+
+/obj/structure/table/optable/abductor/attackby(obj/item/I, mob/living/user, attackchain_flags, damage_multiplier)
+	if(user.a_intent == INTENT_HELP)
+		if(!tank && istype(I, /obj/item/tank/internals))
+			if(user.transferItemToLoc(I, src))
+				user.visible_message(span_notice("[user] закрепляет [I] сбоку инопланетного стола."), span_notice("Вы закрепляете [I] сбоку стола."))
+				tank = I
+				return
+		if(!mask && istype(I, /obj/item/clothing/mask))
+			var/obj/item/clothing/mask/potential_mask = I
+			if(potential_mask.clothing_flags & ALLOWINTERNALS)
+				if(user.transferItemToLoc(I, src))
+					user.visible_message(span_notice("[user] вешает [I] на стойку инопланетного стола."), span_notice("Вы вешаете [I] на стойку для маски."))
+					mask = I
+					return
+	. = ..()
 
 /obj/structure/table/optable/abductor/Crossed(atom/movable/AM)
 	. = ..()
 	if(iscarbon(AM))
 		START_PROCESSING(SSobj, src)
-		to_chat(AM, "<span class='danger'>You feel a series of tiny pricks!</span>")
+		to_chat(AM, span_danger("Вы чувствуете серию лёгких уколов — стол вводит обезболивающее."))
 
 /obj/structure/table/optable/abductor/process()
 	. = PROCESS_KILL
