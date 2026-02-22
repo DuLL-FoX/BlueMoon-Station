@@ -3748,6 +3748,7 @@
 #include "code\modules\reagents\reagent_containers\sleeper_buffer.dm"
 #include "code\modules\reagents\reagent_containers\spray.dm"
 #include "code\modules\reagents\reagent_containers\syringes.dm"
+#include "code\modules\reagents\reagent_containers\urethral_tube.dm"
 #include "code\modules\recycling\conveyor2.dm"
 #include "code\modules\recycling\conveyor_sorter.dm"
 #include "code\modules\recycling\sortingmachinery.dm"
