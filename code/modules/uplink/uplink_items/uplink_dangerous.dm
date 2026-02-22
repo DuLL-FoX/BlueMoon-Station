@@ -183,13 +183,14 @@
 	purchasable_from = UPLINK_SYNDICATE
 
 /datum/uplink_item/dangerous/shield
-	name = "Ballistic Shield"
-	desc = "An incredibly useful personal shield projector, capable of reflecting ballistic projectiles and defending \
-			against other attacks. Pair with an Plasma Sword for a killer combination."
+	name = "Energy Shield"
+	desc = "Устаревшая на несколько поколений модель энергетического щита; компенсируется своей надёжностью и универсальностью. \
+	Использует механические ограничители силового поля и эргономика немного страдает, но всё ещё является желанным элементом экипировки. \
+	В сочетании с плазменным мечом - убийственная комбинация."
 	item = /obj/item/shield/inteq_energy
 	cost = 16
 	surplus = 20
-	purchasable_from = UPLINK_NUKE_OPS
+	purchasable_from = (UPLINK_TRAITORS | UPLINK_NUKE_OPS)
 
 /datum/uplink_item/dangerous/rapier
 	name = "Rapier"
