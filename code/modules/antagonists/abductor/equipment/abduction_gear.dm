@@ -801,22 +801,6 @@
 
 	var/static/list/injected_reagents = list(/datum/reagent/medicine/corazone, /datum/reagent/medicine/morphine)
 
-/obj/structure/table/optable/abductor/attackby(obj/item/I, mob/living/user, attackchain_flags, damage_multiplier)
-	if(user.a_intent == INTENT_HELP)
-		if(!tank && istype(I, /obj/item/tank/internals))
-			if(user.transferItemToLoc(I, src))
-				user.visible_message(span_notice("[user] закрепляет [I] сбоку инопланетного стола."), span_notice("Вы закрепляете [I] сбоку стола."))
-				tank = I
-				return
-		if(!mask && istype(I, /obj/item/clothing/mask))
-			var/obj/item/clothing/mask/potential_mask = I
-			if(potential_mask.clothing_flags & ALLOWINTERNALS)
-				if(user.transferItemToLoc(I, src))
-					user.visible_message(span_notice("[user] вешает [I] на стойку инопланетного стола."), span_notice("Вы вешаете [I] на стойку для маски."))
-					mask = I
-					return
-	. = ..()
-
 /obj/structure/table/optable/abductor/Crossed(atom/movable/AM)
 	. = ..()
 	if(iscarbon(AM))
