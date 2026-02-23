@@ -265,7 +265,7 @@
 	righthand_file = 'modular_bluemoon/fluffs/code/modules/catcrin/icons/mob/inhands/mark45_righthand.dmi'
 	icon_state = "hardsuit-sec_mark46"
 	item_state = "hardsuit-sec_mark46"
-	tail_suit_worn_overlay = 'modular_bluemoon/icons/mob/clothing/tails_digi.dmi'
+	tail_suit_worn_overlay = 'modular_bluemoon/fluffs/icons/mob/clothing/tails_digi.dmi'
 	tail_state = "sec_mark46_catcrin"
 	hardsuit_type = "sec_mark46"
 	helmettype = /obj/item/clothing/head/helmet/space/hardsuit/security/mark46_sec
