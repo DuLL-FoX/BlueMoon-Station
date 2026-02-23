@@ -1175,6 +1175,11 @@ GLOBAL_LIST_INIT(blacklisted_builds, list(
 /client/proc/clear_character_previews()
 	for(var/index in char_render_holders)
 		var/atom/movable/screen/S = char_render_holders[index]
+		// 516 migration: clear appearance data before removal to release BYOND's
+		// internal appearance cache references, preventing GC failure timeouts.
+		S.overlays.Cut()
+		S.underlays.Cut()
+		S.icon = null
 		screen -= S
 		qdel(S)
 	char_render_holders = null

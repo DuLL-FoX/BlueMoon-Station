@@ -181,11 +181,10 @@ const CharacterProfileImageElement = (props, context) => {
 };
 
 const CharacterModelImageElement = (props, context) => {
-  const { act, data } = useBackend<CharacterProfileContext>(context);
+  const { act, data, config } = useBackend<CharacterProfileContext>(context);
 
-    const { config } = useBackend(context);
   if(config.status < 2)
-    { return; }
+    { return null; }
   return (
     <Section title="Модель персонажа" pb="12" textAlign="center">
       <Box mb={1}>

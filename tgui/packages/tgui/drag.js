@@ -68,7 +68,9 @@ export const getWindowSize = () => {
   ];
 };
 
-const SIZE_APPLY_TIMEOUT_MS = 250;
+// 516 migration: BYOND IPC (winget + winset→resize) can exceed 250ms under load.
+// Increase to 1500ms to prevent premature reveal at wrong window size.
+const SIZE_APPLY_TIMEOUT_MS = 1500;
 
 const isWindowSizeApplied = targetSize => {
   const pr = window.devicePixelRatio ?? 1;

@@ -171,7 +171,9 @@ export const backendReducer = (state = initialState, action) => {
 };
 
 export const backendMiddleware = store => {
-  const INITIAL_VISIBILITY_GATE_TIMEOUT = 500;
+  // 516 migration: increased from 500ms; allows SIZE_APPLY_TIMEOUT_MS to complete
+  // before the fallback reveal fires, preventing fullscreen flash on slow servers.
+  const INITIAL_VISIBILITY_GATE_TIMEOUT = 2000;
   let fancyState;
   let suspendInterval;
 

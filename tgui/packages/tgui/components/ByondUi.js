@@ -9,6 +9,7 @@ import { debounce } from 'common/timer';
 import { Component, createRef } from 'inferno';
 
 import { createLogger } from '../logging';
+import { sendMessage } from '../backend';
 import { computeBoxProps } from './Box';
 
 const logger = createLogger('ByondUi');
@@ -28,7 +29,7 @@ const createByondUiElement = (elementId, phonehome = true) => {
     render: params => {
       logger.log(`rendering '${id}'`);
       if (phonehome) {
-        Byond.sendMessage('renderByondUi', { renderByondUi: id });
+        sendMessage({ type: 'renderByondUi', payload: { renderByondUi: id } });
       }
       byondUiStack[index] = id;
       Byond.winset(id, params);
@@ -36,7 +37,7 @@ const createByondUiElement = (elementId, phonehome = true) => {
     unmount: () => {
       logger.log(`unmounting '${id}'`);
       if (phonehome) {
-        Byond.sendMessage('unmountByondUi', { renderByondUi: id });
+        sendMessage({ type: 'unmountByondUi', payload: { renderByondUi: id } });
       }
       byondUiStack[index] = null;
       Byond.winset(id, {
