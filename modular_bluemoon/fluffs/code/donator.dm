@@ -2106,6 +2106,12 @@
 	path = /obj/item/storage/backpack/case/command/freak
 	ckeywhitelist = list("freakowo")
 
+/datum/gear/donator/bm/fire_blossom
+	name = "Fire blossom"
+	slot = ITEM_SLOT_HEAD
+	path = /obj/item/clothing/head/donator/bm/fire_blossom
+	ckeywhitelist = list("sheya, dagran")
+
 /datum/gear/donator/bm/desert_nanosuit
 	name = "Desert Nanosuit"
 	slot = ITEM_SLOT_UNDERWEAR
