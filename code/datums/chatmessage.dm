@@ -191,7 +191,16 @@
 	approx_lines = max(1, mheight / CHAT_MESSAGE_APPROX_LHEIGHT)
 
 	// Translate any existing messages upwards, apply exponential decay factors to timers
-	message_loc = isturf(target) ? target : get_atom_on_turf(target)
+	if(isnull(target) || QDELETED(target))
+		qdel(src)
+		return
+	if(isturf(target))
+		message_loc = target
+	else if(ismovable(target))
+		message_loc = get_atom_on_turf(target)
+	else
+		qdel(src)
+		return
 	// BLUEMOON EDIT START - sanity check
 	// Я БЕЗ ПОНЯТИЯ, как owned_by исчезает в процессе вызова прока и проходит проверку на строке 104
 	if(isnull(owned_by) || QDELETED(owned_by))
@@ -269,7 +278,7 @@
 		var/atom/movable/virtualspeaker/v = speaker
 		speaker = v.source
 		spans |= "virtual-speaker"
-	if(QDELETED(speaker))
+	if(isnull(speaker) || QDELETED(speaker))
 		return
 
 	// Ignore virtual speaker (most often radio messages) from ourself

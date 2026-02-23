@@ -43,6 +43,8 @@
 	var/datum/tgui/parent_ui
 	/// Children of this UI
 	var/list/children = list()
+	/// The id of any ByondUi elements that we have opened
+	var/list/open_byondui_elements
 
 /**
  * public
@@ -144,11 +146,30 @@
 		window.close(can_be_suspended, logout)
 		src_object.ui_close(user)
 		SStgui.on_close(src)
+		if(user.client)
+			terminate_byondui_elements()
 	state = null
 	if(parent_ui && parent_ui != 500)
 		parent_ui.children -= src
 	parent_ui = null
 	qdel(src)
+
+/**
+ * public
+ *
+ * Closes all ByondUI elements, left dangling by a forceful TGUI exit,
+ * such as via Alt+F4, closing in non-fancy mode, or terminating the process
+ */
+/datum/tgui/proc/terminate_byondui_elements()
+	set waitfor = FALSE
+
+	var/client/owner = user?.client
+	if(!owner || !LAZYLEN(open_byondui_elements))
+		return
+
+	for(var/byondui_element in open_byondui_elements)
+		winset(owner, byondui_element, list("parent" = ""))
+	open_byondui_elements = null
 
 /**
  * public
@@ -351,6 +372,18 @@
 			LAZYINITLIST(src_object.tgui_shared_states)
 			src_object.tgui_shared_states[href_list["key"]] = href_list["value"]
 			SStgui.update_uis(src_object)
+		if("renderByondUi")
+			var/byond_ui_id = payload ? payload["renderByondUi"] : null
+			if(!byond_ui_id || LAZYLEN(open_byondui_elements) >= TGUI_MANAGED_BYONDUI_LIMIT)
+				return
+
+			LAZYOR(open_byondui_elements, byond_ui_id)
+		if("unmountByondUi")
+			var/byond_ui_id = payload ? payload["renderByondUi"] : null
+			if(!byond_ui_id)
+				return
+
+			LAZYREMOVE(open_byondui_elements, byond_ui_id)
 		if("fallback")
 			#ifdef TGUI_DEBUGGING
 			log_tgui(user, "Fallback Triggered: [href_list["payload"]], Window: [window.id], Source: [src_object]")

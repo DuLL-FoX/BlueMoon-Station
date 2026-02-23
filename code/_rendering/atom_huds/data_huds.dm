@@ -172,6 +172,9 @@
 //called when a living mob changes health
 /mob/living/proc/med_hud_set_health()
 	var/image/holder = hud_list[HEALTH_HUD]
+	if(!holder)
+		med_hud_set_radstatus()
+		return
 	holder.icon_state = "hud[RoundHealth(src)]"
 	var/icon/I = icon(icon, icon_state, dir)
 	holder.pixel_y = I.Height() - world.icon_size
@@ -184,6 +187,8 @@
 //called when a carbon changes stat, virus or XENO_HOST
 /mob/living/proc/med_hud_set_status()
 	var/image/holder = hud_list[STATUS_HUD]
+	if(!holder)
+		return
 	var/icon/I = icon(icon, icon_state, dir)
 	holder.pixel_y = I.Height() - world.icon_size
 	if(stat == DEAD || (HAS_TRAIT(src, TRAIT_FAKEDEATH)))
@@ -193,6 +198,8 @@
 
 /mob/living/carbon/med_hud_set_status()
 	var/image/holder = hud_list[STATUS_HUD]
+	if(!holder)
+		return
 	var/icon/I = icon(icon, icon_state, dir)
 	var/virus_threat = check_virus()
 	holder.pixel_y = I.Height() - world.icon_size
@@ -233,6 +240,8 @@
 
 /mob/living/proc/med_hud_set_radstatus()
 	var/image/radholder = hud_list[RAD_HUD]
+	if(!radholder)
+		return
 	var/icon/I = icon(icon, icon_state, dir)
 	radholder.pixel_y = I.Height() - world.icon_size
 	var/mob/living/M = src
