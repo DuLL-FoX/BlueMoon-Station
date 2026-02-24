@@ -114,7 +114,7 @@
 	name = "Kukri Kit"
 	slot = ITEM_SLOT_BACKPACK
 	path = /obj/item/modkit/kukri_kit
-	ckeywhitelist = list("hateredsoul", "ggishka", "arion1234", "swgitty", "sw00ty", "kingdeaths", "sierraiv", "ordinarylife", "milidead", "blatoff")
+	ckeywhitelist = list("hateredsoul", "ggishka", "arion1234", "swgitty", "sw00ty", "kingdeaths", "sierraiv", "ordinarylife", "milidead", "blatoff", "angelnedemon")
 
 /datum/gear/donator/bm/Advanced_Tracksuit
 	name = "Advanced Tracksuit"
@@ -2117,3 +2117,15 @@
 	slot = ITEM_SLOT_UNDERWEAR
 	path = /obj/item/clothing/underwear/briefs/nano_suit
 	ckeywhitelist = list("lindaastereih", "kingdeaths", "heathkit1")
+
+/datum/gear/donator/bm/bear_patch
+	name = "BEAR Patch"
+	slot = ITEM_SLOT_BACKPACK
+	path = /obj/item/clothing/accessory/bear_patch
+	ckeywhitelist = list("hihitect", "hateredsoul", "hellsinggc", "silyamg", "dimofon")
+
+/datum/gear/donator/bm/usec_patch
+	name = "USEC Patch"
+	slot = ITEM_SLOT_BACKPACK
+	path = /obj/item/clothing/accessory/usec_patch
+	ckeywhitelist = list("hihitect", "hateredsoul", "hellsinggc", "silyamg", "dimofon")
