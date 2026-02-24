@@ -1,5 +1,8 @@
 // .50 (Sniper)
 
+#define SNIPER_HEAD_GIB_CLOSE_RANGE 2
+#define SNIPER_HEAD_GIB_CHANCE 50
+
 /obj/item/projectile/bullet/p50
 	name =".50 bullet"
 	pixels_per_second = TILES_TO_PIXELS(25)
@@ -16,7 +19,14 @@
 	if(isobj(target) && (blocked != 100) && breakthings)
 		var/obj/O = target
 		O.take_damage(80, BRUTE, BULLET, FALSE)
-	return ..()
+	. = ..()
+	if(blocked >= 100)
+		return .
+	if(iscarbon(target))
+		var/mob/living/carbon/C = target
+		if(def_zone == BODY_ZONE_HEAD && starting && get_dist(starting, get_turf(C)) <= SNIPER_HEAD_GIB_CLOSE_RANGE && prob(SNIPER_HEAD_GIB_CHANCE))
+			C.gib_head()
+	return .
 
 /obj/item/projectile/bullet/p50/soporific
 	name =".50 soporific bullet"
