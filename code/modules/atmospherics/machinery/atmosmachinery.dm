@@ -383,4 +383,4 @@
 	return TRUE
 
 /obj/machinery/atmospherics/proc/update_layer()
-	layer = initial(layer) + (piping_layer - PIPING_LAYER_DEFAULT) * PIPING_LAYER_LCHANGE
+	layer = (level == PIPE_VISIBLE_LEVEL ? GAS_PIPE_VISIBLE_LAYER : GAS_PIPE_HIDDEN_LAYER) + (piping_layer - PIPING_LAYER_DEFAULT) * PIPING_LAYER_LCHANGE
