@@ -77,7 +77,7 @@
 	return recipe_result
 
 /**
- * Signal proc for [COMSIG_ATOM_EXAMINE].
+ * Signal proc for [COMSIG_PARENT_EXAMINE].
  * Lets examiners know we can be microwaved if we're not the default mess type
  */
 /datum/element/microwavable/proc/on_examine(atom/source, mob/user, list/examine_list)

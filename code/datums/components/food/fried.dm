@@ -105,3 +105,12 @@ GLOBAL_LIST_INIT(frying_bad_chems, list(
 		//restore the name, the colour should wash off itself, and then remove the component
 		restore_name()
 		RemoveComponent()
+
+/atom/proc/fry(cook_time = 30) //you can truly fry anything
+	//don't fry reagent containers that aren't food items, indestructable items, or items that are already fried
+	if(isitem(src))
+		var/obj/item/fried_item = src
+		if(fried_item.resistance_flags & INDESTRUCTIBLE)
+			return
+	if(!GetComponent(/datum/component/fried) && (!reagents || isfood(src) || ismob(src)))
+		AddComponent(/datum/component/fried, frying_power = cook_time)

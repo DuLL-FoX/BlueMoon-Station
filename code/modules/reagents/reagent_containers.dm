@@ -58,17 +58,19 @@
 		reagents.add_reagent_list(list_reagents)
 
 /obj/item/reagent_containers/attack_self(mob/user)
-	if(possible_transfer_amounts.len)
-		var/i=0
-		for(var/A in possible_transfer_amounts)
-			i++
-			if(A == amount_per_transfer_from_this)
-				if(i<possible_transfer_amounts.len)
-					amount_per_transfer_from_this = possible_transfer_amounts[i+1]
-				else
-					amount_per_transfer_from_this = possible_transfer_amounts[1]
-				balloon_alert(user, "Transferring [amount_per_transfer_from_this]u")
-				return
+	if(!possible_transfer_amounts.len)
+		return ..()
+
+	var/i=0
+	for(var/A in possible_transfer_amounts)
+		i++
+		if(A == amount_per_transfer_from_this)
+			if(i<possible_transfer_amounts.len)
+				amount_per_transfer_from_this = possible_transfer_amounts[i+1]
+			else
+				amount_per_transfer_from_this = possible_transfer_amounts[1]
+			balloon_alert(user, "Transferring [amount_per_transfer_from_this]u")
+			return
 
 /obj/item/reagent_containers/attack(mob/living/M, mob/living/user, attackchain_flags = NONE, damage_multiplier = 1)
 	if(user.a_intent == INTENT_HARM)

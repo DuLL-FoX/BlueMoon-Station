@@ -937,8 +937,14 @@ GLOBAL_VAR_INIT(embedpocalypse, FALSE) // if true, all items will be able to emb
  //Called BEFORE the object is ground up - use this to change grind results based on conditions
  //Use "return -1" to prevent the grinding from occurring
 /obj/item/proc/on_grind()
+	SHOULD_CALL_PARENT(TRUE)
+
+	return SEND_SIGNAL(src, COMSIG_ITEM_ON_GRIND)
 
 /obj/item/proc/on_juice()
+	SHOULD_CALL_PARENT(TRUE)
+
+	return SEND_SIGNAL(src, COMSIG_ITEM_ON_JUICE)
 
 /obj/item/proc/set_force_string()
 	switch(force)
