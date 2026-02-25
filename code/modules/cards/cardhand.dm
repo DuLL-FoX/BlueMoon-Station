@@ -45,6 +45,8 @@
 	var/obj/item/toy/cards/singlecard/S = draw(user, choice)
 	S.pickup(cardUser)
 	cardUser.put_in_hands(S)
+	if(cards_flipped)
+		S.Flip()
 	cardUser.visible_message("[cardUser] draws a card from [cardUser.ru_ego()] hand.", "You take the [S.cardname] from your hand.")
 	interact(cardUser)
 

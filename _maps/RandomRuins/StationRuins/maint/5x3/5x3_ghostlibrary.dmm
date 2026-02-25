@@ -45,8 +45,7 @@
 "q" = (
 /obj/structure/table/wood,
 /obj/effect/decal/cleanable/dirt/dust,
-/obj/item/paper{
-	icon_state = "paper_onfire";
+/obj/item/paper/always_on_fire{
 	name = "Burning Note";
 	default_raw_text = "I sign here with my last breath to sell my soul to curse you all..."
 	},

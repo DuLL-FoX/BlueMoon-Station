@@ -869,3 +869,14 @@
 
 /obj/item/paper/crumpled/muddy
 	icon_state = "scrap_mud"
+
+/obj/item/paper/always_on_fire
+	icon_state = "paper_onfire"
+	resistance_flags = LAVA_PROOF | FIRE_PROOF | ACID_PROOF
+
+/obj/item/paper/always_on_fire/ComponentInitialize()
+	. = ..()
+	AddElement(/datum/element/update_icon_blocker)
+
+/obj/item/paper/always_on_fire/make_plane(mob/living/user, obj/item/I, obj/item/paperplane/plane_type)
+	. = ..(user, I, /obj/item/paperplane/always_on_fire)
