@@ -15,6 +15,7 @@
 	var/buildstackamount = 1
 	var/item_chair = /obj/item/chair // if null it can't be picked up
 	var/bolts = TRUE
+	var/lone_standing = TRUE // FALSE for sofa and pews. Used in handle_layer()
 
 /obj/structure/chair/examine(mob/user)
 	. = ..()
@@ -133,11 +134,27 @@
 			var/mob/living/buckled_mob = m
 			buckled_mob.setDir(direction)
 
-/obj/structure/chair/proc/handle_layer()
-	if(has_buckled_mobs() && dir == NORTH)
+/obj/structure/chair/proc/handle_layer(activate_adjacent = TRUE)
+	if(dir != NORTH)
+		layer = OBJ_LAYER
+
+	else if((has_buckled_mobs()))
+		layer = ABOVE_MOB_LAYER
+	else if(check_adjacent())
 		layer = ABOVE_MOB_LAYER
 	else
 		layer = OBJ_LAYER
+
+	if(activate_adjacent && !lone_standing)
+		for(var/obj/structure/chair/chair in orange("3x1", src))
+			if(chair.lone_standing || chair.dir != NORTH)
+				continue
+			chair.handle_layer(FALSE)
+
+/obj/structure/chair/proc/check_adjacent()
+	for(var/obj/structure/chair/chair in orange("3x1", src))
+		if(!lone_standing && chair.dir == NORTH && chair.has_buckled_mobs())
+			return TRUE
 
 /obj/structure/chair/post_buckle_mob(mob/living/M)
 	. = ..()
