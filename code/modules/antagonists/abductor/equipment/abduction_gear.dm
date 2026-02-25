@@ -777,7 +777,7 @@
 
 /obj/structure/table/abductor
 	name = "alien table"
-	desc = "Advanced flat surface technology at work!"
+	desc = "Стол из инопланетного сплава. Плоская рабочая поверхность с характерным фиолетовым отливом."
 	icon = 'icons/obj/smooth_structures/alien_table.dmi'
 	icon_state = "alien_table"
 	buildstack = /obj/item/stack/sheet/mineral/abductor
