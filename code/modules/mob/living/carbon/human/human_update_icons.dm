@@ -59,8 +59,6 @@ There are several things that need to be remembered:
 
 //used when putting/removing clothes that hide certain mutant body parts to just update those and not update the whole body.
 /mob/living/carbon/human/proc/update_mutant_bodyparts(block_recursive_calls = FALSE)
-	if(block_mutant_updates)
-		return
 	if(!HAS_TRAIT(src, TRAIT_HUMAN_NO_RENDER))
 		dna.species.handle_mutant_bodyparts(src, null, block_recursive_calls)
 
@@ -80,7 +78,6 @@ There are several things that need to be remembered:
 /mob/living/carbon/human/regenerate_icons(block_recursive_calls = FALSE)
 	if(!HAS_TRAIT(src, TRAIT_HUMAN_NO_RENDER))
 		if(!..())
-			block_mutant_updates = TRUE // suppress redundant handle_mutant_bodyparts calls
 			icon_render_key = null //invalidate bodyparts cache
 			update_body(TRUE, block_recursive_calls)
 			update_hair()
@@ -112,9 +109,6 @@ There are several things that need to be remembered:
 			update_damage_overlays()
 			//antagonism
 			update_antag_overlays()
-			// single final mutant bodyparts update instead of 8 redundant calls above
-			block_mutant_updates = FALSE
-			update_mutant_bodyparts(block_recursive_calls)
 
 /* --------------------------------------- */
 //vvvvvv UPDATE_INV PROCS vvvvvv

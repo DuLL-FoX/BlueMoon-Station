@@ -947,8 +947,7 @@ GLOBAL_LIST_EMPTY(roundstart_race_names)
 		H.overlays_standing[BODY_LAYER] = standing
 
 	H.apply_overlay(BODY_LAYER)
-	if(!H.block_mutant_updates)
-		handle_mutant_bodyparts(H, null, block_recursive_calls)
+	handle_mutant_bodyparts(H, null, block_recursive_calls)
 
 /datum/species/proc/handle_mutant_bodyparts(mob/living/carbon/human/H, forced_colour, block_recursive_calls = FALSE)
 	var/list/bodyparts_to_add = mutant_bodyparts.Copy()

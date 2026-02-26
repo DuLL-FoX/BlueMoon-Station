@@ -422,13 +422,11 @@
 			if(!can_modify_occupant() || !(scrambleready < world.time))
 				return
 
-			var/mob/living/carbon/occupant = scanner_occupant
-			occupant.dna.remove_all_mutations(list(MUT_NORMAL, MUT_EXTRA))
-			occupant.dna.generate_dna_blocks()
+			scanner_occupant.dna.remove_all_mutations(list(MUT_NORMAL, MUT_EXTRA))
+			scanner_occupant.dna.generate_dna_blocks()
 			scrambleready = world.time + SCRAMBLE_TIMEOUT
 			to_chat(usr,"<span class='notice'>ДНК-цепи перемешаны.</span>")
-			if(!QDELETED(occupant))
-				occupant.radiation += RADIATION_STRENGTH_MULTIPLIER*50/(connected_scanner.damage_coeff ** 2)
+			scanner_occupant.radiation += RADIATION_STRENGTH_MULTIPLIER*50/(connected_scanner.damage_coeff ** 2)
 			return
 
 		// Check whether a specific mutation is eligible for discovery within the

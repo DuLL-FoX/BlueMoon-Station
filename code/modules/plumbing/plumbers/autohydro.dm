@@ -23,7 +23,15 @@
 		update_icon()
 		name = initial(name)
 		desc = initial(desc)
-		return
 	if(harvest)
 		myseed.harvest_userless()
+		harvest = 0
+		lastproduce = age
+		if(!myseed.get_gene(/datum/plant_gene/trait/repeated_harvest))
+			qdel(myseed)
+			myseed = null
+			dead = 0
+			name = initial(name)
+			desc = initial(desc)
+		update_icon()
 	..()
