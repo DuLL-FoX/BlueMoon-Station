@@ -860,6 +860,24 @@
 				return
 	add_fingerprint(user)
 
+	// Разболтировочный ключ — в начале, чтобы не перехватывали другие обработчики
+	if(istype(C, /obj/item/wrench/bolter))
+		if(!locked)
+			return ..()
+		if(!panel_open)
+			to_chat(user, "<span class='warning'>You need to open the maintenance panel first!</span>")
+			return
+		if(security_level != AIRLOCK_SECURITY_NONE)
+			to_chat(user, "<span class='warning'>The airlock's reinforcement prevents access to the bolt mechanism!</span>")
+			return
+		to_chat(user, "<span class='notice'>You start raising the door bolts with [C]...</span>")
+		if(C.use_tool(src, user, 50, volume = 50))
+			if(!panel_open || !locked)
+				return
+			unbolt()
+			user.visible_message("<span class='notice'>[user] raises \the [src]'s bolts with [C].</span>", "<span class='notice'>You raise the door bolts.</span>")
+		return
+
 	if(panel_open)
 		switch(security_level)
 			if(AIRLOCK_SECURITY_NONE)
