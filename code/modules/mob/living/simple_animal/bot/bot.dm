@@ -492,11 +492,10 @@ Pass the desired type path itself, declaring a temporary var beforehand is not r
 
 /mob/living/simple_animal/bot/proc/add_to_ignore(subject)
 	if(ignore_list.len < 50) //This will help keep track of them, so the bot is always trying to reach a blocked spot.
-		ignore_list[REF(subject)] = TRUE
+		ignore_list += REF(subject)
 	else  //If the list is full, insert newest, delete oldest.
-		var/oldest = ignore_list[1]
-		ignore_list -= oldest
-		ignore_list[REF(subject)] = TRUE
+		ignore_list.Cut(1,2)
+		ignore_list += REF(subject)
 
 /*
 Movement proc for stepping a bot through a path generated through A-star.

@@ -215,13 +215,9 @@ export const backendMiddleware = store => {
       suspendRenderer();
       clearInterval(suspendInterval);
       suspendInterval = undefined;
-      const hideCmd = { 'is-visible': false };
-      Byond.winset(window.__windowId__, hideCmd);
-      // Retry: location.href transport can lose messages in WebView2.
-      // The winset is idempotent, so a duplicate is harmless.
-      setTimeout(() => {
-        Byond.winset(window.__windowId__, hideCmd);
-      }, 200);
+      Byond.winset(window.__windowId__, {
+        'is-visible': false,
+      });
       defer(() => focusMap());
     }
 

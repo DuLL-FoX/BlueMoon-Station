@@ -98,11 +98,6 @@
 /obj/machinery/computer/process(delta_time)
 	. = is_operational()
 
-	if(!length(typing_users))
-		if(typing)
-			typing = FALSE
-			soundloop_press.stop()
-		return
 	check_typing()
 	if(typing)
 		soundloop_press.start()

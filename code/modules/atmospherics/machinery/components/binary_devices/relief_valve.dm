@@ -30,7 +30,7 @@
 		setDir(EAST)
 	cut_overlays()
 
-	if(!nodes[1] || !opened || !is_operational)
+	if(!nodes[1] || !opened || !is_operational())
 		icon_state = "relief_valve-t"
 		return
 
@@ -48,7 +48,9 @@
 	update_icon_nopipes()
 
 /obj/machinery/atmospherics/components/binary/relief_valve/process_atmos()
-	if(!is_operational)
+	..()
+
+	if(!is_operational())
 		return
 
 	var/datum/gas_mixture/air_one = airs[1]

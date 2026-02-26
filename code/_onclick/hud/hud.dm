@@ -217,10 +217,6 @@ GLOBAL_LIST_INIT(available_ui_styles, list(
 	if(!screenmob.client)
 		return FALSE
 
-	// Restore screen_loc for persistent HUD objects that were saved
-	// during client disconnect cleanup (see /client/Destroy).
-	restore_saved_screen_locs()
-
 	screenmob.client.clear_screen()
 	screenmob.client.update_clickcatcher()
 
@@ -306,30 +302,6 @@ GLOBAL_LIST_INIT(available_ui_styles, list(
 	screenmob.reload_rendering()
 
 	return TRUE
-
-/// Restores screen_loc values saved during client disconnect cleanup.
-/// Called at the start of show_hud() to ensure persistent HUD objects
-/// have valid positions before being re-added to the client screen.
-/datum/hud/proc/restore_saved_screen_locs()
-	var/restored = FALSE
-	for(var/atom/movable/screen/S as anything in static_inventory + toggleable_inventory + extra_inventory + hotkeybuttons + infodisplay + screenoverlays)
-		if(S._saved_screen_loc)
-			S.screen_loc = S._saved_screen_loc
-			S._saved_screen_loc = null
-			restored = TRUE
-	for(var/key in plane_masters)
-		var/atom/movable/screen/P = plane_masters[key]
-		if(P?._saved_screen_loc)
-			P.screen_loc = P._saved_screen_loc
-			P._saved_screen_loc = null
-			restored = TRUE
-	// Standalone screen objects not in any HUD list
-	for(var/atom/movable/screen/S as anything in list(toggle_palette, palette_down, palette_up))
-		if(S?._saved_screen_loc)
-			S.screen_loc = S._saved_screen_loc
-			S._saved_screen_loc = null
-			restored = TRUE
-	return restored
 
 /datum/hud/proc/plane_masters_update()
 	// Plane masters are always shown to OUR mob, never to observers

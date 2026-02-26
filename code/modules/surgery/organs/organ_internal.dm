@@ -88,8 +88,7 @@
 		. = owner //for possible subtypes specific post-removal code.
 	SEND_SIGNAL(src, COMSIG_ORGAN_REMOVED)//SPLURT EDIT ADD - gregnancy
 	owner = null
-	if(can_decay())
-		START_PROCESSING(SSobj, src)
+	START_PROCESSING(SSobj, src)
 
 /obj/item/organ/proc/on_find(mob/living/finder)
 	return

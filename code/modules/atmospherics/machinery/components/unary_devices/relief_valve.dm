@@ -29,14 +29,16 @@
 /obj/machinery/atmospherics/components/unary/relief_valve/update_icon_nopipes()
 	cut_overlays()
 
-	if(!nodes[1] || !opened || !is_operational)
+	if(!nodes[1] || !opened || !is_operational())
 		icon_state = "relief_valve-e"
 		return
 
 	icon_state = "relief_valve-e-blown"
 
 /obj/machinery/atmospherics/components/unary/relief_valve/process_atmos()
-	if(!is_operational)
+	..()
+
+	if(!is_operational())
 		return
 
 	var/datum/gas_mixture/air_contents = airs[1]
@@ -52,6 +54,8 @@
 		var/pressure_delta = abs(our_pressure - environment.return_pressure())
 		if(pressure_delta > 0.1)
 			equalize_all_gases_in_list(list(air_contents,environment))
+			air_update_turf()
+
 			update_parents()
 
 /obj/machinery/atmospherics/components/unary/relief_valve/ui_interact(mob/user, datum/tgui/ui)

@@ -42,12 +42,14 @@
 		var/image/cap = getpipeimage(icon, "dpvent_cap", dir, piping_layer = piping_layer)
 		add_overlay(cap)
 
-	if(!on || !is_operational)
+	if(!on || !is_operational())
 		icon_state = "vent_off"
 	else
 		icon_state = pump_direction ? "vent_out" : "vent_in"
 
 /obj/machinery/atmospherics/components/binary/dp_vent_pump/process_atmos()
+	..()
+
 	if(!on)
 		return
 	var/datum/gas_mixture/air1 = airs[1]
@@ -69,6 +71,7 @@
 				var/transfer_moles = pressure_delta*environment.return_volume()/(air1.return_temperature() * R_IDEAL_GAS_EQUATION)
 
 				loc.assume_air_moles(air1, transfer_moles)
+				air_update_turf()
 
 				var/datum/pipeline/parent1 = parents[1]
 				parent1.update = 1
@@ -84,6 +87,7 @@
 
 			if(moles_delta > 0)
 				loc.transfer_air(air2, moles_delta)
+				air_update_turf()
 
 				var/datum/pipeline/parent2 = parents[2]
 				parent2.update = 1

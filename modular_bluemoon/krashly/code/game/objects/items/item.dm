@@ -99,12 +99,19 @@
 
 /obj/structure/sign/flag/inteq/Initialize(mapload)
 	demotivator = new(src, 7, TRUE)
-	addtimer(CALLBACK(src, PROC_REF(try_scare)), 12 SECONDS, TIMER_LOOP)
+	START_PROCESSING(SSobj,src)
 	return ..()
 
-/obj/structure/sign/flag/inteq/proc/try_scare()
+/obj/structure/sign/flag/inteq/process()
+	if(world.time < demotivator.next_scare)
+		return
+	var/scared_someone = FALSE
 	for(var/mob/living/viewer in view(5, src))
 		demotivator.pugach(viewer)
+		scared_someone = TRUE
+	if(scared_someone)
+		demotivator.next_scare = world.time + 120
+
 
 /obj/structure/sign/flag/inteq/Destroy()
 	QDEL_NULL(demotivator)

@@ -50,8 +50,6 @@
 	if(!controller || !controller.linked_filter)
 		return PROCESS_KILL
 	// SPLURT EDIT END
-	if(!active)
-		return
 	if(!filling)
 		for(var/obj/item/I in range(min(item_suction_range, 10), src))
 			if(!I.anchored && (I.w_class <= WEIGHT_CLASS_SMALL))

@@ -147,7 +147,6 @@
 	var/lastused_equip = 0
 	var/lastused_environ = 0
 	var/lastused_total = 0
-	var/last_surplus = 0
 	var/main_status = 0
 	powernet = FALSE // set so that APCs aren't found as powernet nodes //Hackish, Horrible, was like this before I changed it :(
 	var/malfhack = FALSE //New var for my changes to AI malf. --NeoFite
@@ -1369,7 +1368,6 @@
 		return FALSE
 
 /obj/machinery/power/apc/process()
-	last_surplus = 0
 	if(icon_update_needed)
 		update_appearance()
 	if(machine_stat & (BROKEN|MAINT))
@@ -1398,7 +1396,6 @@
 	var/last_ch = charging
 
 	var/excess = surplus()
-	last_surplus = excess
 
 	if(!avail())
 		main_status = APC_NO_POWER

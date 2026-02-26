@@ -82,9 +82,6 @@
 
 	var/danger_level = 0
 	var/mode = AALARM_MODE_SCRUBBING
-	var/last_env_pressure
-	var/last_env_temperature
-	var/skip_ticks = 0
 
 	var/locked = TRUE
 	var/aidisabled = 0
@@ -745,31 +742,17 @@
 	if(!location)
 		return
 
-	var/datum/gas_mixture/environment = location.return_air()
-	var/environment_pressure = environment.return_pressure()
-	var/environment_temperature = environment.return_temperature()
-
-	// Skip full analysis if environment P/T hasn't changed, but force full check every 5 ticks
-	// to catch gas composition changes (e.g. O2 replaced by plasma at same pressure)
-	if(skip_ticks > 0 && abs(environment_pressure - last_env_pressure) < 0.1 && abs(environment_temperature - last_env_temperature) < 0.1)
-		skip_ticks--
-		if(mode == AALARM_MODE_REPLACEMENT && environment_pressure < ONE_ATMOSPHERE * 0.05)
-			mode = AALARM_MODE_SCRUBBING
-			apply_mode()
-		return
-	skip_ticks = 5
-	last_env_pressure = environment_pressure
-	last_env_temperature = environment_temperature
-
 	var/datum/tlv/cur_tlv
 
-	var/partial_pressure = R_IDEAL_GAS_EQUATION * environment_temperature / environment.return_volume()
+	var/datum/gas_mixture/environment = location.return_air()
+	var/partial_pressure = R_IDEAL_GAS_EQUATION * environment.return_temperature() / environment.return_volume()
 
 	cur_tlv = TLV["pressure"]
+	var/environment_pressure = environment.return_pressure()
 	var/pressure_dangerlevel = cur_tlv.get_danger_level(environment_pressure)
 
 	cur_tlv = TLV["temperature"]
-	var/temperature_dangerlevel = cur_tlv.get_danger_level(environment_temperature)
+	var/temperature_dangerlevel = cur_tlv.get_danger_level(environment.return_temperature())
 
 	var/gas_dangerlevel = 0
 	for(var/gas_id in environment.get_gases())
@@ -973,7 +956,7 @@
 	qdel(src)
 
 /obj/machinery/airalarm/proc/handle_decomp_alarm()
-	if(!is_operational || !COOLDOWN_FINISHED(src, decomp_alarm))
+	if(!is_operational() || !COOLDOWN_FINISHED(src, decomp_alarm))
 		return
 	var/area/A = get_base_area(src)
 	A.firealert(src)

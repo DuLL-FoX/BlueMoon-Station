@@ -18,6 +18,8 @@
 	icon_state = "passive_vent"
 
 /obj/machinery/atmospherics/components/unary/passive_vent/process_atmos()
+	..()
+
 	var/active = FALSE
 
 	var/datum/gas_mixture/external = loc.return_air()
@@ -33,6 +35,7 @@
 	active = internal.temperature_share(external, OPEN_HEAT_TRANSFER_COEFFICIENT) || active
 
 	if(active)
+		air_update_turf()
 		update_parents()
 
 /obj/machinery/atmospherics/components/unary/passive_vent/can_crawl_through()

@@ -13,9 +13,6 @@
 	var/id_tag
 	var/frequency = FREQ_ATMOS_STORAGE
 	var/datum/radio_frequency/radio_connection
-	var/last_pressure
-	var/last_temperature
-	var/skip_ticks = 0
 
 /obj/machinery/air_sensor/atmos/toxin_tank
 	name = "plasma tank gas sensor"
@@ -51,23 +48,13 @@
 /obj/machinery/air_sensor/process_atmos()
 	if(on)
 		var/datum/gas_mixture/air_sample = return_air()
-		var/cur_pressure = air_sample.return_pressure()
-		var/cur_temperature = air_sample.return_temperature()
-		// Skip broadcast if P/T unchanged, but force full broadcast every 5 ticks
-		// to catch gas composition changes at same pressure/temperature
-		if(skip_ticks > 0 && abs(cur_pressure - last_pressure) < 0.5 && abs(cur_temperature - last_temperature) < 0.5)
-			skip_ticks--
-			return
-		skip_ticks = 5
-		last_pressure = cur_pressure
-		last_temperature = cur_temperature
 
 		var/datum/signal/signal = new(list(
 			"sigtype" = "status",
 			"id_tag" = id_tag,
 			"timestamp" = world.time,
-			"pressure" = cur_pressure,
-			"temperature" = cur_temperature,
+			"pressure" = air_sample.return_pressure(),
+			"temperature" = air_sample.return_temperature(),
 			"gases" = list()
 		))
 		var/total_moles = air_sample.total_moles()

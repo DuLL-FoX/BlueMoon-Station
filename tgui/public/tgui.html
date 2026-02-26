@@ -316,19 +316,9 @@ if (window.__windowId__ === '[' + 'tgui:windowId' + ']') {
         // fall through to legacy transport
       }
     }
-    Byond.call('winset', {
+    return Byond.call('winset', {
       command: command,
     });
-    // When the native bridge is unavailable, location.href transport can
-    // lose messages during rapid call bursts in WebView2. Schedule a single
-    // retry — winset/command operations are idempotent.
-    if (!window.BYOND) {
-      setTimeout(function () {
-        Byond.call('winset', {
-          command: command,
-        });
-      }, 150);
-    }
   };
 
   Byond.winget = function (id, propName) {
@@ -375,9 +365,9 @@ if (window.__windowId__ === '[' + 'tgui:windowId' + ']') {
   // ------------------------------------------------------
 
   var RETRY_ATTEMPTS = 5;
-  var RETRY_WAIT_INITIAL = 250;
+  var RETRY_WAIT_INITIAL = 500;
   var RETRY_WAIT_INCREMENT = 500;
-  var JS_LOAD_TIMEOUT = 5000;
+  var JS_LOAD_TIMEOUT = 15000;
 
   var loadedAssetByUrl = {};
   var pushAssetEvent = function (kind, payload) {
@@ -483,11 +473,6 @@ if (window.__windowId__ === '[' + 'tgui:windowId' + ']') {
     };
     // JS specific code
     if (type === 'js') {
-      // Update retry state so the boot watchdog can track JS loading progress
-      if (window.__assetRetryState__) {
-        window.__assetRetryState__.jsAttempt = attempt;
-        window.__assetRetryState__.jsLastAttemptAt = debugNow();
-      }
       var node = document.createElement('script');
       node.type = 'text/javascript';
       node.src = url;
@@ -705,44 +690,6 @@ window.__stringifyTguiDebug__ = function () {
   }
 };
 
-// Truncated version for transport via Byond.topic() (must fit under 2048 char URL limit)
-window.__stringifyTguiDebugTruncated__ = function () {
-  var debug = window.__tguiDebug__ || {};
-  try {
-    var slim = {
-      v: debug.version,
-      hasMsg: !!debug.hasAnyMessage,
-      hasUpd: !!debug.hasBackendUpdate,
-      inc: debug.incomingCount || 0,
-      readyCnt: debug.readySentCount || 0,
-    };
-    var events = debug.events || [];
-    if (events.length > 4) {
-      events = events.slice(events.length - 4);
-    }
-    slim.ev = [];
-    for (var i = 0; i < events.length; i++) {
-      slim.ev.push(events[i].kind);
-    }
-    var attempts = debug.transportAttempts || [];
-    if (attempts.length > 2) {
-      attempts = attempts.slice(attempts.length - 2);
-    }
-    slim.tr = [];
-    for (var j = 0; j < attempts.length; j++) {
-      slim.tr.push(attempts[j].name + ':' + (attempts[j].ok ? 'ok' : 'fail'));
-    }
-    var result = JSON.stringify(slim);
-    if (result.length > 1024) {
-      result = result.substring(0, 1021) + '...';
-    }
-    return result;
-  }
-  catch (err) {
-    return '[truncated debug error: ' + (err && err.message ? err.message : err) + ']';
-  }
-};
-
 window.__augmentStack__ = function (stack, error) {
   var debugStr = window.__stringifyTguiDebug__();
   return stack
@@ -930,75 +877,53 @@ var readyRetryTimer = setInterval(function () {
 setTimeout(function () {
   clearInterval(readyRetryTimer);
 }, 30000);
-// Watchdog: show debug overlay if no backend update after 10s (informational only, retries continue)
+// Watchdog: show debug overlay if no backend update after 8s (informational only, retries continue)
 setTimeout(function () {
   var debug = window.__tguiDebug__;
   if (debug && !debug.hasAnyMessage) {
     if (window.__pushTguiDebugEvent__) {
       window.__pushTguiDebugEvent__('watchdog/noBackendUpdate', {
-        waitedMs: 10000,
+        waitedMs: 8000,
         hasAnyMessage: !!debug.hasAnyMessage,
         incomingCount: debug.incomingCount || 0,
       });
     }
-    window.__showTguiDebugOverlay__('No backend update within 10 seconds after ready (retrying...)');
+    window.__showTguiDebugOverlay__('No backend update within 8 seconds after ready (retrying...)');
     try {
       Byond.topic({
         tgui: 1,
         window_id: window.__windowId__,
         type: 'log',
-        message: 'TGUI watchdog: no backend update. Debug=' + window.__stringifyTguiDebugTruncated__(),
+        message: 'TGUI watchdog: no backend update. Debug=' + window.__stringifyTguiDebug__(),
       });
     }
     catch (err) {}
   }
-}, 10000);
-// Track JS asset retry state so the watchdog can wait for retries to finish
-var __assetRetryState__ = window.__assetRetryState__ = {
-  jsAttempt: 0,
-  jsMaxAttempts: 5,
-  jsLastAttemptAt: 0,
-};
-// Watchdog: show debug overlay if app hasn't booted after retries have had time
-var appBootWatchdogInterval = setInterval(function () {
-  if (window.__tguiAppBooted__) {
-    clearInterval(appBootWatchdogInterval);
-    return;
-  }
+}, 8000);
+setTimeout(function () {
   var debug = window.__tguiDebug__;
-  if (!debug) {
-    return;
-  }
-  var now = Date.now ? Date.now() : +new Date();
-  var elapsed = now - debug.startedAt;
-  // Don't alarm while JS retries are still actively happening
-  // JS_LOAD_TIMEOUT = 5000
-  var retryActive = __assetRetryState__.jsAttempt < __assetRetryState__.jsMaxAttempts
-    && (now - __assetRetryState__.jsLastAttemptAt) < 7000;
-  // Only alarm after at least 12 seconds AND no active retries
-  if (elapsed >= 12000 && !retryActive) {
-    clearInterval(appBootWatchdogInterval);
+  // Separate watchdog: backend updates may be arriving, but bundle bootstrap can still fail.
+  if (debug && !window.__tguiAppBooted__) {
     if (window.__pushTguiDebugEvent__) {
       window.__pushTguiDebugEvent__('watchdog/appNotBooted', {
-        waitedMs: elapsed,
+        waitedMs: 8000,
         hasAnyMessage: !!debug.hasAnyMessage,
         hasBackendUpdate: !!debug.hasBackendUpdate,
         incomingCount: debug.incomingCount || 0,
-        jsAttempt: __assetRetryState__.jsAttempt,
       });
     }
-    window.__showTguiDebugOverlay__('Frontend bundle did not boot within ' + Math.round(elapsed / 1000) + ' seconds');
+    window.__showTguiDebugOverlay__('Frontend bundle did not boot within 8 seconds');
     try {
       Byond.topic({
         tgui: 1,
         window_id: window.__windowId__,
         type: 'log',
-        message: 'TGUI watchdog: app not booted. Debug=' + window.__stringifyTguiDebugTruncated__(),
+        message: 'TGUI watchdog: app not booted. Debug=' + window.__stringifyTguiDebug__(),
       });
     }
     catch (err) {}
   }
-}, 2000);
+}, 8000);
 
 </script>
 

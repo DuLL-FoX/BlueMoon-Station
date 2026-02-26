@@ -70,11 +70,12 @@
 		last_pressure_delta = 0
 
 /obj/machinery/atmospherics/components/binary/circulator/process_atmos()
+	..()
 	update_icon()
 
 /obj/machinery/atmospherics/components/binary/circulator/update_icon()
 	. = ..()
-	if(!is_operational)
+	if(!is_operational())
 		icon_state = "circ-p-[flipped]"
 	else if(last_pressure_delta > 0)
 		if(last_pressure_delta > ONE_ATMOSPHERE)

@@ -12,10 +12,8 @@
 /// Maximum number of open windows
 #define TGUI_WINDOW_HARD_LIMIT 9
 
-/// Maximum ping timeout allowed to detect zombie windows.
-/// Extended to 12s to tolerate slow CDN asset delivery and unreliable
-/// location.href transport in WebView2 (ready signal may need several retries).
-#define TGUI_PING_TIMEOUT 12 SECONDS
+/// Maximum ping timeout allowed to detect zombie windows
+#define TGUI_PING_TIMEOUT 4 SECONDS
 /// Used for rate-limiting to prevent DoS by excessively refreshing a TGUI window
 #define TGUI_REFRESH_FULL_UPDATE_COOLDOWN 5 SECONDS
 

@@ -41,10 +41,6 @@
 	var/default_click = FALSE
 	/// If FALSE, this will not be cleared when calling /client/clear_screen()
 	var/clear_with_screen = TRUE
-	/// Saved screen_loc for restoration after client disconnect cleanup.
-	/// Set by /client/Destroy() before nulling screen_loc to release
-	/// BYOND appearance cache refs, restored by show_hud() on reconnect.
-	var/tmp/_saved_screen_loc
 
 /atom/movable/screen/Initialize(mapload, datum/hud/hud_owner)
 	. = ..()
@@ -53,7 +49,6 @@
 	set_new_hud(hud_owner)
 
 /atom/movable/screen/Destroy()
-	src.screen_loc = null // Release BYOND appearance cache ref
 	if(istype(hud) && hud.mymob?.client)
 		hud.mymob.client.screen -= src
 	set_new_hud(null)
@@ -717,7 +712,6 @@ INITIALIZE_IMMEDIATE(/atom/movable/screen/splash)
 
 /atom/movable/screen/splash/Destroy()
 	if(holder)
-		src.screen_loc = null
 		holder.screen -= src
 		holder = null
 	return ..()

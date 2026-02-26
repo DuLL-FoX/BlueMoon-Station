@@ -43,7 +43,6 @@
 	req_access = list()
 
 	var/update = 0
-	var/last_pressure_bracket = -1
 	var/static/list/label2types = list(
 		"n2" = /obj/machinery/portable_atmospherics/canister/nitrogen,
 		"o2" = /obj/machinery/portable_atmospherics/canister/oxygen,
@@ -313,11 +312,9 @@
 			investigate_log("[key_name(user)] started a transfer into [holding].<br>", INVESTIGATE_ATMOS)
 
 /obj/machinery/portable_atmospherics/canister/process_atmos()
+	..()
 	if(machine_stat & BROKEN)
 		return PROCESS_KILL
-	// Inline parent logic — avoids redundant update_icon() when connected
-	if(!connected_port)
-		air_contents.react(src)
 	if(timing && valve_timer < world.time)
 		valve_open = !valve_open
 		timing = FALSE
@@ -328,22 +325,14 @@
 		if(release_gas_to(air_contents, target_air, release_pressure) && !holding)
 			air_update_turf()
 
-	// Only update icon when pressure bracket actually changes
-	var/pressure = air_contents.return_pressure()
-	var/new_bracket
-	if(pressure >= 40 * ONE_ATMOSPHERE)
-		new_bracket = 4
-	else if(pressure >= 10 * ONE_ATMOSPHERE)
-		new_bracket = 3
-	else if(pressure >= 5 * ONE_ATMOSPHERE)
-		new_bracket = 2
-	else if(pressure >= 10)
-		new_bracket = 1
-	else
-		new_bracket = 0
-	if(new_bracket != last_pressure_bracket)
-		last_pressure_bracket = new_bracket
-		update_icon()
+	// var/our_pressure = air_contents.return_pressure()
+	// var/our_temperature = air_contents.return_temperature()
+
+	///function used to check the limit of the canisters and also set the amount of damage that the canister can receive, if the heat and pressure are way higher than the limit the more damage will be done
+	// currently unused
+	// if(our_temperature > heat_limit || our_pressure > pressure_limit)
+	// 	take_damage(clamp((our_temperature/heat_limit) * (our_pressure/pressure_limit) * delta_time * 2, 5, 50), BURN, 0)
+	update_icon()
 
 /obj/machinery/portable_atmospherics/canister/ui_state(mob/user)
 	return GLOB.physical_state

@@ -59,13 +59,7 @@
 	return ..()
 
 /obj/machinery/atmospherics/components/unary/vent_scrubber/auto_use_power()
-	if(!on || welded || !is_operational)
-		return FALSE
-	var/area/A = get_area(src)
-	if(!A)
-		return FALSE
-	var/chan = power_channel
-	if(!A.powered(chan))
+	if(!on || welded || !is_operational() || !powered(power_channel))
 		return FALSE
 
 	var/amount = idle_power_usage
@@ -77,7 +71,7 @@
 
 	if(widenet)
 		amount += amount * (adjacent_turfs.len * (adjacent_turfs.len / 2))
-	A.use_power(amount, chan)
+	use_power(amount, power_channel)
 	return TRUE
 
 /obj/machinery/atmospherics/components/unary/vent_scrubber/update_icon_nopipes()
@@ -90,7 +84,7 @@
 		icon_state = "scrub_welded"
 		return
 
-	if(!nodes[1] || !on || !is_operational)
+	if(!nodes[1] || !on || !is_operational())
 		icon_state = "scrub_off"
 		return
 
@@ -151,32 +145,40 @@
 	..()
 
 /obj/machinery/atmospherics/components/unary/vent_scrubber/process_atmos()
-	if(welded || !is_operational)
+	..()
+	if(welded || !is_operational())
 		return FALSE
 	if(!nodes[1] || !on)
 		on = FALSE
 		return FALSE
-	var/datum/gas_mixture/air_contents = airs[1]
-	if(air_contents.return_pressure() >= 50*ONE_ATMOSPHERE)
-		return TRUE
-	scrub(loc, air_contents)
+	scrub(loc)
 	if(widenet)
 		for(var/turf/tile in adjacent_turfs)
-			if(air_contents.return_pressure() >= 50*ONE_ATMOSPHERE)
-				break
-			scrub(tile, air_contents)
-	update_parents()
+			scrub(tile)
 	return TRUE
 
-/obj/machinery/atmospherics/components/unary/vent_scrubber/proc/scrub(turf/tile, datum/gas_mixture/air_contents)
+/obj/machinery/atmospherics/components/unary/vent_scrubber/proc/scrub(var/turf/tile)
 	if(!istype(tile))
-		return
+		return FALSE
 	var/datum/gas_mixture/environment = tile.return_air()
+	var/datum/gas_mixture/air_contents = airs[1]
+
+	if(air_contents.return_pressure() >= 50*ONE_ATMOSPHERE || !islist(clean_filter_types))
+		return FALSE
 
 	if(scrubbing & SCRUBBING)
-		environment.scrub_into(air_contents, volume_rate / environment.return_volume(), clean_filter_types)
+		environment.scrub_into(air_contents, volume_rate/environment.return_volume(), clean_filter_types)
+
+		tile.air_update_turf()
+
 	else //Just siphoning all air
-		environment.transfer_ratio_to(air_contents, volume_rate / environment.return_volume())
+
+		environment.transfer_ratio_to(air_contents, volume_rate/environment.return_volume())
+		tile.air_update_turf()
+
+	update_parents()
+
+	return TRUE
 
 //There is no easy way for an object to be notified of changes to atmos can pass flags
 //	So we check every machinery process (2 seconds)
@@ -194,7 +196,7 @@
 		adjacent_turfs = T.GetAtmosAdjacentTurfs(alldir = 1)
 
 /obj/machinery/atmospherics/components/unary/vent_scrubber/receive_signal(datum/signal/signal)
-	if(!is_operational || !signal.data["tag"] || (signal.data["tag"] != id_tag) || (signal.data["sigtype"]!="command"))
+	if(!is_operational() || !signal.data["tag"] || (signal.data["tag"] != id_tag) || (signal.data["sigtype"]!="command"))
 		return FALSE
 
 	var/mob/signal_sender = signal.data["user"]
@@ -261,7 +263,7 @@
 
 /obj/machinery/atmospherics/components/unary/vent_scrubber/can_unwrench(mob/user)
 	. = ..()
-	if(. && on && is_operational)
+	if(. && on && is_operational())
 		to_chat(user, "<span class='warning'>You cannot unwrench [src], turn it off first!</span>")
 		return FALSE
 

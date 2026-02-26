@@ -287,15 +287,12 @@ Class Procs:
 	occupant = new_occupant
 
 /obj/machinery/proc/auto_use_power()
-	if(!use_power)
-		return TRUE
-	if(!powered())
+	if(!powered(power_channel))
 		return FALSE
-	var/area/A = get_area(src)
 	if(use_power == 1)
-		A.use_power(idle_power_usage, power_channel)
+		use_power(idle_power_usage,power_channel)
 	else if(use_power >= 2)
-		A.use_power(active_power_usage, power_channel)
+		use_power(active_power_usage,power_channel)
 	return TRUE
 
 /**

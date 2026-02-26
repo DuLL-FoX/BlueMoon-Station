@@ -638,13 +638,6 @@ GLOBAL_LIST_INIT(blacklisted_builds, list(
 	// seen_messages = null
 	Master.UpdateTickRate()
 	. = ..() //Even though we're going to be hard deleted there are still some things that want to know the destroy is happening
-	// Save screen_loc and null it to release BYOND appearance cache refs.
-	// BYOND hard-deletes client.screen contents via del() which bypasses Destroy(),
-	// leaving screen_loc set → appearance cache holds a ref → GC failure.
-	// We save the original value so persistent HUD objects can restore it on reconnect.
-	for(var/atom/movable/screen/S in screen)
-		S._saved_screen_loc = S.screen_loc
-		S.screen_loc = null
 	screen.Cut()
 	return QDEL_HINT_HARDDEL_NOW
 
