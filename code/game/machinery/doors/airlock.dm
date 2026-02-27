@@ -356,7 +356,7 @@
 	return ((!secondsMainPowerLost || !secondsBackupPowerLost) && !(machine_stat & NOPOWER))
 
 /obj/machinery/door/airlock/requiresID()
-	return !(wires?.is_cut(WIRE_IDSCAN) || aiDisabledIdScanner)
+	return !(wires.is_cut(WIRE_IDSCAN) || aiDisabledIdScanner)
 
 /obj/machinery/door/airlock/proc/isAllPowerCut()
 	if((wires.is_cut(WIRE_POWER1) || wires.is_cut(WIRE_POWER2)) && (wires.is_cut(WIRE_BACKUP1) || wires.is_cut(WIRE_BACKUP2)))
@@ -1160,7 +1160,7 @@
 	if( operating || welded || locked )
 		return FALSE
 	if(!forced)
-		if(!hasPower() || wires?.is_cut(WIRE_OPEN))
+		if(!hasPower() || wires.is_cut(WIRE_OPEN))
 			return FALSE
 	if(charge && !detonated)
 		panel_open = TRUE
@@ -1228,7 +1228,7 @@
 	if(density)
 		return TRUE
 	if(!forced)
-		if(!hasPower() || wires?.is_cut(WIRE_BOLTS))
+		if(!hasPower() || wires.is_cut(WIRE_BOLTS))
 			return
 	/*if(safe)	// BLUEMOON REMOVAL BEGIN - ModernTG Wide Airlocks.
 		for(var/atom/movable/M in get_turf(src))

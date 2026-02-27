@@ -26,12 +26,6 @@
 	for(var/obj/machinery/power/M in nodes)
 		nodes -= M
 		M.powernet = null
-	// Handle non-standard power consumers that aren't /obj/machinery/power (e.g., nuclear reactors)
-	for(var/obj/machinery/atmospherics/components/trinary/nuclear_reactor/reactor in nodes)
-		nodes -= reactor
-		reactor.powernet = null
-	cables = null
-	nodes = null
 
 	SSmachines.powernets -= src
 	return ..()

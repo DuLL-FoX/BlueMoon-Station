@@ -15,11 +15,9 @@
 			movement_dir &= ~(NORTH|SOUTH)
 		if((movement_dir & EAST) && (movement_dir & WEST))
 			movement_dir &= ~(EAST|WEST)
+		user.Move(get_step(src, movement_dir), movement_dir)
 
 	if(user.movement_locked)
 		keybind_face_direction(movement_dir)
-		// Clear movement buffers since Move() won't consume them
-		user.next_move_dir_add = NONE
-		user.next_move_dir_sub = NONE
 	else
 		user.Move(get_step(src, movement_dir), movement_dir)

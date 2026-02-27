@@ -1025,9 +1025,9 @@
 		R.on_new(pH) //Add more as desired.
 
 
-	update_total()
 	if(isliving(my_atom))
 		R.on_mob_add(my_atom, amount)
+	update_total()
 	if(my_atom)
 		my_atom.on_reagent_change(ADD_REAGENT)
 	if(!no_react)
@@ -1058,7 +1058,7 @@
 		var/datum/reagent/R = A
 		if (R.type == reagent)
 			//In practice this is really confusing and players feel like it randomly melts their beakers, but I'm not sure how else to handle it. We'll see how it goes and I can remove this if it confuses people.
-			if(!ignore_pH && total_volume)
+			if(!ignore_pH)
 				//if (((pH > R.pH) && (pH <= 7)) || ((pH < R.pH) && (pH >= 7)))
 				pH = (((pH - R.pH) / total_volume) * amount) + pH
 			if(istype(my_atom, /obj/item/reagent_containers/))

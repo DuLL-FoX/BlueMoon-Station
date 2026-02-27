@@ -26,43 +26,6 @@ const MODIFIER_TO_BYOND = {
   [KEY_SHIFT]: 'Shift',
 };
 
-// Maps browser event.key values to BYOND key names for navigation keys.
-const DIRECTION_TO_BYOND = {
-  'ArrowLeft': 'West',
-  'ArrowUp': 'North',
-  'ArrowRight': 'East',
-  'ArrowDown': 'South',
-  'PageUp': 'Northeast',
-  'PageDown': 'Southeast',
-  'End': 'Southwest',
-  'Home': 'Northwest',
-};
-
-/**
- * Converts a raw DOM KeyboardEvent to a BYOND key name.
- * Uses event.code for layout-independent letter/digit mapping.
- */
-export const eventToByondKey = (e) => {
-  const { code, key } = e;
-  // Numpad digits
-  if (/^Numpad\d$/.test(code)) return 'Numpad' + code.slice(6);
-  // Direction/navigation keys
-  if (DIRECTION_TO_BYOND[key]) return DIRECTION_TO_BYOND[key];
-  // Letters (layout-independent via physical key code)
-  if (/^Key[A-Z]$/.test(code)) return code.charAt(3);
-  // Digits (layout-independent via physical key code)
-  if (/^Digit\d$/.test(code)) return code.charAt(5);
-  // F-keys
-  if (/^F\d+$/.test(key)) return key;
-  // Special keys
-  if (key === 'Insert') return 'Insert';
-  if (key === 'Delete') return 'Delete';
-  if (code === 'Comma') return ',';
-  if (code === 'Minus') return '-';
-  if (code === 'Period') return '.';
-  return null;
-};
-
 export const setupPanelFocusHacks = () => {
   let focusStolen = false;
   let clickStartPos = null;
@@ -118,47 +81,9 @@ export const setupPanelFocusHacks = () => {
     }
   });
 
-  // Fix for stuck regular keys (WASD, arrows, etc.) after BYOND 516 migration.
-  // Same principle as modifier keys above: track keys pressed in the panel,
-  // and forward orphaned KeyUp events (released without preceding KeyDown in
-  // the panel) to BYOND. This covers the scenario where a movement key is
-  // held on the map, focus moves to the panel (e.g. player clicks chat),
-  // and the key is released while the panel has focus.
-  const regularKeyPressedInPanel = {};
-
-  document.addEventListener('keydown', (e) => {
-    const byondKey = eventToByondKey(e);
-    if (byondKey) {
-      regularKeyPressedInPanel[byondKey] = true;
-    }
-  });
-
-  document.addEventListener('keyup', (e) => {
-    const byondKey = eventToByondKey(e);
-    if (byondKey) {
-      if (!regularKeyPressedInPanel[byondKey]) {
-        Byond.command(`KeyUp "${byondKey}"`);
-      }
-      regularKeyPressedInPanel[byondKey] = false;
-    }
-  });
-
   window.addEventListener('blur', () => {
     for (const key of Object.keys(modifierPressedInPanel)) {
       modifierPressedInPanel[key] = false;
-    }
-    for (const key of Object.keys(regularKeyPressedInPanel)) {
-      regularKeyPressedInPanel[key] = false;
-    }
-  });
-
-  // When the BYOND application is minimized / Alt-Tabbed and the player
-  // releases keys while the app is in the background, neither BYOND macros
-  // nor JS event listeners fire. Release all server-side keys when the
-  // page becomes visible again.
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
-      Byond.command('force_release_all_keys');
     }
   });
 };

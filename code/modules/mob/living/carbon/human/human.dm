@@ -4,8 +4,6 @@
 	icon = 'icons/mob/human.dmi'
 	icon_state = "caucasian_m"
 	SET_APPEARANCE_FLAGS(KEEP_TOGETHER|TILE_BOUND|PIXEL_SCALE)
-	/// When TRUE, suppresses intermediate update_mutant_bodyparts calls during regenerate_icons batch
-	var/block_mutant_updates = FALSE
 
 /mob/living/carbon/human/Initialize(mapload)
 	add_verb(src, /mob/living/proc/mob_sleep)

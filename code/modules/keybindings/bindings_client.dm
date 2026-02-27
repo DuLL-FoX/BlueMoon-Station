@@ -81,13 +81,6 @@
 	for(var/key in keys_held)
 		keyUp("[key]")
 
-/// Verb callable from TGUI JavaScript to release all held keys.
-/// Used by the panel to release stale keys on app focus return.
-/client/verb/force_release_all_keys()
-	set instant = TRUE
-	set hidden = TRUE
-	ForceAllKeysUp()
-
 /client/verb/keyUp(_key as text)
 	SHOULD_NOT_SLEEP(TRUE)
 	set instant = TRUE

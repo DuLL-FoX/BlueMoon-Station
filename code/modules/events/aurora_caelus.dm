@@ -47,8 +47,6 @@
 /datum/round_event/aurora_caelus/tick()
 	if(activeFor % 5 == 0)
 		aurora_progress++
-		if(aurora_progress > aurora_colors.len)
-			aurora_progress = 1
 		var/aurora_color = aurora_colors[aurora_progress]
 		for(var/area in GLOB.sortedAreas)
 			var/area/A = area
