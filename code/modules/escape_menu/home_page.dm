@@ -112,7 +112,8 @@
 	if (!enabled())
 		return
 
-	on_click_callback.InvokeAsync()
+	if(on_click_callback)
+		on_click_callback.InvokeAsync()
 
 /atom/movable/screen/escape_menu/home_button/MouseEntered(location, control, params)
 	if(home_button_text)
