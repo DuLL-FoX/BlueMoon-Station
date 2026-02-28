@@ -872,6 +872,8 @@
 	if(!blood_DNA.len)
 		return
 	if(initial(icon) && initial(icon_state))
+		if(blood_splatter_icon)
+			cut_overlay(blood_splatter_icon)
 		blood_splatter_icon = icon(initial(icon), initial(icon_state), , 1)		//we only want to apply blood-splatters to the initial icon_state for each object
 		blood_splatter_icon.Blend("#fff", ICON_ADD) 			//fills the icon_state with white (except where it's transparent)
 		blood_splatter_icon.Blend(icon('icons/effects/blood.dmi', "itemblood"), ICON_MULTIPLY) //adds blood and the remaining white areas become transparant
