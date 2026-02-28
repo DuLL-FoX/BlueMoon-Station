@@ -128,12 +128,18 @@
 	qdel(src)
 
 /obj/item/gun/magic/contractor_hook/Destroy() //BLUEMOON ADD START Правильно отвязывает крюк от костюма при сбросе или выпадении самого крюка
-	.=..()
-	suit.scorpion = null
-	suit = null
-	hook_action.action_ready = FALSE
-	hook_action.toggle_button_on_off()
-	hook_action = null //BLUEMOON ADD END
+	// Clear the hardsuit's back-reference so the hardsuit can no longer find us.
+	if(suit)
+		suit.scorpion = null
+		suit = null
+	if(hook_action)
+		// Null target first — the action remains alive (owned by the mob wearing the suit),
+		// so its target var would otherwise hold a hard ref to this qdeled gun, causing GC failure.
+		hook_action.target = null
+		hook_action.action_ready = FALSE
+		hook_action.toggle_button_on_off()
+		hook_action = null //BLUEMOON ADD END
+	return ..()
 
 /obj/item/ammo_casing/magic/contractor_hook
 	name = "Hardlight hook"

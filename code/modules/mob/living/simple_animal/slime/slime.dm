@@ -110,6 +110,9 @@
 	AddElement(/datum/element/ventcrawling, given_tier = VENTCRAWLER_ALWAYS)
 
 /mob/living/simple_animal/slime/Destroy()
+	// Cancel pending atkcool timer so the CALLBACK doesn't hold a hard ref to src
+	// for the full 45-tick duration, which would exceed the 20-tick GC check window.
+	deltimer(atkcool_timer_id)
 	AIproc = 0
 	for(var/friend in Friends)
 		UnregisterSignal(friend, COMSIG_PARENT_QDELETING)
@@ -214,7 +217,7 @@
 					if (is_adult || prob(5))
 						O.attack_slime(src)
 						Atkcool = 1
-					addtimer(CALLBACK(src, PROC_REF(reset_atkcool)), 45, TIMER_DELETE_ME)
+					atkcool_timer_id = addtimer(CALLBACK(src, PROC_REF(reset_atkcool)), 45, TIMER_STOPPABLE | TIMER_DELETE_ME)
 
 /mob/living/simple_animal/slime/Process_Spacemove(movement_dir = 0)
 	return 2

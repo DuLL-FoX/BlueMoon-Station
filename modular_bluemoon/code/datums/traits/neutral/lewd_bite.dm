@@ -23,7 +23,11 @@
 
 /datum/quirk/bite/remove()
 	. = ..()
-	my_action.Remove()
+	if(my_action)
+		// Null the back-reference first to break the circular datum ref that prevents both from GC'ing.
+		my_action.my_quirk = null
+		my_action.Remove(quirk_holder)
+		QDEL_NULL(my_action)
 
 /datum/quirk/bite_lewd
 	name = "Клыки суккуба"
@@ -49,7 +53,11 @@
 
 /datum/quirk/bite_lewd/remove()
 	. = ..()
-	my_action.Remove()
+	if(my_action)
+		// Null the back-reference first to break the circular datum ref that prevents both from GC'ing.
+		my_action.my_quirk = null
+		my_action.Remove(quirk_holder)
+		QDEL_NULL(my_action)
 
 /datum/action/cooldown/bite
 	name = "Ядовитый укус"
@@ -64,6 +72,13 @@
 /datum/action/cooldown/bite/lewd
 	name = "Клыки суккуба"
 	button_icon_state = "lewd_bite"
+
+/datum/action/cooldown/bite/Destroy()
+	// Null the back-reference first to break the circular datum ref (quirk ↔ action).
+	my_quirk = null
+	// venom_bank is only referenced here; qdel it so datum/reagents doesn't linger.
+	QDEL_NULL(venom_bank)
+	return ..()
 
 /datum/action/cooldown/bite/Grant(quirk_holder, type)
 	. = ..()

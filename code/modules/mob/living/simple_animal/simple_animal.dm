@@ -177,7 +177,11 @@
 
 /mob/living/simple_animal/Destroy()
 	GLOB.simple_animals[AIStatus] -= src
-	if (SSnpcpool.state == SS_PAUSED && LAZYLEN(SSnpcpool.currentrun))
+	// SSnpcpool copies simple_animals[AI_ON] at the start of each fire cycle.
+	// Always remove from currentrun regardless of subsystem state — the fire loop
+	// has a QDELETED guard, but currentrun holding a ref for up to wait+fire_time
+	// ticks could still exceed the 20-tick GC check window if timers are involved.
+	if (LAZYLEN(SSnpcpool.currentrun))
 		SSnpcpool.currentrun -= src
 	// SSidlenpcpool copies simple_animals[AI_IDLE] at the start of each fire cycle.
 	// If we are qdeled mid-cycle, the copy still holds our ref and the GC check

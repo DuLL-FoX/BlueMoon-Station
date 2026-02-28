@@ -2,6 +2,9 @@
 /mob/living/simple_animal/slime
 	var/AIproc = 0 // determines if the AI loop is activated
 	var/Atkcool = 0 // attack cooldown
+	/// Stored timer ID for the attack cooldown reset timer; deltimer'd on Destroy() to prevent
+	/// the CALLBACK holding a hard ref to src and blocking GC after the slime is qdeled.
+	var/atkcool_timer_id
 	var/Tempstun = 0 // temporary temperature stuns
 	var/Discipline = 0 // if a slime has been hit with a freeze gun, or wrestled/attacked off a human, they become disciplined and don't attack anymore for a while
 	var/SStun = 0 // stun variable
@@ -63,19 +66,17 @@
 				if(!CanFeedon(Target)) //If they're not able to be fed upon, ignore them.
 					if(!Atkcool)
 						Atkcool = 1
-						addtimer(CALLBACK(src, PROC_REF(reset_atkcool)), 45, TIMER_DELETE_ME)
+					atkcool_timer_id = addtimer(CALLBACK(src, PROC_REF(reset_atkcool)), 45, TIMER_STOPPABLE | TIMER_DELETE_ME)
 
-						if(Target.Adjacent(src))
-							Target.attack_slime(src)
+					if(Target.Adjacent(src))
+						Target.attack_slime(src)
 					break
 				if(!Target.lying && prob(80))
 
 					if(Target.client && Target.health >= 20)
 						if(!Atkcool)
 							Atkcool = 1
-							addtimer(CALLBACK(src, PROC_REF(reset_atkcool)), 45, TIMER_DELETE_ME)
-
-							if(Target.Adjacent(src))
+							atkcool_timer_id = addtimer(CALLBACK(src, PROC_REF(reset_atkcool)), 45, TIMER_STOPPABLE | TIMER_DELETE_ME)
 								Target.attack_slime(src)
 
 					else
