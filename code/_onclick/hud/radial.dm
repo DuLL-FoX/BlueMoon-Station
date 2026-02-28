@@ -307,11 +307,13 @@ GLOBAL_LIST_EMPTY(radial_menus)
 		stoplag(1)
 
 /datum/radial_menu/Destroy()
+	// Clear vis_contents first so BYOND's renderer doesn't hold refs to screen objects while they're being qdeled
+	if(menu_holder)
+		menu_holder.vis_contents.Cut()
+		menu_holder = null
+	hide()
 	QDEL_LIST(elements)
 	Reset()
-	hide()
-
-	QDEL_LIST(elements)
 	QDEL_NULL(close_button)
 	current_user = null
 	anchor = null

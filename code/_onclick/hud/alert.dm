@@ -942,6 +942,10 @@ so as to remain in compliance with the most up-to-date laws."
 	return TRUE
 
 /atom/movable/screen/alert/Destroy()
+	// Cancel any pending BYOND animation (animate() holds internal engine refs
+	// for its duration; stopping on Destroy prevents soft GC failures).
+	animate(src)
+	transform = null
 	. = ..()
 	severity = 0
 	master = null

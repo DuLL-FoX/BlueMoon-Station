@@ -40,7 +40,7 @@
 	set_choices(newchoices,tooltips)
 
 /datum/radial_menu/persistent/Destroy()
-	QDEL_NULL(select_proc_callback)
+	select_proc_callback = null // Don't qdel: may be on the Invoke call stack if element was just selected
 	GLOB.radial_menus -= uniqueid
 	Reset()
 	hide()

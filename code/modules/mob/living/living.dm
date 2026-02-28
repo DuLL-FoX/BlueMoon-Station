@@ -40,6 +40,10 @@
 	remove_from_all_data_huds()
 	cleanse_trait_datums()
 	GLOB.mob_living_list -= src
+	// SSmobs.currentrun is a copy of mob_living_list built at the start of each fire cycle.
+	// If src is qdeled mid-cycle (e.g. via explosion, not during Life()), currentrun still
+	// holds a reference — GC check (~20 ticks) fires before the next cycle refreshes it.
+	SSmobs.currentrun -= src
 	GLOB.ssd_mob_list -= src
 	QDEL_LIST(diseases)
 	return ..()

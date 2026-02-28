@@ -36,6 +36,11 @@
 /turf/open/Destroy()
 	if(active_hotspot)
 		QDEL_NULL(active_hotspot)
+	// Explicitly qdel air so gas_mixture.Destroy() calls __gasmixture_unregister(),
+	// releasing the auxmos (Rust-side) reference. Without this, BYOND cannot GC
+	// the gas_mixture orphaned when a turf changes type or is destroyed, causing
+	// persistent GC failures (~100+ per round).
+	QDEL_NULL(air)
 	return ..()
 
 /////////////////GAS MIXTURE PROCS///////////////////

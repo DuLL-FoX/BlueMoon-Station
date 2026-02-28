@@ -164,3 +164,5 @@
 	var/datum/gas_mixture/G = new
 	G.parse_gas_string(text)
 	assume_air(G)
+	qdel(G) // Must qdel explicitly so gas_mixture.Destroy() calls __gasmixture_unregister();
+	         // otherwise auxmos holds a Rust-side ref and BYOND cannot GC the orphaned mixture.

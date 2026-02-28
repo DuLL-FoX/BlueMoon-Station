@@ -104,7 +104,7 @@
 	update_color()
 
 /atom/movable/screen/escape_menu/leave_body_button/Destroy()
-	QDEL_NULL(on_click_callback)
+	on_click_callback = null // Don't qdel: may still be on the Invoke/InvokeAsync call stack if button was just clicked
 
 	return ..()
 

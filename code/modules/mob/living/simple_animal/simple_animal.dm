@@ -179,6 +179,11 @@
 	GLOB.simple_animals[AIStatus] -= src
 	if (SSnpcpool.state == SS_PAUSED && LAZYLEN(SSnpcpool.currentrun))
 		SSnpcpool.currentrun -= src
+	// SSidlenpcpool copies simple_animals[AI_IDLE] at the start of each fire cycle.
+	// If we are qdeled mid-cycle, the copy still holds our ref and the GC check
+	// (20 ticks) may fire before the next 60-tick idle cycle refreshes the copy.
+	if (LAZYLEN(SSidlenpcpool.currentrun))
+		SSidlenpcpool.currentrun -= src
 
 	if(nest)
 		nest.spawned_mobs -= src

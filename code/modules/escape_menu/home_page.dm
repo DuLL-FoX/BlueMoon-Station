@@ -103,7 +103,7 @@
 		vis_contents -= home_button_text
 		home_button_text.moveToNullspace()
 	escape_menu = null
-	QDEL_NULL(on_click_callback)
+	on_click_callback = null // Don't qdel: may still be on the InvokeAsync call stack if button was just clicked
 	QDEL_NULL(home_button_text)
 
 	return ..()
