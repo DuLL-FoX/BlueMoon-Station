@@ -77,7 +77,7 @@
 						if(!Atkcool)
 							Atkcool = 1
 							atkcool_timer_id = addtimer(CALLBACK(src, PROC_REF(reset_atkcool)), 45, TIMER_STOPPABLE | TIMER_DELETE_ME)
-								Target.attack_slime(src)
+							Target.attack_slime(src)
 
 					else
 						if(!Atkcool && Target.Adjacent(src))
