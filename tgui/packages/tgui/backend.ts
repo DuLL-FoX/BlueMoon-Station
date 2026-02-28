@@ -383,6 +383,12 @@ const splitIntoChunks = (str: string): string[] => {
 };
 
 /**
+ * Debounce state for sendAct — guards against WebView2 duplicate delivery.
+ */
+let lastActTime = 0;
+let lastActKey = '';
+
+/**
  * Sends an action to `ui_act` on `src_object` that this tgui window
  * is associated with.
  */
@@ -396,6 +402,14 @@ export const sendAct = (action: string, payload: object = {}) => {
     return;
   }
   const stringifiedPayload = JSON.stringify(payload);
+  // Debounce identical act calls within 50ms (WebView2 double-delivery guard)
+  const now = Date.now();
+  const actKey = action + stringifiedPayload;
+  if (now - lastActTime < 50 && actKey === lastActKey) {
+    return;
+  }
+  lastActTime = now;
+  lastActKey = actKey;
   const urlSize = Object.entries({
     type: 'act/' + action,
     payload: stringifiedPayload,

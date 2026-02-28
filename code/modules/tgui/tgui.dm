@@ -45,6 +45,8 @@
 	var/list/children = list()
 	/// The id of any ByondUi elements that we have opened
 	var/list/open_byondui_elements
+	/// world.time of the last processed act (dedup guard for WebView2 double-delivery)
+	var/last_act_tick = -1
 
 /**
  * public
@@ -345,6 +347,10 @@
 /datum/tgui/proc/on_message(type, list/payload, list/href_list)
 	// Pass act type messages to ui_act
 	if(type && copytext(type, 1, 5) == "act/")
+		// Dedup: WebView2 can deliver the same location.href twice in the same tick
+		if(last_act_tick >= world.time)
+			return FALSE
+		last_act_tick = world.time
 		var/act_type = copytext(type, 5)
 		#ifdef TGUI_DEBUGGING
 		log_tgui(user, "Action: [act_type] [href_list["payload"]], Window: [window.id], Source: [src_object]")
