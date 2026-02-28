@@ -66,10 +66,9 @@
 				if(!CanFeedon(Target)) //If they're not able to be fed upon, ignore them.
 					if(!Atkcool)
 						Atkcool = 1
-					atkcool_timer_id = addtimer(CALLBACK(src, PROC_REF(reset_atkcool)), 45, TIMER_STOPPABLE | TIMER_DELETE_ME)
-
-					if(Target.Adjacent(src))
-						Target.attack_slime(src)
+						atkcool_timer_id = addtimer(CALLBACK(src, PROC_REF(reset_atkcool)), 45, TIMER_STOPPABLE | TIMER_DELETE_ME)
+						if(Target.Adjacent(src))
+							Target.attack_slime(src)
 					break
 				if(!Target.lying && prob(80))
 

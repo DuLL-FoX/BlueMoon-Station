@@ -135,9 +135,11 @@
 	if(hook_action)
 		// Null target first — the action remains alive (owned by the mob wearing the suit),
 		// so its target var would otherwise hold a hard ref to this qdeled gun, causing GC failure.
+		// NOTE: do NOT call toggle_button_on_off() here — it leads to UpdateButton() → IsAvailable()
+		// which dereferences the target we just nulled and can runtime.
+		// action_ready = FALSE is enough: the button will grey out via IsAvailable() returning FALSE.
 		hook_action.target = null
 		hook_action.action_ready = FALSE
-		hook_action.toggle_button_on_off()
 		hook_action = null //BLUEMOON ADD END
 	return ..()
 
