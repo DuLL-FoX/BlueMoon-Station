@@ -116,10 +116,12 @@
 			continue
 		// Run reactions if air changed (skip for near-vacuum — no meaningful reactions)
 		if(turf_air.total_moles() > MINIMUM_MOLE_COUNT)
-			var/react_result = turf_air.react(T)
 #ifdef TESTING
+			var/react_result = turf_air.react(T)
 			if(react_result & REACTING)
 				SSair.prof_finalize_reactions++
+#else
+			turf_air.react(T)
 #endif
 		// Update gas overlays
 		T.update_visuals()
