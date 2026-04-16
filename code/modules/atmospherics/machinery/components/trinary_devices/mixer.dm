@@ -21,6 +21,7 @@
 		on = !on
 		investigate_log("was turned [on ? "on" : "off"] by [key_name(user)]", INVESTIGATE_ATMOS)
 		update_appearance()
+		wake_atmos()
 	return ..()
 
 /obj/machinery/atmospherics/components/trinary/mixer/AltClick(mob/user)
@@ -29,6 +30,7 @@
 		investigate_log("was set to [target_pressure] kPa by [key_name(user)]", INVESTIGATE_ATMOS)
 		balloon_alert(user, "pressure output on set to [target_pressure] kPa")
 		update_appearance()
+		wake_atmos()
 	return ..()
 
 /obj/machinery/atmospherics/components/trinary/mixer/update_overlays()
@@ -52,6 +54,7 @@
 /obj/machinery/atmospherics/components/trinary/mixer/process_atmos()
 	..()
 	if(!on || !(nodes[1] && nodes[2] && nodes[3]) || !is_operational())
+		idle_atmos()
 		return
 
 	//Get those gases, mah boiiii
@@ -67,6 +70,7 @@
 
 	if(output_starting_pressure >= target_pressure)
 		//No need to mix if target is already full!
+		idle_atmos()
 		return
 
 	//Calculate necessary moles to transfer using PV=nRT
@@ -101,13 +105,20 @@
 
 	//Actually transfer the gas
 
+	var/did_transfer = FALSE
+
 	if(transfer_moles1)
 		air1.transfer_to(air3, transfer_moles1)
+		did_transfer = TRUE
 
 	if(transfer_moles2)
 		air2.transfer_to(air3, transfer_moles2)
+		did_transfer = TRUE
 
-	update_parents()
+	if(did_transfer)
+		update_parents()
+	else
+		idle_atmos()
 
 /obj/machinery/atmospherics/components/trinary/mixer/ui_interact(mob/user, datum/tgui/ui)
 	ui = SStgui.try_update_ui(user, src, ui)
@@ -158,6 +169,7 @@
 			investigate_log("was set to [node2_concentration] % on node 2 by [key_name(usr)]", INVESTIGATE_ATMOS)
 			. = TRUE
 	update_icon()
+	wake_atmos()
 
 /obj/machinery/atmospherics/components/trinary/mixer/proc/adjust_node1_value(newValue)
 	node1_concentration = newValue / 100

@@ -147,18 +147,27 @@
 /obj/machinery/atmospherics/components/unary/vent_scrubber/process_atmos()
 	..()
 	if(welded || !is_operational())
+		idle_atmos()
 		return FALSE
 	if(!nodes[1] || !on)
 		on = FALSE
+		idle_atmos()
 		return FALSE
-	scrub(loc)
+	var/did_scrub = scrub(loc)
 	if(widenet)
 		for(var/turf/tile in adjacent_turfs)
-			scrub(tile)
+			if(scrub(tile))
+				did_scrub = TRUE
+	if(did_scrub)
+		update_parents()
+	else
+		idle_atmos()
 	return TRUE
 
 /obj/machinery/atmospherics/components/unary/vent_scrubber/proc/scrub(var/turf/tile)
 	if(!istype(tile))
+		return FALSE
+	if(!airs?[1])
 		return FALSE
 	var/datum/gas_mixture/environment = tile.return_air()
 	var/datum/gas_mixture/air_contents = airs[1]
@@ -166,19 +175,22 @@
 	if(air_contents.return_pressure() >= 50*ONE_ATMOSPHERE || !islist(clean_filter_types))
 		return FALSE
 
+	var/env_vol = environment.return_volume()
+	if(env_vol <= 0)
+		return FALSE
+
+	var/pre_moles = air_contents.total_moles()
+
 	if(scrubbing & SCRUBBING)
-		environment.scrub_into(air_contents, volume_rate/environment.return_volume(), clean_filter_types)
-
-		tile.air_update_turf()
-
+		environment.scrub_into(air_contents, volume_rate/env_vol, clean_filter_types)
 	else //Just siphoning all air
+		environment.transfer_ratio_to(air_contents, volume_rate/env_vol)
 
-		environment.transfer_ratio_to(air_contents, volume_rate/environment.return_volume())
+	if(air_contents.total_moles() > pre_moles + MINIMUM_MOLE_COUNT)
 		tile.air_update_turf()
+		return TRUE
 
-	update_parents()
-
-	return TRUE
+	return FALSE
 
 //There is no easy way for an object to be notified of changes to atmos can pass flags
 //	So we check every machinery process (2 seconds)
@@ -239,11 +251,13 @@
 
 	broadcast_status()
 	update_icon()
+	wake_atmos()
 	return
 
 /obj/machinery/atmospherics/components/unary/vent_scrubber/power_change()
 	..()
 	update_icon_nopipes()
+	wake_atmos()
 
 /obj/machinery/atmospherics/components/unary/vent_scrubber/welder_act(mob/living/user, obj/item/I)
 	if(!I.tool_start_check(user, amount=0))
@@ -259,6 +273,7 @@
 		update_icon()
 		pipe_vision_img = image(src, loc, layer = ABOVE_HUD_LAYER, dir = dir)
 		pipe_vision_img.plane = ABOVE_HUD_PLANE
+		wake_atmos()
 	return TRUE
 
 /obj/machinery/atmospherics/components/unary/vent_scrubber/can_unwrench(mob/user)

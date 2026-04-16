@@ -179,7 +179,7 @@ GLOBAL_LIST_INIT(blacklisted_automated_baseturfs, typecacheof(list(
 			else
 				newTurf.turf_fire = turf_fire
 		newTurf.air.copy_from(stashed_air)
-		newTurf.update_air_ref(planetary_atmos ? 1 : 2)
+		SSair.add_to_active(newTurf)
 		QDEL_NULL(stashed_air)
 	else if (!(flags & CHANGETURF_SKIP))
 		flags |= CHANGETURF_RECALC_ADJACENT
@@ -190,9 +190,7 @@ GLOBAL_LIST_INIT(blacklisted_automated_baseturfs, typecacheof(list(
 			// BLUEMOON EDIT START: Invalid Space Turfs
 			if (!.)
 				return
-			var/turf/open/newTurf = .
-			if (newTurf)
-				newTurf.update_air_ref(-1)
+			// Closed turf path - no atmos processing needed
 		else
 			. = ..()
 			if (!.)
@@ -200,6 +198,7 @@ GLOBAL_LIST_INIT(blacklisted_automated_baseturfs, typecacheof(list(
 			var/turf/open/newTurf = .
 			if (newTurf)
 				newTurf.Initalize_Atmos(0)
+				SSair.add_to_active(newTurf)
 			// BLUEMOON EDIT END: Invalid Space Turfs
 	else
 		. = ..()

@@ -18,41 +18,30 @@
 	volume = 35 * device_type
 	..()
 
+/// Pipes don't need per-tick processing — they only participate in pipelines.
+/// Return PROCESS_KILL to remove from atmos_machinery after init completes.
+/obj/machinery/atmospherics/pipe/process_atmos()
+	return PROCESS_KILL
+
 /obj/machinery/atmospherics/pipe/nullifyNode(i)
 	var/obj/machinery/atmospherics/oldN = nodes[i]
 	..()
-	if(oldN)
+	if(oldN && !QDELETED(oldN))
 		SSair.add_to_rebuild_queue(oldN)
 
 /obj/machinery/atmospherics/pipe/destroy_network()
 	QDEL_NULL(parent)
 
-/obj/machinery/atmospherics/pipe/proc/prune_stale_pipeline_memberships(datum/pipeline/skip_pipeline = null)
-	var/list/seen_pipelines = list()
-	for(var/list/source as anything in list(SSair.networks, SSair.currentrun))
-		if(!islist(source))
-			continue
-		for(var/thing as anything in source)
-			if(!istype(thing, /datum/pipeline))
-				continue
-			var/datum/pipeline/P = thing
-			if(P in seen_pipelines)
-				continue
-			seen_pipelines += P
-			if(P == skip_pipeline)
-				continue
-			if(src in P.members)
-				P.members -= src
-				P.update = TRUE
 
 /obj/machinery/atmospherics/pipe/build_network()
 	if(QDELETED(src))
 		return // Pipe was destroyed, don't rebuild
-	if(QDELETED(parent))
-		if(parent && QDESTROYING(parent))
-			investigate_log("[type] at [COORD(src)] rebuilding network while parent pipeline is being destroyed", INVESTIGATE_ATMOS)
-		parent = new
-		parent.build_pipeline(src)
+	if(parent && !QDELETED(parent))
+		return // Already has a healthy pipeline, skip redundant rebuild
+	if(parent && QDESTROYING(parent))
+		investigate_log("[type] at [COORD(src)] rebuilding network while parent pipeline is being destroyed", INVESTIGATE_ATMOS)
+	parent = new
+	parent.build_pipeline(src)
 
 /obj/machinery/atmospherics/pipe/atmosinit()
 	var/turf/T = loc			// hide if turf is not intact
@@ -109,7 +98,6 @@
 	return FALSE // they're not really machines in the normal sense, probably shouldn't explode
 
 /obj/machinery/atmospherics/pipe/Destroy()
-	prune_stale_pipeline_memberships(parent)
 	QDEL_NULL(parent)
 
 	releaseAirToTurf()

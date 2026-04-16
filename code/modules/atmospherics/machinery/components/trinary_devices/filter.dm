@@ -24,6 +24,7 @@
 		on = !on
 		investigate_log("was turned [on ? "on" : "off"] by [key_name(user)]", INVESTIGATE_ATMOS)
 		update_appearance()
+		wake_atmos()
 		return ..()
 
 /obj/machinery/atmospherics/components/trinary/filter/AltClick(mob/user)
@@ -32,6 +33,7 @@
 		investigate_log("was set to [transfer_rate] L/s by [key_name(user)]", INVESTIGATE_ATMOS)
 		balloon_alert(user, "volume output set to [transfer_rate] L/s")
 		update_appearance()
+		wake_atmos()
 	return ..()
 
 /obj/machinery/atmospherics/components/trinary/filter/proc/set_frequency(new_frequency)
@@ -70,10 +72,12 @@
 	..()
 	if(machine_stat != old_stat)
 		update_icon()
+		wake_atmos()
 
 /obj/machinery/atmospherics/components/trinary/filter/process_atmos()
 	..()
 	if(!on || !(nodes[1] && nodes[2] && nodes[3]) || !is_operational())
+		idle_atmos()
 		return
 
 	var/datum/gas_mixture/air1 = airs[1]
@@ -83,6 +87,7 @@
 	var/input_starting_pressure = air1.return_pressure()
 
 	if((input_starting_pressure < 0.01))
+		idle_atmos()
 		return
 
 	//Calculate necessary moles to transfer using PV=nRT
@@ -91,6 +96,8 @@
 
 	//Actually transfer the gas
 
+	var/did_transfer = FALSE
+
 	if(transfer_ratio > 0)
 
 		if(filter_type && air2.return_pressure() <= 9000)
@@ -98,10 +105,15 @@
 				air1.scrub_into(air2, transfer_ratio, GLOB.gas_data.groups[filter_type])
 			else
 				air1.scrub_into(air2, transfer_ratio, list(filter_type))
+			did_transfer = TRUE
 		if(air3.return_pressure() <= 9000)
 			air1.transfer_ratio_to(air3, transfer_ratio)
+			did_transfer = TRUE
 
-	update_parents()
+	if(did_transfer)
+		update_parents()
+	else
+		idle_atmos()
 
 /obj/machinery/atmospherics/components/trinary/filter/atmosinit()
 	set_frequency(frequency)
@@ -163,6 +175,7 @@
 			investigate_log("was set to filter [filter_name] by [key_name(usr)]", INVESTIGATE_ATMOS)
 			. = TRUE
 	update_icon()
+	wake_atmos()
 
 /obj/machinery/atmospherics/components/trinary/filter/can_unwrench(mob/user)
 	. = ..()

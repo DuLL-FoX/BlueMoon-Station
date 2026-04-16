@@ -85,10 +85,12 @@
 /obj/machinery/atmospherics/components/unary/vent_pump/process_atmos()
 	..()
 	if(!is_operational())
+		idle_atmos()
 		return
 	if(!nodes[1])
 		on = FALSE
 	if(!on || welded)
+		idle_atmos()
 		return
 
 	var/datum/gas_mixture/air_contents = airs[1]
@@ -97,8 +99,10 @@
 		return
 
 	var/environment_pressure = environment?.return_pressure()
-	if(!environment_pressure)
+	if(isnull(environment_pressure))
 		return
+
+	var/did_transfer = FALSE
 
 	if(pump_direction & RELEASING) // internal -> external
 		var/pressure_delta = 10000
@@ -108,12 +112,15 @@
 		if(pressure_checks&INT_BOUND)
 			pressure_delta = min(pressure_delta, (air_contents.return_pressure() - internal_pressure_bound))
 
+		ATMOS_DEBUG_LOG("VENT_PUMP ([x],[y],[z]) RELEASING pressure_delta=[round(pressure_delta, 0.01)] env_pressure=[round(environment_pressure, 0.01)] pipe_pressure=[round(air_contents.return_pressure(), 0.01)] pipe_moles=[round(air_contents.total_moles(), 0.01)] pipe_temp=[round(air_contents.return_temperature(), 0.01)] ext_bound=[external_pressure_bound] int_bound=[internal_pressure_bound]")
 		if(pressure_delta > 0)
 			if(air_contents.return_temperature() > 0)
 				var/transfer_moles = pressure_delta*environment.return_volume()/(air_contents.return_temperature() * R_IDEAL_GAS_EQUATION)
+				ATMOS_DEBUG_LOG("VENT_PUMP ([x],[y],[z]) TRANSFER_OUT moles=[round(transfer_moles, 0.01)] env_moles_before=[round(environment.total_moles(), 0.01)]")
 
 				loc.assume_air_moles(air_contents, transfer_moles)
 				air_update_turf()
+				did_transfer = TRUE
 
 	else // external -> internal
 		if(environment.return_pressure() > 0)
@@ -127,7 +134,13 @@
 			if(moles_delta > 0)
 				loc.transfer_air(air_contents, moles_delta)
 				air_update_turf()
-	update_parents()
+				did_transfer = TRUE
+	if(did_transfer)
+		ATMOS_DEBUG_LOG("VENT_PUMP ([x],[y],[z]) TRANSFERRED env_moles_after=[round(environment.total_moles(), 0.01)] env_pressure_after=[round(environment.return_pressure(), 0.01)]")
+		update_parents()
+	else
+		ATMOS_DEBUG_LOG("VENT_PUMP ([x],[y],[z]) NO_TRANSFER direction=[pump_direction] env_pressure=[round(environment_pressure, 0.01)] pipe_pressure=[round(air_contents.return_pressure(), 0.01)]")
+		idle_atmos()
 
 //Radio remote control
 
@@ -245,6 +258,7 @@
 		// log_admin("DEBUG \[[world.timeofday]\]: vent_pump/receive_signal: unknown command \"[signal.data["command"]]\"\n[signal.debug_print()]")
 	broadcast_status()
 	update_icon()
+	wake_atmos()
 
 /obj/machinery/atmospherics/components/unary/vent_pump/welder_act(mob/living/user, obj/item/I)
 	if(!I.tool_start_check(user, amount=0))
@@ -260,6 +274,7 @@
 		update_icon()
 		pipe_vision_img = image(src, loc, layer = ABOVE_HUD_LAYER, dir = dir)
 		pipe_vision_img.plane = ABOVE_HUD_PLANE
+		wake_atmos()
 	return TRUE
 
 /obj/machinery/atmospherics/components/unary/vent_pump/can_unwrench(mob/user)
@@ -276,6 +291,7 @@
 /obj/machinery/atmospherics/components/unary/vent_pump/power_change()
 	..()
 	update_icon_nopipes()
+	wake_atmos()
 
 /obj/machinery/atmospherics/components/unary/vent_pump/can_crawl_through()
 	return !welded

@@ -84,19 +84,16 @@
 			atmos_adjacent_turfs -= current_turf
 			LAZYREMOVE(current_turf.atmos_adjacent_turfs, src)
 
-		current_turf.__update_auxtools_turf_adjacency_info()
 	UNSETEMPTY(atmos_adjacent_turfs)
 	src.atmos_adjacent_turfs = atmos_adjacent_turfs
-	__update_auxtools_turf_adjacency_info()
+	ATMOS_DEBUG_LOG("ADJACENCY ([x],[y],[z]) adj_count=[length(atmos_adjacent_turfs)]")
 
 /turf/proc/clear_adjacencies()
 	block_all_conductivity()
 	for(var/turf/current_turf as anything in atmos_adjacent_turfs)
 		LAZYREMOVE(current_turf.atmos_adjacent_turfs, src)
-		current_turf.__update_auxtools_turf_adjacency_info()
 
 	LAZYNULL(atmos_adjacent_turfs)
-	__update_auxtools_turf_adjacency_info()
 
 /**
  * Returns a list of adjacent turfs that can share air with this one.
@@ -146,6 +143,13 @@
 		return
 	ImmediateCalculateAdjacentTurfs()
 
+/turf/open/air_update_turf(calculate_adjacencies = FALSE)
+	if(calculate_adjacencies)
+		ImmediateCalculateAdjacentTurfs()
+	if(!isspaceturf(src) && air && SSair?.initialized)
+		ATMOS_DEBUG_LOG("AIR_UPDATE ([x],[y],[z]) calc_adj=[calculate_adjacencies] moles=[round(air.total_moles(), 0.01)] temp=[round(air.temperature, 0.01)] already_active=[excited]")
+		SSair.add_to_active(src)
+
 /atom/movable/proc/move_update_air(turf/T)
 	if(isturf(T))
 		T.air_update_turf(TRUE)
@@ -165,3 +169,4 @@
 	G.parse_gas_string(text)
 	assume_air(G)
 	qdel(G)
+	air_update_turf()

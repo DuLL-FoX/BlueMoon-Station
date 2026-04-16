@@ -15,7 +15,7 @@
 	..()
 
 	for(var/i in 1 to device_type)
-		var/datum/gas_mixture/A = new(200)
+		var/datum/gas_mixture/A = gasmix_acquire(200)
 		airs[i] = A
 
 // Iconnery
@@ -64,10 +64,16 @@
 // Pipenet stuff; housekeeping
 
 /obj/machinery/atmospherics/components/nullifyNode(i)
-	var/datum/gas_mixture/air_ref = airs ? airs[i] : null
 	if(parents[i])
 		nullifyPipenet(parents[i])
-	prune_stale_pipeline_memberships(air_ref)
+	// Safety net: if the air is still tracked in a pipeline we don't know about, clean it up
+	var/datum/gas_mixture/air_to_remove = airs[i]
+	if(air_to_remove?._owner_pipeline && !QDELETED(air_to_remove._owner_pipeline))
+		stack_trace("nullifyNode: air [REF(air_to_remove)] still owned by pipeline [air_to_remove._owner_pipeline]([REF(air_to_remove._owner_pipeline)]) after nullifyPipenet! \
+			Component [type] at [COORD(src)], port [i], parents[i]=[parents[i] ? "[parents[i]]([REF(parents[i])])" : "null"]")
+		air_to_remove._owner_pipeline.cached_connected_airs = null
+		air_to_remove._owner_pipeline.other_airs -= air_to_remove
+		air_to_remove._owner_pipeline = null
 	QDEL_NULL(airs[i])
 	return ..()
 
@@ -98,12 +104,19 @@
 		// Still need to clear our local references even if pipeline is being destroyed
 		for (var/i in 1 to parents.len)
 			if (parents[i] == reference)
+				reference.other_airs -= airs[i]
+				if(airs[i]?._owner_pipeline == reference)
+					airs[i]._owner_pipeline = null
 				parents[i] = null
+		reference.cached_connected_airs = null
 		return
 	for (var/i in 1 to parents.len)
 		if (parents[i] == reference)
 			reference.other_airs -= airs[i] // Disconnects from the pipeline side
+			if(airs[i]?._owner_pipeline == reference)
+				airs[i]._owner_pipeline = null
 			parents[i] = null // Disconnects from the machinery side.
+	reference.cached_connected_airs = null
 	reference.other_atmosmch -= src
 	/**
 	 *  We explicitly qdel pipeline when this particular pipeline
@@ -118,31 +131,6 @@
 			CRASH("nullifyPipenet() called on qdeleting [reference]")
 		qdel(reference)
 
-/obj/machinery/atmospherics/components/proc/prune_stale_pipeline_memberships(datum/gas_mixture/air_ref)
-	var/list/seen_pipelines = list()
-	for(var/list/source as anything in list(SSair.networks, SSair.currentrun))
-		if(!islist(source))
-			continue
-		for(var/thing as anything in source)
-			if(!istype(thing, /datum/pipeline))
-				continue
-			var/datum/pipeline/P = thing
-			if(P in seen_pipelines)
-				continue
-			seen_pipelines += P
-			if(QDELETED(P) || QDESTROYING(P))
-				continue
-			var/changed = FALSE
-			if(src in P.other_atmosmch)
-				P.other_atmosmch -= src
-				changed = TRUE
-			if(air_ref && (air_ref in P.other_airs))
-				P.other_airs -= air_ref
-				changed = TRUE
-			if(changed)
-				P.update = TRUE
-				if(!length(P.other_atmosmch) && !length(P.members))
-					qdel(P)
 
 /obj/machinery/atmospherics/components/returnPipenetAirs(datum/pipeline/reference)
 	var/list/returned_air = list()
@@ -158,17 +146,32 @@
 
 /obj/machinery/atmospherics/components/pipeline_expansion(datum/pipeline/reference)
 	if(reference)
-		return list(nodes[parents.Find(reference)])
+		var/idx = parents.Find(reference)
+		if(!idx)
+			stack_trace("pipeline_expansion: pipeline not found in [type] parents at [COORD(src)]")
+			return list()
+		return list(nodes[idx])
 	return ..()
 
 /obj/machinery/atmospherics/components/setPipenet(datum/pipeline/reference, obj/machinery/atmospherics/A)
-	parents[nodes.Find(A)] = reference
+	var/idx = nodes.Find(A)
+	if(!idx)
+		stack_trace("setPipenet: [A] ([A.type]) not found in [type] nodes at [COORD(src)]")
+		return
+	parents[idx] = reference
+	wake_atmos()
 
 /obj/machinery/atmospherics/components/returnPipenet(obj/machinery/atmospherics/A = nodes[1]) //returns parents[1] if called without argument
-	return parents[nodes.Find(A)]
+	var/idx = nodes.Find(A)
+	if(!idx)
+		stack_trace("returnPipenet: [A] ([A?.type]) not found in [type] nodes at [COORD(src)]")
+		return
+	return parents[idx]
 
 /obj/machinery/atmospherics/components/replacePipenet(datum/pipeline/Old, datum/pipeline/New)
-	parents[parents.Find(Old)] = New
+	for(var/i in 1 to parents.len)
+		if(parents[i] == Old)
+			parents[i] = New
 
 /obj/machinery/atmospherics/components/unsafe_pressure_release(var/mob/user, var/pressures)
 	..()
@@ -211,7 +214,7 @@
 			investigate_log("[type] at [COORD(src)] is missing a pipenet, rebuilding", INVESTIGATE_ATMOS)
 			SSair.add_to_rebuild_queue(src)
 		else
-			parent.update = TRUE
+			parent.mark_dirty()
 
 /obj/machinery/atmospherics/components/returnPipenets()
 	. = list()

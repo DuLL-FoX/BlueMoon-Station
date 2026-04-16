@@ -26,6 +26,10 @@
 	for(var/obj/machinery/power/M in nodes)
 		nodes -= M
 		M.powernet = null
+	// Handle non-standard machines added to the powernet (e.g. nuclear reactor)
+	for(var/obj/machinery/atmospherics/components/trinary/nuclear_reactor/reactor in nodes)
+		nodes -= reactor
+		reactor.powernet = null
 
 	SSmachines.powernets -= src
 	return ..()

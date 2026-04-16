@@ -138,12 +138,12 @@ GLOBAL_LIST_INIT(nonreactive_gases, typecacheof(list(GAS_O2, GAS_N2, GAS_CO2, GA
 		if(gas.price)
 			prices[g] = gas.price
 		add_supermatter_properties(gas)
-		_auxtools_register_gas(gas)
 		if(done_initializing)
 			for(var/r in SSair.gas_reactions)
 				var/datum/gas_reaction/R = r
 				R.init_reqs()
-			SSair.auxtools_update_reactions()
+			// Rebuild gas index tables since a new gas was added
+			init_gas_index_tables()
 		SEND_GLOBAL_SIGNAL(COMSIG_GLOB_NEW_GAS, g)
 
 /datum/auxgm/New()
@@ -162,7 +162,8 @@ GLOBAL_LIST_INIT(nonreactive_gases, typecacheof(list(GAS_O2, GAS_N2, GAS_CO2, GA
 		var/datum/breathing_class/class = new breathing_class_path
 		breathing_classes[breathing_class_path] = class
 	done_initializing = TRUE
-	finalize_gas_refs()
+	// Initialize gas index translation tables for the pure DM atmos system
+	init_gas_index_tables(src)
 
 /datum/auxgm/proc/get_by_flag(flag)
 	var/static/list/gases_by_flag

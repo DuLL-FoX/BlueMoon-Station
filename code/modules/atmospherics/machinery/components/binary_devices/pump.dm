@@ -37,6 +37,7 @@
 		on = !on
 		investigate_log("was turned [on ? "on" : "off"] by [key_name(user)]", INVESTIGATE_ATMOS)
 		update_appearance()
+		wake_atmos()
 	return ..()
 
 /obj/machinery/atmospherics/components/binary/pump/AltClick(mob/user)
@@ -45,6 +46,7 @@
 		investigate_log("was set to [target_pressure] kPa by [key_name(user)]", INVESTIGATE_ATMOS)
 		balloon_alert(user, "pressure output set to [target_pressure] kPa")
 		update_appearance()
+		wake_atmos()
 	return ..()
 
 /obj/machinery/atmospherics/components/binary/pump/Destroy()
@@ -59,15 +61,20 @@
 /obj/machinery/atmospherics/components/binary/pump/process_atmos()
 //	..()
 	if(!on || !is_operational())
+		idle_atmos()
 		return
 
 	var/datum/gas_mixture/air1 = airs[1]
 	var/datum/gas_mixture/air2 = airs[2]
+	if(!air1 || !air2)
+		idle_atmos()
+		return
 
 	var/output_starting_pressure = air2.return_pressure()
 
 	if((target_pressure - output_starting_pressure) < 0.01)
 		//No need to pump gas if target is already reached!
+		idle_atmos()
 		return
 
 	//Calculate necessary moles to transfer using PV=nRT
@@ -78,6 +85,8 @@
 		air1.transfer_to(air2,transfer_moles)
 
 		update_parents()
+	else
+		idle_atmos()
 
 //Radio remote control
 /obj/machinery/atmospherics/components/binary/pump/proc/set_frequency(new_frequency)
@@ -139,6 +148,7 @@
 				target_pressure = clamp(pressure, 0, MAX_OUTPUT_PRESSURE)
 				investigate_log("was set to [target_pressure] kPa by [key_name(usr)]", INVESTIGATE_ATMOS)
 	update_icon()
+	wake_atmos()
 
 /obj/machinery/atmospherics/components/binary/pump/atmosinit()
 	..()
@@ -169,10 +179,12 @@
 
 	broadcast_status()
 	update_icon()
+	wake_atmos()
 
 /obj/machinery/atmospherics/components/binary/pump/power_change()
 	..()
 	update_icon()
+	wake_atmos()
 
 /obj/machinery/atmospherics/components/binary/pump/can_unwrench(mob/user)
 	. = ..()

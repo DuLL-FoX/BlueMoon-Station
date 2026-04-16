@@ -68,6 +68,7 @@
 /obj/machinery/atmospherics/components/unary/thermomachine/process_atmos()
 	..()
 	if(!on || !nodes[1])
+		idle_atmos()
 		return
 	var/datum/gas_mixture/air_contents = airs[1]
 
@@ -85,11 +86,13 @@
 		update_parents()
 	else
 		active_power_usage = idle_power_usage
+		idle_atmos()
 	return TRUE
 
 /obj/machinery/atmospherics/components/unary/thermomachine/power_change()
 	..()
 	update_icon()
+	wake_atmos()
 
 /obj/machinery/atmospherics/components/unary/thermomachine/attackby(obj/item/I, mob/user, params)
 	if(!on)
@@ -174,6 +177,7 @@
 				investigate_log("was set to [target_temperature] K by [key_name(usr)]", INVESTIGATE_ATMOS)
 
 	update_icon()
+	wake_atmos()
 
 /obj/machinery/atmospherics/components/unary/thermomachine/CtrlClick(mob/living/user)
 	var/area/A = get_area(src)
@@ -184,6 +188,7 @@
 	update_icon()
 	investigate_log("was turned [on ? "on" : "off"] by [key_name(usr)]", INVESTIGATE_ATMOS)
 	message_admins("[src.name] was turned [on ? "on" : "off"] [ADMIN_LOOKUPFLW(usr)] at [ADMIN_COORDJMP(T)], [A]")
+	wake_atmos()
 
 /obj/machinery/atmospherics/components/unary/thermomachine/freezer
 	name = "freezer"
@@ -224,6 +229,7 @@
 	target_temperature = min_temperature
 	investigate_log("was set to [target_temperature] K by [key_name(user)]", INVESTIGATE_ATMOS)
 	balloon_alert(user, "температура сброшена до [target_temperature] K")
+	wake_atmos()
 
 /obj/machinery/atmospherics/components/unary/thermomachine/heater
 	name = "heater"
@@ -252,3 +258,4 @@
 	target_temperature = max_temperature
 	investigate_log("was set to [target_temperature] K by [key_name(user)]", INVESTIGATE_ATMOS)
 	balloon_alert(user, "температура сброшена до [target_temperature] K")
+	wake_atmos()

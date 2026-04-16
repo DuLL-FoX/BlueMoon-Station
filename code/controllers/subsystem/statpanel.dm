@@ -253,7 +253,8 @@ SUBSYSTEM_DEF(statpanels)
 		list("\u0421\u0435\u0442\u0438", SSair.networks.len),
 		list("\u0412\u044B\u0441 \u0434\u0430\u0432\u043B. \u0442\u0430\u0439\u043B\u044B", SSair.high_pressure_turfs),
 		list("\u041D\u0438\u0437\u043A \u0434\u0430\u0432\u043B. \u0442\u0430\u0439\u043B\u044B", SSair.low_pressure_turfs),
-		list("\u0413\u0430\u0437\u043E\u0432\u044B\u0435 \u0441\u043C\u0435\u0441\u0438", SSair.gas_mixes_count)
+		list("\u0413\u0430\u0437\u043E\u0432\u044B\u0435 \u0441\u043C\u0435\u0441\u0438 (\u043F\u0443\u043B)", GLOB.gasmix_pool_count),
+		list("\u0410\u043A\u0442\u0438\u0432\u043D\u044B\u0435 \u0442\u0430\u0439\u043B\u044B", SSair.active_turfs.len)
 	)
 	// Garbage Collector
 	var/gc_ratio = (SSgarbage.totaldels + SSgarbage.totalgcs) ? "[round((SSgarbage.totalgcs / (SSgarbage.totaldels + SSgarbage.totalgcs)) * 100, 0.1)]%" : "n/a"

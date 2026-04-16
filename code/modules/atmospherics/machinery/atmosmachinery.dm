@@ -39,6 +39,8 @@
 	var/construction_type
 	var/pipe_state //icon_state as a pipe item
 	var/on = FALSE
+	/// TRUE when this machine is already in SSair.pipenets_needing_rebuilt — prevents O(n) list scan
+	var/tmp/rebuild_queued = FALSE
 
 /obj/machinery/atmospherics/Initialize(mapload)
 	. = ..()
@@ -83,7 +85,9 @@
 
 
 	SSair.stop_processing_machine(src)
-	SSair.pipenets_needing_rebuilt -= src
+	if(rebuild_queued)
+		SSair.pipenets_needing_rebuilt -= src
+		rebuild_queued = FALSE
 
 	dropContents()
 	if(pipe_vision_img)
@@ -381,6 +385,14 @@
 //Used for certain children of obj/machinery/atmospherics to not show pipe vision when mob is inside it.
 /obj/machinery/atmospherics/proc/can_see_pipes()
 	return TRUE
+
+/// Stop atmospheric processing (machine is idle). Call when process_atmos() has nothing to do.
+/obj/machinery/atmospherics/proc/idle_atmos()
+	SSair.stop_processing_machine(src)
+
+/// Resume atmospheric processing. Call when machine state changes and it needs to process again.
+/obj/machinery/atmospherics/proc/wake_atmos()
+	SSair.start_processing_machine(src)
 
 /obj/machinery/atmospherics/proc/update_layer()
 	layer = (level == PIPE_VISIBLE_LEVEL ? GAS_PIPE_VISIBLE_LAYER : GAS_PIPE_HIDDEN_LAYER) + (piping_layer - PIPING_LAYER_DEFAULT) * PIPING_LAYER_LCHANGE

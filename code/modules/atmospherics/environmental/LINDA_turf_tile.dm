@@ -30,7 +30,6 @@
 /turf/open/Initialize(mapload, inherited_virtual_z)
 	air = new(2500,src)
 	air.copy_from_turf(src)
-	update_air_ref(planetary_atmos ? AIR_REF_PLANETARY_TURF : AIR_REF_OPEN_TURF)
 	return ..()
 
 /turf/open/Destroy()
@@ -127,12 +126,30 @@
 		return
 
 
-	for(var/id in air.get_gases())
-		if (nonoverlaying_gases[id])
+	// Iterate core gases directly to avoid get_gases() list allocation
+	var/list/cm = air.core_moles
+	var/list/idx_to_id = GLOB.gas_idx_to_id
+	var/list/gas_overlays = GLOB.gas_data.overlays
+	var/list/gas_visibility = GLOB.gas_data.visibility
+	for(var/i in 1 to CORE_GAS_COUNT)
+		var/moles_val = cm[i]
+		if(moles_val <= 0)
 			continue
-		var/gas_overlay = GLOB.gas_data.overlays[id]
-		if(gas_overlay && air.get_moles(id) > GLOB.gas_data.visibility[id])
-			new_overlay_types += gas_overlay[min(FACTOR_GAS_VISIBLE_MAX, CEILING(air.get_moles(id) / MOLES_GAS_VISIBLE_STEP, 1))]
+		var/id = idx_to_id[i]
+		if(nonoverlaying_gases[id])
+			continue
+		var/gas_overlay = gas_overlays[id]
+		if(gas_overlay && moles_val > gas_visibility[id])
+			new_overlay_types += gas_overlay[min(FACTOR_GAS_VISIBLE_MAX, CEILING(moles_val / MOLES_GAS_VISIBLE_STEP, 1))]
+	// Rare gases
+	if(air.rare_gases)
+		for(var/id as anything in air.rare_gases)
+			var/moles_val = air.rare_gases[id]
+			if(moles_val <= 0 || nonoverlaying_gases[id])
+				continue
+			var/gas_overlay = gas_overlays[id]
+			if(gas_overlay && moles_val > gas_visibility[id])
+				new_overlay_types += gas_overlay[min(FACTOR_GAS_VISIBLE_MAX, CEILING(moles_val / MOLES_GAS_VISIBLE_STEP, 1))]
 
 	if (atmos_overlay_types)
 		for(var/overlay in atmos_overlay_types-new_overlay_types) //doesn't remove overlays that would only be added

@@ -153,6 +153,11 @@
 #include "screen_gc.dm"
 #include "ssmobs_optimization.dm"
 #include "tattoo_system.dm"
+#include "atmos_gas_mixture.dm"
+#include "atmos_pool.dm"
+#include "atmos_sharing.dm"
+#include "atmos_reactions.dm"
+#include "atmos_pipeline.dm"
 
 #undef TEST_ASSERT
 #undef TEST_ASSERT_EQUAL
