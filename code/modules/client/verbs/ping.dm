@@ -1,4 +1,5 @@
 #define PING_RTT_WINDOW_SIZE 15
+#define PING_HISTORY_SIZE 30
 
 /client/proc/current_ping_tickstamp()
 	return world.time + world.tick_lag * TICK_USAGE_REAL / 100
@@ -56,6 +57,10 @@
 	lastping_server = server_ping
 	lastping = rtt_ping
 	ping_updated = TRUE
+	ping_history += list(list(round(best_ping, 0.1), round(server_ping, 0.1), round(jitter, 0.1)))
+	var/history_len = length(ping_history)
+	if(history_len > PING_HISTORY_SIZE)
+		ping_history.Cut(1, history_len - PING_HISTORY_SIZE + 1)
 
 	if(isnull(avgping_tick))
 		avgping_tick = tick_ping
@@ -100,3 +105,4 @@
 	winset(src, null, "command=.display_ping+[current_ping_tickstamp()]+[REALTIMEOFDAY]")
 
 #undef PING_RTT_WINDOW_SIZE
+#undef PING_HISTORY_SIZE

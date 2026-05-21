@@ -160,6 +160,7 @@
 #include "memory_leak_limits.dm"
 #include "human_mob_gc.dm"
 #include "perf_optimizations.dm"
+#include "ping_diagnostics.dm"
 #include "psychosis_pools.dm"
 #include "preload_size_budgets.dm"
 #include "image_leak_audit.dm"

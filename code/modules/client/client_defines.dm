@@ -111,6 +111,10 @@
 	var/avgping_jitter
 	var/ping_updated = FALSE
 	var/list/ping_rtt_window = list()
+	/// Rolling history of [rtt, server, jitter] samples for the diagnostics sparkline.
+	var/list/ping_history = list()
+	/// Lazily created diagnostics panel datum, one per opener.
+	var/datum/ping_diagnostics/ping_diag
 	var/connection_time //world.time they connected
 	var/connection_realtime //world.realtime they connected
 	var/connection_timeofday //world.timeofday they connected
