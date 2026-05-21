@@ -3,8 +3,12 @@
 // in modular_bluemoon/code/modules/ping_diagnostics/ping_verdict.dm - keep them in sync if
 // those #defines change.
 
-// Mirror of PING_SPIKE_MIN_MS: an RTT peak this far (ms) above the window average is a spike.
+// Mirror of PING_SPIKE_MIN_MS: an RTT peak must be this far (ms) above the window average to
+// count as a spike (absolute floor, ignores tiny hitches on a low-ping link).
 export const SPIKE_MIN_MS = 25;
+// Mirror of PING_SPIKE_RATIO: the peak must also be this fraction of the window-average RTT, so
+// a peak that is routine for a high-latency link is not mistaken for instability.
+const SPIKE_RATIO = 0.25;
 // Mirror of PING_NETWORK_MIN_MS.
 const NETWORK_MIN_MS = 15;
 // Mirror of PING_FLOOR_MARGIN_MS.
@@ -13,9 +17,6 @@ const FLOOR_MARGIN_MS = 8;
 const JITTER_MIN_MS = 10;
 // Mirror of PING_JITTER_RATIO.
 const JITTER_RATIO = 0.6;
-// Mirror of PING_NETWORK_HARD_MS: an RTT this high that also outweighs the server delay reads
-// as network regardless of any transient spike.
-const NETWORK_HARD_MS = 60;
 
 // Half-window average totals this far (ms) apart read as a trend rather than noise.
 const TREND_MIN_MS = 5;
@@ -45,9 +46,16 @@ const VERDICT_ORDER: SampleVerdict[] = ['server', 'network', 'jitter', 'healthy'
 
 const round1 = (value: number) => Math.round(value * 10) / 10;
 
+// True when an RTT sample stands far enough above the window average to count as a transient
+// spike, gauged both absolutely and as a fraction of the baseline so it scales with the
+// connection. Mirrors the spike branch of classify_ping.
+const isSpike = (above: number, windowAvgRtt: number): boolean =>
+  above >= SPIKE_MIN_MS && above >= windowAvgRtt * SPIKE_RATIO;
+
 // Categorize one sample by its dominant component. Mirrors the component-based branches of
-// classify_ping; the dilation- and fps-driven branches are intentionally omitted because the
-// history carries no per-sample dilation or client fps.
+// classify_ping (same ordering: instability before the network conclusion); the dilation- and
+// fps-driven branches are intentionally omitted because the history carries no per-sample
+// dilation or client fps.
 export const classifySample = (
   rtt: number,
   server: number,
@@ -55,18 +63,15 @@ export const classifySample = (
   floor: number,
   windowAvgRtt: number
 ): SampleVerdict => {
-  if (rtt >= NETWORK_HARD_MS && rtt >= server) {
-    return 'network';
-  }
-  if (rtt - windowAvgRtt >= SPIKE_MIN_MS) {
+  if (isSpike(rtt - windowAvgRtt, windowAvgRtt)) {
     return 'jitter';
-  }
-  if (rtt >= NETWORK_MIN_MS && rtt >= server && rtt > floor + FLOOR_MARGIN_MS) {
-    return 'network';
   }
   const total = rtt + server;
   if (jitter >= JITTER_MIN_MS && total > 0 && jitter / total >= JITTER_RATIO) {
     return 'jitter';
+  }
+  if (rtt >= NETWORK_MIN_MS && rtt >= server && rtt > floor + FLOOR_MARGIN_MS) {
+    return 'network';
   }
   if (server > floor + FLOOR_MARGIN_MS) {
     return 'server';
@@ -128,7 +133,7 @@ export const summarizeHistory = (
   let spikeMax = 0;
   rtts.forEach((rtt) => {
     const above = rtt - windowAvgRtt;
-    if (above >= SPIKE_MIN_MS) {
+    if (isSpike(above, windowAvgRtt)) {
       spikeCount += 1;
       if (above > spikeMax) {
         spikeMax = above;

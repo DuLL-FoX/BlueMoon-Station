@@ -28,10 +28,26 @@ describe('classifySample', () => {
     expect(classifySample(5, 3, 20, FLOOR, 5)).toBe('jitter');
   });
 
-  test('very high rtt is network even when it also spikes', () => {
-    // rtt 70 would trip the spike check (70 - 5 >= SPIKE_MIN_MS), but the hard-network
-    // branch wins first, matching DM PING_NETWORK_HARD_MS.
-    expect(classifySample(70, 5, 1, FLOOR, 5)).toBe('network');
+  test('a spike on a high baseline is jitter, not masked as network', () => {
+    // A 300ms-baseline link that peaks to 400 (above the window avg of 300) is bouncing:
+    // instability is now caught ahead of the plain-network conclusion.
+    expect(classifySample(400, 5, 1, FLOOR, 300)).toBe('jitter');
+  });
+
+  test('a stable high baseline reads as calm network', () => {
+    // A steady 300ms link with no peak above its own average is just distance, not a hitch.
+    expect(classifySample(300, 5, 1, FLOOR, 300)).toBe('network');
+  });
+
+  test('routine wobble on a high baseline is not a spike', () => {
+    // +30ms above a 300ms average clears the absolute floor but not the proportional one
+    // (300 * 0.25 = 75), so it stays network rather than false-flagging jitter.
+    expect(classifySample(330, 5, 1, FLOOR, 300)).toBe('network');
+  });
+
+  test('the same +30ms peak on a low baseline is a spike', () => {
+    // +30ms above a 40ms average is proportionally large, so it flags as instability.
+    expect(classifySample(70, 5, 1, FLOOR, 40)).toBe('jitter');
   });
 });
 

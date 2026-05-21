@@ -18,50 +18,63 @@
 #define PING_JITTER_RATIO 0.6
 /// Client framerate below this inflates the measured round-trip.
 #define PING_CLIENT_FPS_MIN 20
-/// Server-wide time dilation (percent) at or above this means the server cannot hold
-/// real-time: it is the bottleneck, and the rtt/server split becomes unreliable because
-/// the tick clock runs slow (server delay leaks into the wall-clock RTT instead).
+/// Server-wide time dilation (percent) at or above this means the server is struggling to hold
+/// real-time and the rtt/server split becomes unreliable (the tick clock runs slow, so server
+/// delay leaks into the wall-clock RTT instead of the `server` figure). Below the severe
+/// threshold this is only decisive when the player's own connection isn't the dominant cost.
 #define PING_TIDI_SERVER_PCT 10
-/// ...unless RTT is this high (ms) and is itself the dominant component, where a genuinely
-/// bad personal connection wins regardless of moderate dilation. A server delay that
-/// outweighs even a high RTT still reads as server - don't blame the player's network for it.
+/// At or above this dilation the server is the acute, unambiguous bottleneck for everyone on it,
+/// so it is the verdict regardless of how far the player sits from the server.
+#define PING_TIDI_SEVERE_PCT 30
+/// Under merely moderate dilation, an RTT this high (ms) that also outweighs the server delay
+/// means the player's own connection - not the moderate server wobble - dominates their ping,
+/// so it reads as network. Scoped to the dilation escape only; it does NOT gate the general
+/// network verdict (a stable 300ms link is judged the same way as a stable 40ms one).
 #define PING_NETWORK_HARD_MS 60
-/// A recent RTT peak this far (ms) above the running average is a transient spike. Caught
-/// independently of dilation/jitter, which are smoothed and miss short hitches that don't
-/// move the average (e.g. a single subsystem overrunning for one fire).
+/// A recent RTT peak must be at least this many ms above the running average to count as a
+/// transient spike. Absolute floor so tiny absolute hitches on a low-ping link are ignored.
 #define PING_SPIKE_MIN_MS 25
+/// ...and the peak must also be at least this fraction of the player's own baseline RTT, so a
+/// peak that is large in absolute terms but routine for a high-latency link (e.g. +30ms on a
+/// 300ms connection) is not mistaken for instability, while the same +30ms on a 40ms link is.
+#define PING_SPIKE_RATIO 0.25
 
 /// Classify a single client's ping into one verdict. All inputs are milliseconds
 /// (except client_fps and time_dilation, which is a percent). `spike` is the recent RTT
 /// peak above the average. Pure: no side effects, no I/O.
+///
+/// Order matters: server overload (dilation) is authoritative first because it invalidates the
+/// rtt/server decomposition; instability (spike/jitter) is checked next so a high but steady
+/// baseline RTT cannot mask a real hitch; only then do we conclude the ping is plain network
+/// distance. This keeps the verdict meaningful across the whole latency range - a stable 40ms
+/// and a stable 300ms player both read as a calm "network", while either one bouncing reads as
+/// "jitter".
 /proc/classify_ping(rtt as num, server as num, jitter as num, floor as num, client_fps as num, time_dilation as num, spike as num)
-	// High time dilation is the authoritative server-load signal. It also invalidates the
-	// rtt/server decomposition (under dilation the tick clock lags real time, so server
-	// delay shows up inside RTT, not in `server`). Skip only when RTT is so high that the
-	// player's own connection clearly dominates.
+	// Severe dilation: the server cannot hold real-time, which dominates everyone's experience
+	// regardless of their distance from it. Authoritative.
+	if(time_dilation >= PING_TIDI_SEVERE_PCT)
+		return PING_VERDICT_SERVER
+	// Moderate dilation: the server is the cause unless the player's own connection clearly
+	// dominates the (modest) server-induced delay - a genuinely far/bad personal connection
+	// shouldn't be blamed on a server that is only mildly behind.
 	if(time_dilation >= PING_TIDI_SERVER_PCT && rtt < PING_NETWORK_HARD_MS)
 		return PING_VERDICT_SERVER
-	// Genuinely bad personal connection: an RTT this high that also outweighs the server
-	// delay dominates regardless of any transient spike, so it wins ahead of the spike/jitter
-	// checks. When the server delay is the larger component we fall through instead - a slow
-	// server shouldn't read as a network problem just because the RTT is high.
-	if(rtt >= PING_NETWORK_HARD_MS && rtt >= server)
-		return PING_VERDICT_NETWORK
-	// Transient spike with otherwise-calm averages: a peak well above the mean means
-	// instability even when smoothed dilation/jitter look fine. Checked before the soft
-	// network threshold so a remote client's steady baseline RTT doesn't mask a real hitch.
-	if(spike >= PING_SPIKE_MIN_MS)
+	// Transient spike: a peak well above the player's own baseline, gauged both absolutely and
+	// proportionally so it scales with the connection. Checked before the network conclusion so
+	// a steady high baseline (a far player) doesn't shadow a real hitch on top of it.
+	if(spike >= PING_SPIKE_MIN_MS && spike >= rtt * PING_SPIKE_RATIO)
 		return PING_VERDICT_JITTER
-	// Network-bound only when the RTT is significant, outweighs the server delay, and
-	// actually exceeds the structural floor. The floor already grows with a low client
-	// framerate (longer frames inflate the measured round-trip), so an elevated RTT that
-	// stays within floor reach is the framerate's doing - leave it for the client verdict
-	// below rather than blaming the network.
-	if(rtt >= PING_NETWORK_MIN_MS && rtt >= server && rtt > floor + PING_FLOOR_MARGIN_MS)
-		return PING_VERDICT_NETWORK
 	var/total = rtt + server
+	// Sustained jitter: instability that the smoothed average misses. The ratio test is already
+	// scale-relative, so it behaves the same at any baseline.
 	if(jitter >= PING_JITTER_MIN_MS && total > 0 && (jitter / total) >= PING_JITTER_RATIO)
 		return PING_VERDICT_JITTER
+	// Network-bound: a significant, stable RTT that outweighs the server delay and clears the
+	// structural floor. The floor grows with a low client framerate, so an elevated RTT that
+	// stays within floor reach is the framerate's doing - left for the client verdict below.
+	if(rtt >= PING_NETWORK_MIN_MS && rtt >= server && rtt > floor + PING_FLOOR_MARGIN_MS)
+		return PING_VERDICT_NETWORK
+	// Residual server load that isn't reflected as dilation (e.g. one slow subsystem).
 	if(server > floor + PING_FLOOR_MARGIN_MS)
 		return PING_VERDICT_SERVER
 	if(client_fps && client_fps < PING_CLIENT_FPS_MIN)

@@ -32,3 +32,25 @@
 	// Server delay dominates an already-high RTT: the server is the bottleneck even past the
 	// hard RTT threshold, so don't surface it as a network problem.
 	TEST_ASSERT_EQUAL(classify_ping(80, 120, 3, 10, 60, 0, 0), "server", "server delay outweighing a high rtt should be server-bound, not network")
+
+	// --- Latency-range matrix: the verdict must stay meaningful whether a player sits at ~40ms
+	// or ~300ms. A stable connection at either end is plain network distance, not a warning, and
+	// instability at either end is flagged - judged proportionally so it scales with the link.
+	// Stable low-ping player: a calm 40ms link is network distance, not a problem in itself.
+	TEST_ASSERT_EQUAL(classify_ping(40, 5, 2, 14, 60, 0, 0), "network", "a stable 40ms link reads as network distance")
+	// Stable high-ping player: a calm 300ms link is still just distance, not instability.
+	TEST_ASSERT_EQUAL(classify_ping(300, 5, 2, 14, 60, 0, 0), "network", "a stable 300ms link reads as network distance, not a problem")
+	// High-ping player with a real transient peak: +120ms over a 300ms baseline is instability.
+	TEST_ASSERT_EQUAL(classify_ping(300, 5, 2, 14, 60, 0, 120), "jitter", "a large transient peak on a high baseline flags as jitter")
+	// High-ping player with routine wobble: +40ms over 300ms clears the absolute spike floor but
+	// not the proportional one (300 * 0.25 = 75), so it must not false-flag as jitter.
+	TEST_ASSERT_EQUAL(classify_ping(300, 5, 2, 14, 60, 0, 40), "network", "proportionally small wobble on a high baseline stays network")
+	// Low-ping player with the same +40ms peak: proportionally large on a 40ms link, so it flags.
+	TEST_ASSERT_EQUAL(classify_ping(40, 5, 2, 14, 60, 0, 40), "jitter", "the same peak on a low baseline is proportionally large and flags as jitter")
+	// Severe dilation makes the server the verdict even for a far 300ms player.
+	TEST_ASSERT_EQUAL(classify_ping(300, 5, 2, 14, 60, 35, 0), "server", "severe dilation is server-bound even for a high-ping player")
+	// Moderate dilation with a far player: their 300ms connection dominates the mild server
+	// wobble, so it stays network rather than blaming the server.
+	TEST_ASSERT_EQUAL(classify_ping(300, 5, 2, 14, 60, 15, 0), "network", "moderate dilation does not override a dominant personal connection")
+	// Moderate dilation with a near player: 40ms is below the escape, so the server wins.
+	TEST_ASSERT_EQUAL(classify_ping(40, 5, 2, 14, 60, 15, 0), "server", "moderate dilation is server-bound when the connection isn't dominant")
