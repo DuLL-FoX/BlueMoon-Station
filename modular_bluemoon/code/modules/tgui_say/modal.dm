@@ -1,3 +1,10 @@
+/// Способы ввода сообщений, доступные игроку в настройках.
+GLOBAL_LIST_INIT(say_input_modes, list(
+	SAY_INPUT_MODE_WINDOW,
+	SAY_INPUT_MODE_NATIVE,
+	SAY_INPUT_MODE_MODAL,
+))
+
 /// Окно ввода сообщений, привязанное к клиенту.
 /client/var/datum/tgui_say/tgui_say
 

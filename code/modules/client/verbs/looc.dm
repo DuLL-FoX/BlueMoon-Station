@@ -22,7 +22,7 @@ GLOBAL_VAR_INIT(normal_looc_colour, "#6699CC")
 		return
 
 	var/message = ""
-	if(prefs.tgui_input_verbs)
+	if(prefs.say_input_mode == SAY_INPUT_MODE_MODAL)
 		message = tgui_input_text(src, "", "LOOC", "", MAX_MESSAGE_LEN, encode = TRUE)
 	else
 		message = stripped_input(mob, "", "LOOC")

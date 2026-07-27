@@ -37,7 +37,7 @@ GLOBAL_VAR_INIT(normal_ooc_colour, "#002eb8")
 		return
 
 	var/message = ""
-	if(prefs.tgui_input_verbs)
+	if(prefs.say_input_mode == SAY_INPUT_MODE_MODAL)
 		message = tgui_input_text(src, "", "OOC", "", MAX_MESSAGE_LEN, encode = TRUE)
 	else
 		message = stripped_input(mob, "", "OOC")

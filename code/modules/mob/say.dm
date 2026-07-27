@@ -33,7 +33,7 @@
 
 	// say() вызывает sanitize() сам, поэтому на вход отдаём сырой текст, чтобы не получить двойное экранирование (&amp;&amp;, &lt;, и т.д.)
 	var/message = ""
-	if(client?.prefs.tgui_input_verbs)
+	if(client?.prefs.say_input_mode == SAY_INPUT_MODE_MODAL)
 		message = tgui_input_text(src, "", "Say (Indicator)", null, MAX_MESSAGE_LEN, encode = FALSE)
 	else
 		message = input(src, "", "Say (Indicator)") as text|null
@@ -53,7 +53,7 @@
 		return
 
 	var/message = ""
-	if(client?.prefs.tgui_input_verbs)
+	if(client?.prefs.say_input_mode == SAY_INPUT_MODE_MODAL)
 		message = tgui_input_text(usr, "", "Say", null, MAX_MESSAGE_LEN, encode = FALSE)
 	else
 		message = input(usr, "", "Say") as text|null
@@ -87,7 +87,7 @@
 	display_typing_indicator(isMe = TRUE)
 
 	var/message = ""
-	if(client?.prefs.tgui_input_verbs)
+	if(client?.prefs.say_input_mode == SAY_INPUT_MODE_MODAL)
 		message = tgui_input_text(usr, "", "Me (Indicator)", null, MAX_MESSAGE_LEN, TRUE, TRUE)
 	else
 		message = stripped_multiline_input_or_reflect(usr, "", "Me (Indicator)")
@@ -109,7 +109,7 @@
 		return
 
 	var/message = ""
-	if(client?.prefs.tgui_input_verbs)
+	if(client?.prefs.say_input_mode == SAY_INPUT_MODE_MODAL)
 		message = tgui_input_text(usr, "", "Me", null, MAX_MESSAGE_LEN, TRUE, TRUE)
 	else
 		message = stripped_multiline_input_or_reflect(usr, "", "Me")
@@ -183,7 +183,7 @@
 
 	// whisper() уходит в say(), который санитизит сам — отдаём сырой текст
 	var/message = ""
-	if(client?.prefs.tgui_input_verbs)
+	if(client?.prefs.say_input_mode == SAY_INPUT_MODE_MODAL)
 		message = tgui_input_text(usr, "", "Whisper", null, MAX_MESSAGE_LEN, encode = FALSE)
 	else
 		message = input(usr, "", "Whisper") as text|null

@@ -26,8 +26,23 @@ type ChatData = {
   custom_colors: number;
   tgui_input_mode: boolean;
   tgui_input_verbs: boolean;
+  say_input_mode: string;
   max_chat_length: number;
   auto_capitalize_enabled: boolean;
+};
+
+// Значения должны совпадать с SAY_INPUT_MODE_* в
+// code/__BLUEMOONCODE/_DEFINES/tgui_say.dm.
+const SAY_INPUT_MODES: Record<string, string> = {
+  'Отдельное окно': 'window',
+  'Обычный ввод BYOND': 'native',
+  'Старое окно TGUI': 'modal',
+};
+
+const SAY_INPUT_MODE_LABELS: Record<string, string> = {
+  window: 'Отдельное окно',
+  native: 'Обычный ввод BYOND',
+  modal: 'Старое окно TGUI',
 };
 
 // React's onChange fires continuously while dragging inside the color
@@ -276,6 +291,30 @@ export const ChatSection = (props) => {
                   options={['TGUI', 'BYOND']}
                   selected={data.tgui_input_verbs ? 'TGUI' : 'BYOND'}
                   onSelected={value => act('set_ui_pref', { flag: 'tgui_input_verbs', value })}
+                />
+              </Stack.Item>
+            </Stack>
+          </Stack.Item>
+          <Stack.Item>
+            <Stack align="center" fill className="GamePreferences__row">
+              <Stack.Item grow basis={0}>
+                <div className="GamePreferences__label">Ввод сообщений (SAY, ME, рация...)</div>
+                <div className="GamePreferences__hint">
+                  Отдельное окно: загружено заранее, помнит историю по стрелкам,
+                  переключает каналы по Tab и хранит черновик на каждый канал.
+                  Обычный ввод BYOND: диалог рисует сам клиент, можно держать
+                  несколько открытых сразу. Старое окно TGUI — прежнее поведение
+                </div>
+              </Stack.Item>
+              <Stack.Item>
+                <Dropdown
+                  width="160px"
+                  options={Object.keys(SAY_INPUT_MODES)}
+                  selected={SAY_INPUT_MODE_LABELS[data.say_input_mode] ?? 'Отдельное окно'}
+                  onSelected={value => act('set_ui_pref', {
+                    flag: 'say_input_mode',
+                    value: SAY_INPUT_MODES[value],
+                  })}
                 />
               </Stack.Item>
             </Stack>

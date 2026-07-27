@@ -162,6 +162,7 @@
 	.["hud_toggle_color"] = hud_toggle_color
 	.["tgui_input_mode"] = tgui_input_mode
 	.["tgui_input_verbs"] = tgui_input_verbs
+	.["say_input_mode"] = say_input_mode
 	.["UI_style"] = UI_style
 	.["auto_capitalize_enabled"] = auto_capitalize_enabled
 	.["preferred_chaos_level"] = preferred_chaos_level
@@ -505,6 +506,11 @@
 					tgui_input_mode = (value == "TGUI" ? TRUE : FALSE)
 				if("tgui_input_verbs")
 					tgui_input_verbs = (value == "TGUI" ? TRUE : FALSE)
+				if("say_input_mode")
+					say_input_mode = sanitize_inlist(value, GLOB.say_input_modes, initial(say_input_mode))
+					// Клавиши каналов связи ведут либо в окно, либо в верб —
+					// без пересборки макросов смена настройки ничего не даст.
+					user?.client?.full_macro_assert()
 				if("UI_style")
 					UI_style = value
 					if(user?.hud_used)

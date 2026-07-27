@@ -83,6 +83,9 @@ GLOBAL_LIST_EMPTY(preferences_datums)
 	var/tgui_lock = TRUE
 	var/tgui_input_mode = TRUE			// All the Input Boxes (Text,Number,List,Alert)
 	var/tgui_input_verbs = TRUE 		// Все частоиспользуемые вербы: SAY, ME, OOC и т.д.
+	/// Способ ввода сообщений в каналы связи: отдельное окно, обычный диалог
+	/// BYOND или старое окно TGUI. См. SAY_INPUT_MODE_*.
+	var/say_input_mode = SAY_INPUT_MODE_WINDOW
 	var/tgui_large_buttons = TRUE
 	var/tgui_swapped_buttons = FALSE
 	var/tgui_panel_theme = "default"
