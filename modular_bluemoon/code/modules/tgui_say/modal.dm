@@ -72,9 +72,46 @@
 	))
 	return TRUE
 
+/**
+ * Окно доложило, что открылось.
+ *
+ * Сам показ делает фронт: он умеет это без обращения к серверу, и до сервера
+ * событие доходит уже постфактум. Здесь остаётся только состояние.
+ */
+/datum/tgui_say/proc/open(list/payload)
+	current_channel = payload?["channel"] || TGUI_SAY_CHANNEL_SAY
+	window_open = TRUE
+	return TRUE
+
+/// Окно закрылось: игрок отправил сообщение или нажал Escape.
+/datum/tgui_say/proc/close()
+	window_open = FALSE
+	return TRUE
+
 /// Единая точка приёма сообщений от окна.
 /datum/tgui_say/proc/on_message(type, payload)
 	switch(type)
 		if("ready")
 			return load()
+		if("open")
+			return open(payload)
+		if("close")
+			return close()
+		if("entry")
+			return handle_entry(payload)
 	return FALSE
+
+/**
+ * Показывает окно ввода в нужном канале.
+ *
+ * Клавиша движения, отпущенная за время смены фокуса, до сервера не доходит:
+ * KeyUp уходит либо в потерявшую фокус карту, либо в ещё не получивший его
+ * браузер. Поэтому удержания сбрасываем сами, иначе кукла продолжит бежать,
+ * пока игрок печатает.
+ */
+/client/proc/tgui_say_open(channel)
+	if(!tgui_say?.window)
+		return FALSE
+	ForceAllKeysUp()
+	tgui_say.window.send_message("open", list("channel" = channel))
+	return TRUE

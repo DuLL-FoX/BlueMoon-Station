@@ -5088,6 +5088,7 @@
 #include "modular_bluemoon\code\modules\tgui_panel\telemetry.dm"
 #include "modular_bluemoon\code\modules\tgui_panel\tgui_emote_panel.dm"
 #include "modular_bluemoon\code\modules\tgui_say\modal.dm"
+#include "modular_bluemoon\code\modules\tgui_say\speech.dm"
 #include "modular_bluemoon\code\modules\uplink\uplink_items\uplink_ammo.dm"
 #include "modular_bluemoon\code\modules\uplink\uplink_items\uplink_clothing.dm"
 #include "modular_bluemoon\code\modules\uplink\uplink_items\uplink_dangerous.dm"

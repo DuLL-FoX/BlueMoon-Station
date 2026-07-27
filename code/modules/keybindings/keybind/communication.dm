@@ -28,6 +28,10 @@
 	full_name = "Say with Typing Indicator"
 
 /datum/keybinding/client/communication/say_with_indicator/down(client/user)
+	// Новое окно ввода живёт загруженным и открывается сразу в нужном канале.
+	// Старый путь остаётся для тех, кто выбрал нативный ввод.
+	if(user.prefs?.tgui_input_verbs && user.tgui_say_open(TGUI_SAY_CHANNEL_SAY))
+		return TRUE
 	var/mob/M = user.mob
 	M.say_typing_indicator()
 	return TRUE
