@@ -30,6 +30,19 @@ GLOBAL_VAR_INIT(normal_looc_colour, "#6699CC")
 	if(QDELETED(src) || !length(message))
 		return
 
+	looc_message(message)
+
+/**
+ * Выдача сообщения в LOOC.
+ *
+ * Отделено от верба, чтобы готовый текст мог прийти не только из диалога, но и
+ * из окна ввода сообщений. Проверки, которые обязаны отработать до набора
+ * текста, остаются в вербе.
+ */
+/client/proc/looc_message(message)
+	if(QDELETED(src) || !length(message))
+		return
+
 	if(!(prefs.chat_toggles & CHAT_OOC))
 		to_chat(src, "<span class='danger'> You have OOC muted.</span>")
 		return

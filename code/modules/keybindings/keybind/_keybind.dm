@@ -26,3 +26,12 @@
 
 /datum/keybinding/proc/can_use(client/user)
 	return TRUE
+
+/**
+ * Команда, которая уйдёт в макрос клиента.
+ *
+ * Переопределяется там, где команда зависит от настроек игрока: например,
+ * каналы связи открывают либо окно ввода, либо старый диалог.
+ */
+/datum/keybinding/proc/get_clientside_command(client/user)
+	return clientside

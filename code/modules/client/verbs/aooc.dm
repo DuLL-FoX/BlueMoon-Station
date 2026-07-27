@@ -29,6 +29,19 @@ GLOBAL_VAR_INIT(normal_aooc_colour, "#ce254f")
 	if(QDELETED(src) || !length(message))
 		return
 
+	aooc_message(message)
+
+/**
+ * Выдача сообщения в AOOC.
+ *
+ * Отделено от верба, чтобы готовый текст мог прийти не только из диалога, но и
+ * из окна ввода сообщений. Проверки, которые обязаны отработать до набора
+ * текста, остаются в вербе.
+ */
+/client/proc/aooc_message(message)
+	if(QDELETED(src) || !length(message))
+		return
+
 	if(!holder)
 		if(!GLOB.aooc_allowed)
 			to_chat(src, "<span class='danger'>AOOC is currently muted.</span>")

@@ -24,6 +24,44 @@
 		if(TGUI_SAY_CHANNEL_SAY)
 			speaker.say(entry)
 			return TRUE
+		if(TGUI_SAY_CHANNEL_RADIO)
+			// Префикс общего канала добавляется здесь, а не в окне: разбор
+			// префиксов речи остаётся единственным и живёт на сервере.
+			speaker.say("[TGUI_SAY_RADIO_TOKEN][entry]")
+			return TRUE
+		if(TGUI_SAY_CHANNEL_WHISPER)
+			speaker.whisper(entry)
+			return TRUE
+		if(TGUI_SAY_CHANNEL_ME)
+			speaker.emote("me", 1, entry, TRUE)
+			return TRUE
+		if(TGUI_SAY_CHANNEL_SUBTLE)
+			speaker.emote("subtle", 1, entry, TRUE)
+			return TRUE
+		if(TGUI_SAY_CHANNEL_SUBTLER)
+			speaker.emote("subtler", 1, entry, TRUE)
+			return TRUE
+		if(TGUI_SAY_CHANNEL_SUBTLER_TABLE)
+			speaker.emote("subtler_table", 1, entry, TRUE)
+			return TRUE
+		if(TGUI_SAY_CHANNEL_SUBTLER_TARGET)
+			speaker.emote("subtler_target", 1, list("text" = entry), TRUE)
+			return TRUE
+		if(TGUI_SAY_CHANNEL_LOOC)
+			if(!client)
+				return FALSE
+			client.looc_message(entry)
+			return TRUE
+		if(TGUI_SAY_CHANNEL_OOC)
+			if(!client)
+				return FALSE
+			client.ooc_message(entry)
+			return TRUE
+		if(TGUI_SAY_CHANNEL_AOOC)
+			if(!client)
+				return FALSE
+			client.aooc_message(entry)
+			return TRUE
 	return FALSE
 
 /**

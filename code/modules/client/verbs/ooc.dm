@@ -45,6 +45,19 @@ GLOBAL_VAR_INIT(normal_ooc_colour, "#002eb8")
 	if(QDELETED(src) || !length(message))
 		return
 
+	ooc_message(message)
+
+/**
+ * Выдача сообщения в OOC.
+ *
+ * Отделено от верба, чтобы готовый текст мог прийти не только из диалога, но и
+ * из окна ввода сообщений. Проверки, которые обязаны отработать до набора
+ * текста, остаются в вербе.
+ */
+/client/proc/ooc_message(message)
+	if(QDELETED(src) || !length(message))
+		return
+
 	var/raw_msg = message
 
 	GLOB.bot_ooc_sending_que += list(list("author" = holder && holder.fakekey ? holder.fakekey : key, "message" = message))

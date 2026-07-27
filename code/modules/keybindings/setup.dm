@@ -196,7 +196,12 @@
 					var/datum/keybinding/KB = GLOB.keybindings_by_name[kb_name]
 					if(!KB.clientside)
 						continue
-					.[key] = KB.clientside
+					// Команда берётся через процедуру: у каналов связи она
+					// зависит от выбранного игроком способа ввода.
+					var/command = KB.get_clientside_command(src)
+					if(!command)
+						continue
+					.[key] = command
 
 /// Manually clears any held keys, in case due to lag or other undefined behavior a key gets stuck.
 /client/proc/reset_held_keys()

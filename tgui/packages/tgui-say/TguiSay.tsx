@@ -1,10 +1,11 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 
+import { type Channel, ChannelIterator } from './ChannelIterator';
 import { windowClose, windowOpen } from './helpers';
 import { dispatchMessage, sendMessage, subscribeTo } from './messages';
 
 type OpenPayload = {
-  channel: string;
+  channel: Channel;
 };
 
 type PropsPayload = {
@@ -13,11 +14,12 @@ type PropsPayload = {
 
 const KEY_ENTER = 'Enter';
 const KEY_ESCAPE = 'Escape';
+const KEY_TAB = 'Tab';
 
 export const TguiSay = () => {
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const channelRef = useRef('Say');
-  const [channel, setChannel] = useState('Say');
+  const iterator = useRef(new ChannelIterator());
+  const [channel, setChannel] = useState<Channel>('Say');
   const [maxLength, setMaxLength] = useState(4096);
   const [value, setValue] = useState('');
 
@@ -25,26 +27,41 @@ export const TguiSay = () => {
     inputRef.current?.blur();
     windowClose();
     setValue('');
+    iterator.current.reset();
+    setChannel(iterator.current.current());
     sendMessage('close');
   };
 
   const submit = () => {
     const entry = inputRef.current?.value || '';
     if (entry.length) {
-      sendMessage('entry', { channel: channelRef.current, entry });
+      sendMessage('entry', { channel: iterator.current.current(), entry });
     }
     close();
   };
 
+  const switchChannel = () => {
+    const next = iterator.current.next();
+    setChannel(next);
+    sendMessage('channel', { channel: next });
+  };
+
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === KEY_ENTER && !event.shiftKey) {
-      event.preventDefault();
-      submit();
-      return;
-    }
-    if (event.key === KEY_ESCAPE) {
-      event.preventDefault();
-      close();
+    switch (event.key) {
+      case KEY_ENTER:
+        if (event.shiftKey) {
+          return;
+        }
+        event.preventDefault();
+        submit();
+        return;
+      case KEY_TAB:
+        event.preventDefault();
+        switchChannel();
+        return;
+      case KEY_ESCAPE:
+        event.preventDefault();
+        close();
     }
   };
 
@@ -55,14 +72,14 @@ export const TguiSay = () => {
       }
     });
     subscribeTo('open', (payload: OpenPayload) => {
-      const nextChannel = payload?.channel || 'Say';
-      channelRef.current = nextChannel;
-      setChannel(nextChannel);
+      iterator.current.set(payload?.channel || 'Say');
+      const opened = iterator.current.current();
+      setChannel(opened);
       windowOpen();
       // Фокус ставим после того, как окно стало видимым: BYOND не отдаёт
       // фокус скрытому элементу.
       setTimeout(() => inputRef.current?.focus(), 0);
-      sendMessage('open', { channel: nextChannel });
+      sendMessage('open', { channel: opened });
     });
     subscribeTo('close', () => close());
     // Сообщения, пришедшие до монтирования, лежат в очереди шима.
@@ -79,7 +96,10 @@ export const TguiSay = () => {
 
   return (
     <div className="TguiSay">
-      <button className="TguiSay__channel" type="button">
+      <button
+        className="TguiSay__channel"
+        onClick={switchChannel}
+        type="button">
         {channel}
       </button>
       <textarea
