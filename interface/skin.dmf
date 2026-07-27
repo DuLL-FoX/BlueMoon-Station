@@ -350,3 +350,25 @@ window "statwindow"
 		is-visible = false
 		saved-params = ""
 
+
+window "tgui_say"
+	elem "tgui_say"
+		type = MAIN
+		pos = 0,0
+		size = 240x32
+		anchor1 = none
+		anchor2 = none
+		is-visible = false
+		saved-params = ""
+		statusbar = false
+		can-close = false
+		can-minimize = false
+		can-resize = false
+		titlebar = false
+	elem "browser"
+		type = BROWSER
+		pos = 0,0
+		size = 240x32
+		anchor1 = 0,0
+		anchor2 = 100,100
+		saved-params = ""

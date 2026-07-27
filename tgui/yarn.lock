@@ -10526,6 +10526,19 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"tgui-say@workspace:packages/tgui-say":
+  version: 0.0.0-use.local
+  resolution: "tgui-say@workspace:packages/tgui-say"
+  dependencies:
+    "@types/react": "npm:^19.2.4"
+    "@types/react-dom": "npm:^19.2.3"
+    common: "workspace:*"
+    react: "npm:^19.2.4"
+    react-dom: "npm:^19.2.4"
+    tgui: "workspace:*"
+  languageName: unknown
+  linkType: soft
+
 "tgui-workspace@workspace:.":
   version: 0.0.0-use.local
   resolution: "tgui-workspace@workspace:."

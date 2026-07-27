@@ -14,6 +14,7 @@ const aliases = [
   { find: /^common\//, replacement: `${resolvePackage('common')}/` },
   { find: /^tgui\//, replacement: `${resolvePackage('tgui')}/` },
   { find: /^tgui-panel\//, replacement: `${resolvePackage('tgui-panel')}/` },
+  { find: /^tgui-say\//, replacement: `${resolvePackage('tgui-say')}/` },
   { find: /^tgui-dev-server\//, replacement: `${resolvePackage('tgui-dev-server')}/` },
 ];
 

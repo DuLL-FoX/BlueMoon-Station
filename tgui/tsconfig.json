@@ -16,6 +16,7 @@
       "common/*": ["packages/common/*"],
       "tgui/*": ["packages/tgui/*"],
       "tgui-panel/*": ["packages/tgui-panel/*"],
+      "tgui-say/*": ["packages/tgui-say/*"],
       "tgui-dev-server/*": ["packages/tgui-dev-server/*"]
     },
     "resolveJsonModule": true,

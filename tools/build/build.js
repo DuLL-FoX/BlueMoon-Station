@@ -263,6 +263,7 @@ export const TguiTarget = new Juke.Target({
     'tgui/vite.base.config.cjs',
     'tgui/vite.tgui.config.cjs',
     'tgui/vite.tgui-panel.config.cjs',
+    'tgui/vite.tgui-say.config.cjs',
     'tgui/**/package.json',
     'tgui/packages/**/*.+(js|cjs|ts|tsx|scss)',
   ],
@@ -271,10 +272,13 @@ export const TguiTarget = new Juke.Target({
     'tgui/public/tgui.bundle.js',
     'tgui/public/tgui-panel.bundle.css',
     'tgui/public/tgui-panel.bundle.js',
+    'tgui/public/tgui-say.bundle.css',
+    'tgui/public/tgui-say.bundle.js',
   ],
   executes: async () => {
     await yarn('vite', 'build', '--mode=production', '--config', 'vite.tgui.config.cjs');
     await yarn('vite', 'build', '--mode=production', '--config', 'vite.tgui-panel.config.cjs');
+    await yarn('vite', 'build', '--mode=production', '--config', 'vite.tgui-say.config.cjs');
   },
 });
 

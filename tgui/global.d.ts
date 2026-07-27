@@ -21,6 +21,9 @@ declare module '*.svg' {
   export default content;
 }
 
+// Style bundles are pulled in for their side effect only.
+declare module '*.scss';
+
 declare const process: {
   env: {
     NODE_ENV: string;
@@ -138,4 +141,16 @@ interface Window {
    */
   __windowId__: string;
   Byond: ByondType;
+
+  /**
+   * Messages that arrived from DM before the bundle finished loading.
+   * Every bundle drains this queue on startup.
+   */
+  __updateQueue__: string[];
+
+  /**
+   * Entry point for messages coming from DM. Defined by tgui.html and
+   * replaced by the bundle once it boots.
+   */
+  update: (message: string) => void;
 }

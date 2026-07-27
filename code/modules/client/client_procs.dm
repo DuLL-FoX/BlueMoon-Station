@@ -425,6 +425,10 @@ GLOBAL_LIST_INIT(blacklisted_builds, list(
 	// Instantiate tgui panel
 	tgui_panel = new(src)
 
+	// Окно ввода сообщений. Живёт скрытым весь раунд, чтобы показ по горячей
+	// клавише не требовал ни создания окна, ни загрузки бандла.
+	tgui_say = new(src, TGUI_SAY_WINDOW_ID)
+
 	GLOB.ahelp_tickets.ClientLogin(src)
 
 	// BLUEMOON EDIT Loading preferences earlier to use the deadmin or similar prefs
@@ -554,6 +558,7 @@ GLOBAL_LIST_INIT(blacklisted_builds, list(
 	src << browse(file('html/statbrowser.html'), "window=statbrowser")
 	addtimer(CALLBACK(src, PROC_REF(check_panel_loaded)), 30 SECONDS)
 	tgui_panel.initialize()
+	tgui_say.initialize()
 	acquire_dpi()
 
 	if(alert_mob_dupe_login && !holder)
@@ -1023,6 +1028,9 @@ GLOBAL_LIST_INIT(blacklisted_builds, list(
 
 			send2adminchat("Server", "[cheesy_message] (No admins online)")
 	clear_character_previews()
+	// Датум окна ввода и его tgui-окно ссылаются друг на друга, поэтому сами
+	// по себе не соберутся: рвём связку явно.
+	QDEL_NULL(tgui_say)
 	// seen_messages = null
 	Master.UpdateTickRate()
 	. = ..() //Even though we're going to be hard deleted there are still some things that want to know the destroy is happening
