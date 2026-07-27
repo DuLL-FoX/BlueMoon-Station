@@ -104,6 +104,62 @@
 
 	qdel(say_modal)
 
+/// Индикатор печати обязан зажигаться по первому набранному символу, а не по
+/// факту открытия окна, и гаснуть при закрытии. Иначе пузырь висит над теми,
+/// кто открыл окно и передумал.
+/datum/unit_test/tgui_say_typing_indicator
+
+/datum/unit_test/tgui_say_typing_indicator/Run()
+	var/mob/living/carbon/human/typist = allocate(/mob/living/carbon/human)
+	var/datum/tgui_say/unit_test_probe/say_modal = new(null, null)
+	say_modal.probe_mob = typist
+
+	say_modal.on_message("open", list("channel" = TGUI_SAY_CHANNEL_SAY))
+	TEST_ASSERT_NULL(typist.typing_indicator_current, "индикатор зажёгся до первого символа")
+
+	say_modal.on_message("typing", null)
+	TEST_ASSERT_NOTNULL(typist.typing_indicator_current, "индикатор не зажёгся при наборе")
+
+	say_modal.on_message("close", null)
+	TEST_ASSERT_NULL(typist.typing_indicator_current, "индикатор не погас при закрытии окна")
+
+	qdel(say_modal)
+
+/// В OOC-каналах индикатор печати не показывается: окружающие не должны знать,
+/// что человек пишет вне игры.
+/datum/unit_test/tgui_say_typing_indicator_ooc
+
+/datum/unit_test/tgui_say_typing_indicator_ooc/Run()
+	var/mob/living/carbon/human/typist = allocate(/mob/living/carbon/human)
+	var/datum/tgui_say/unit_test_probe/say_modal = new(null, null)
+	say_modal.probe_mob = typist
+
+	say_modal.on_message("open", list("channel" = TGUI_SAY_CHANNEL_OOC))
+	say_modal.on_message("typing", null)
+	TEST_ASSERT_NULL(typist.typing_indicator_current, "индикатор зажёгся в OOC-канале")
+
+	qdel(say_modal)
+
+/// Пока человек печатает, окно шлёт сигнал заново — индикатор обязан
+/// продлеваться, иначе на длинном сообщении он погаснет по таймауту.
+/datum/unit_test/tgui_say_typing_indicator_refresh
+
+/datum/unit_test/tgui_say_typing_indicator_refresh/Run()
+	var/mob/living/carbon/human/typist = allocate(/mob/living/carbon/human)
+	var/datum/tgui_say/unit_test_probe/say_modal = new(null, null)
+	say_modal.probe_mob = typist
+
+	say_modal.on_message("open", list("channel" = TGUI_SAY_CHANNEL_SAY))
+	say_modal.on_message("typing", null)
+	var/first_timer = typist.typing_indicator_timerid
+	TEST_ASSERT_NOTNULL(first_timer, "индикатор зажёгся без таймера очистки")
+
+	say_modal.on_message("typing", null)
+	TEST_ASSERT_NOTEQUAL(typist.typing_indicator_timerid, first_timer, "повторный сигнал набора не продлил индикатор")
+	TEST_ASSERT_NOTNULL(typist.typing_indicator_current, "повторный сигнал набора погасил индикатор")
+
+	qdel(say_modal)
+
 /// Внутриигровые каналы отделены от OOC: по этому признаку работает и блокировка
 /// речи администрацией, и индикатор печати.
 /datum/unit_test/tgui_say_ic_channels

@@ -6,6 +6,7 @@ import { DraftStore } from './drafts';
 import { windowClose, windowOpen } from './helpers';
 import { dispatchMessage, sendMessage, subscribeTo } from './messages';
 import { getPrefix, type RadioPrefix, stripPrefix } from './prefixes';
+import { resetTypingThrottle, shouldSendTyping } from './timers';
 
 type OpenPayload = {
   channel: Channel;
@@ -52,6 +53,7 @@ export const TguiSay = () => {
     windowClose();
     setValue('');
     prefix.current = null;
+    resetTypingThrottle();
     history.current.reset();
     iterator.current.reset();
     setLabel(iterator.current.current());
@@ -86,6 +88,11 @@ export const TguiSay = () => {
   };
 
   const handleInput = (typed: string) => {
+    // Индикатор печати зажигается по набору, а не по открытию окна: иначе
+    // пузырь висит над теми, кто открыл окно и передумал.
+    if (iterator.current.isVisible() && shouldSendTyping(Date.now())) {
+      sendMessage('typing');
+    }
     // Префикс ловим только в Say и только пока он не выбран: дальше символы
     // ":" и ";" — это обычный текст.
     if (!prefix.current && iterator.current.isSay()) {

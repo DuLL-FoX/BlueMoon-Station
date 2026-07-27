@@ -54,6 +54,20 @@ GLOBAL_LIST_EMPTY(typing_indicator_overlays)
 	typing_indicator_timerid = addtimer(CALLBACK(src, PROC_REF(clear_typing_indicator)), timeout_override, TIMER_STOPPABLE)
 
 /**
+  * Продлевает уже показанный индикатор.
+  *
+  * Окно ввода шлёт сигнал набора, пока человек печатает: без продления
+  * индикатор погас бы по таймауту прямо посреди длинного сообщения.
+  */
+/mob/proc/refresh_typing_indicator(timeout_override = TYPING_INDICATOR_TIMEOUT)
+	if(!typing_indicator_current)
+		return FALSE
+	if(typing_indicator_timerid)
+		deltimer(typing_indicator_timerid)
+	typing_indicator_timerid = addtimer(CALLBACK(src, PROC_REF(clear_typing_indicator)), timeout_override, TIMER_STOPPABLE)
+	return TRUE
+
+/**
   * Removes typing indicator.
   */
 /mob/proc/clear_typing_indicator()

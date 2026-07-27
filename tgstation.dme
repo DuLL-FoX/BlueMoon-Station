@@ -5090,6 +5090,7 @@
 #include "modular_bluemoon\code\modules\tgui_say\keybinds.dm"
 #include "modular_bluemoon\code\modules\tgui_say\modal.dm"
 #include "modular_bluemoon\code\modules\tgui_say\speech.dm"
+#include "modular_bluemoon\code\modules\tgui_say\typing.dm"
 #include "modular_bluemoon\code\modules\uplink\uplink_items\uplink_ammo.dm"
 #include "modular_bluemoon\code\modules\uplink\uplink_items\uplink_clothing.dm"
 #include "modular_bluemoon\code\modules\uplink\uplink_items\uplink_dangerous.dm"

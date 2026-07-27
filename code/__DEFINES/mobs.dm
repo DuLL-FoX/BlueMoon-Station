@@ -345,7 +345,11 @@
 
 #define HUMAN_FIRE_STACK_ICON_NUM	3
 
-#define TYPING_INDICATOR_TIMEOUT 20 MINUTES
+/// Страховка на случай, когда клиент не сообщил о закрытии ввода. Окно ввода
+/// продлевает индикатор, пока человек печатает, поэтому таймаут может быть
+/// коротким: раньше он был двадцатиминутным и пузырь висел над каждым, кто
+/// открыл ввод и передумал.
+#define TYPING_INDICATOR_TIMEOUT 60 SECONDS
 
 #define GRAB_PIXEL_SHIFT_PASSIVE	6
 #define GRAB_PIXEL_SHIFT_AGGRESSIVE	12

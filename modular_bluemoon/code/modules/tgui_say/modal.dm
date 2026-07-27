@@ -86,6 +86,7 @@
 /// Окно закрылось: игрок отправил сообщение или нажал Escape.
 /datum/tgui_say/proc/close()
 	window_open = FALSE
+	stop_typing()
 	return TRUE
 
 /// Единая точка приёма сообщений от окна.
@@ -97,6 +98,14 @@
 			return open(payload)
 		if("close")
 			return close()
+		if("typing")
+			return start_typing()
+		if("channel")
+			// Смена канала по Tab: индикатор обязан переехать вместе с ней,
+			// иначе над игроком висит пузырь речи, пока он пишет в OOC.
+			stop_typing()
+			current_channel = payload?["channel"] || current_channel
+			return TRUE
 		if("entry")
 			return handle_entry(payload)
 	return FALSE
