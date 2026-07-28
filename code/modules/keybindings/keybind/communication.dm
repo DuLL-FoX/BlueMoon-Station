@@ -28,9 +28,9 @@
 	full_name = "Say with Typing Indicator"
 
 /datum/keybinding/client/communication/say_with_indicator/down(client/user)
-	// Новое окно ввода живёт загруженным и открывается сразу в нужном канале.
-	// Старый путь остаётся для тех, кто выбрал нативный ввод.
-	if(user.tgui_say_enabled() && user.tgui_say_open(TGUI_SAY_CHANNEL_SAY))
+	// Обычно клавиша открывает панель ввода сама, без сервера. Сюда мы
+	// попадаем, только пока панель не догрузилась или игрок выбрал старый ввод.
+	if(user.tgui_say_ready() && user.tgui_say_open(TGUI_SAY_CHANNEL_SAY))
 		return TRUE
 	var/mob/M = user.mob
 	M.say_typing_indicator()
@@ -42,7 +42,7 @@
 	full_name = "Me (emote) with Typing Indicator"
 
 /datum/keybinding/client/communication/me_with_indicator/down(client/user)
-	if(user.tgui_say_enabled() && user.tgui_say_open(TGUI_SAY_CHANNEL_ME))
+	if(user.tgui_say_ready() && user.tgui_say_open(TGUI_SAY_CHANNEL_ME))
 		return TRUE
 	var/mob/M = user.mob
 	M.me_typing_indicator()

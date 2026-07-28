@@ -195,6 +195,49 @@
 
 	qdel(say_modal)
 
+/// Команда открытия уходит в макрос клавиши, а параметры winset разделяются
+/// в том числе пробелом: без кавычек команда обрезается по первому пробелу и
+/// клавиша перестаёт открывать панель вовсе.
+/datum/unit_test/tgui_say_open_command_quoted
+
+/datum/unit_test/tgui_say_open_command_quoted/Run()
+	var/command = tgui_say_build_open_command(TGUI_SAY_CHANNEL_OOC)
+
+	TEST_ASSERT(findtext(command, " "), "в команде открытия не осталось пробела — проверять нечего")
+	TEST_ASSERT_EQUAL(copytext(command, 1, 2), "\"", "команда открытия не начинается с кавычки")
+	TEST_ASSERT_EQUAL(copytext(command, -1), "\"", "команда открытия не заканчивается кавычкой")
+	TEST_ASSERT(findtext(command, "[TGUI_SAY_OPEN_COMMAND][TGUI_SAY_CHANNEL_OOC]"), "команда открытия не несёт канал")
+	TEST_ASSERT(findtext(command, TGUI_SAY_WINDOW_ID), "команда открытия не адресована панели ввода")
+
+/// Пока бандл не загрузился, панель нельзя ни открыть, ни спрятать: сообщение
+/// просто некому принять, а игрок остался бы без речи.
+/datum/unit_test/tgui_say_hide_requires_ready
+
+/datum/unit_test/tgui_say_hide_requires_ready/Run()
+	var/datum/tgui_say/say_modal = new(null, null)
+
+	TEST_ASSERT(!say_modal.hide(), "незагруженная панель согласилась прятаться")
+
+	say_modal.window_ready = TRUE
+	// Окна tgui без клиента нет, поэтому дальше hide() ничего не отправит —
+	// проверяем именно снятие блокировки по готовности.
+	TEST_ASSERT(say_modal.hide(), "загруженная панель отказалась прятаться")
+
+	qdel(say_modal)
+
+/// Рукопожатие обязано отмечать панель загруженной: по этому признаку клавиши
+/// переводятся на прямое открытие.
+/datum/unit_test/tgui_say_ready_marks_loaded
+
+/datum/unit_test/tgui_say_ready_marks_loaded/Run()
+	var/datum/tgui_say/say_modal = new(null, null)
+
+	TEST_ASSERT(!say_modal.window_ready, "панель считает себя загруженной до рукопожатия")
+	say_modal.on_message("ready", null)
+	TEST_ASSERT(say_modal.window_ready, "после рукопожатия панель не отмечена загруженной")
+
+	qdel(say_modal)
+
 /// Открытие и закрытие обязаны вести состояние канала, иначе после закрытия
 /// сервер продолжит считать игрока печатающим.
 /datum/unit_test/tgui_say_open_close_state

@@ -1,16 +1,37 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
+/**
+ * @file
+ * Панель ввода сообщений.
+ *
+ * Держит стопку набираемых сообщений: у каждого свой канал и свой текст.
+ * Клавиша канала не отменяет начатое, а добавляет строку рядом — ровно так же
+ * себя вёл нативный ввод BYOND, где диалогов можно было открыть сколько
+ * угодно, только теперь всё это живёт в одном месте и не теряется за окнами.
+ */
 
-import { type Channel, ChannelIterator } from './ChannelIterator';
-import { ChatHistory } from './ChatHistory';
-import { DraftStore } from './drafts';
-import { windowClose, windowOpen } from './helpers';
-import { dispatchMessage, sendMessage, subscribeTo } from './messages';
-import { getPrefix, type RadioPrefix, stripPrefix } from './prefixes';
+import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
+
+import { flattenNewlines, isCaretOnFirstLine, isCaretOnLastLine } from './caret';
 import {
-  encodedLength,
-  getEmoteSuggestions,
-  splitCustomSay,
-} from './suggestions';
+  type Channel,
+  isChannel,
+  isSayChannel,
+  isVisibleChannel,
+} from './channels';
+import { ChatHistory } from './ChatHistory';
+import { hidePanel, refreshMapSize, resizePanel, showPanel } from './helpers';
+import { MessageRow } from './MessageRow';
+import { dispatchMessage, sendMessage, subscribeTo } from './messages';
+import { getPrefix, stripPrefix } from './prefixes';
+import {
+  activeRow,
+  closeRow,
+  emptyRows,
+  nextFreeChannel,
+  openChannel,
+  type Row,
+  stepActive,
+  updateRow,
+} from './rows';
 import { resetTypingThrottle, shouldSendTyping } from './timers';
 
 type OpenPayload = {
@@ -22,156 +43,220 @@ type PropsPayload = {
   emotes: string[];
 };
 
-/**
- * Порог, за которым сообщение перестаёт помещаться в один запрос к клиенту и
- * начинает резаться на куски. У кириллицы это примерно каждый третий символ,
- * поэтому считаем в байтах, а не в символах.
- */
-const SLOW_TRANSPORT_BYTES = 1800;
-
-const KEY_ARROW_DOWN = 'ArrowDown';
-const KEY_ARROW_UP = 'ArrowUp';
-const KEY_BACKSPACE = 'Backspace';
-const KEY_DELETE = 'Delete';
-const KEY_ENTER = 'Enter';
-const KEY_ESCAPE = 'Escape';
-const KEY_TAB = 'Tab';
+/** Обработчики, которые подписки зовут через ref, а не через замыкание. */
+type Handlers = {
+  open: (channel: Channel) => void;
+  hide: () => void;
+};
 
 export const TguiSay = () => {
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const iterator = useRef(new ChannelIterator());
-  const history = useRef(new ChatHistory());
-  const drafts = useRef(new DraftStore());
-  const prefix = useRef<RadioPrefix | null>(null);
-  // Подпись кнопки: либо канал, либо выбранный префикс рации.
-  const [label, setLabel] = useState<string>('Say');
+  const [state, setState] = useState(emptyRows());
+  const [visible, setVisible] = useState(false);
   const [maxLength, setMaxLength] = useState(4096);
-  const [value, setValue] = useState('');
   const [emotes, setEmotes] = useState<string[]>([]);
 
-  /** Текущий текст поля. Читаем из DOM: состояние отстаёт на один кадр. */
-  const currentValue = () => inputRef.current?.value || '';
+  const rootRef = useRef<HTMLDivElement>(null);
+  const inputs = useRef(new Map<number, HTMLTextAreaElement>());
+  const histories = useRef(new Map<Channel, ChatHistory>());
+  // Строка, которой нужно отдать фокус после ближайшей отрисовки.
+  const pendingFocus = useRef<number | null>(null);
+  // Нужно ли заново показать панель и забрать фокус у карты.
+  const revealRequested = useRef(false);
+  // Канал, о котором знает сервер. По нему он ведёт индикатор печати.
+  const knownChannel = useRef<Channel | null>(null);
+  // Свежие обработчики для подписок: подписки ставятся один раз, а замыкания
+  // в них устарели бы уже на следующем рендере.
+  const handlers = useRef<Handlers>({
+    open: () => {},
+    hide: () => {},
+  });
 
-  const clearPrefix = () => {
-    prefix.current = null;
-    setLabel(iterator.current.current());
+  const historyFor = (channel: Channel): ChatHistory => {
+    let history = histories.current.get(channel);
+    if (!history) {
+      history = new ChatHistory();
+      histories.current.set(channel, history);
+    }
+    return history;
   };
 
-  const close = (keepDraft = true) => {
-    if (keepDraft) {
-      // Escape не должен терять недописанное: черновик ждёт возвращения
-      // в этот канал.
-      drafts.current.save(iterator.current.current(), currentValue());
-    }
-    inputRef.current?.blur();
-    windowClose();
-    setValue('');
-    prefix.current = null;
+  const focusLater = (id: number | null) => {
+    pendingFocus.current = id;
+  };
+
+  const openIn = (channel: Channel) => {
+    setState(previous => {
+      const next = openChannel(previous, channel);
+      focusLater(next.activeId);
+      return next;
+    });
+    // Фокус мог уехать на карту, пока панель висела открытой: забирать его
+    // обратно нужно на каждом открытии, а не только на первом.
+    revealRequested.current = true;
+    setVisible(true);
+    knownChannel.current = channel;
+    sendMessage('open', { channel });
+  };
+
+  /** Прячет панель, не трогая набранное: строки ждут возвращения. */
+  const hide = () => {
+    setVisible(false);
+    hidePanel();
     resetTypingThrottle();
-    history.current.reset();
-    iterator.current.reset();
-    setLabel(iterator.current.current());
+    knownChannel.current = null;
     sendMessage('close');
   };
 
-  const submit = () => {
-    const typed = currentValue();
-    const target = iterator.current.current();
-    if (typed.length) {
-      history.current.add(typed);
+  const setValue = (id: number, value: string) => {
+    setState(previous => updateRow(previous, id, { value }));
+  };
+
+  const dropRow = (id: number) => {
+    setState(previous => {
+      const next = closeRow(previous, id);
+      if (!next.rows.length) {
+        // Прятать панель прямо здесь нельзя: setState обязан оставаться чистым.
+        pendingFocus.current = null;
+      }
+      else {
+        focusLater(next.activeId);
+      }
+      return next;
+    });
+  };
+
+  const submit = (row: Row) => {
+    const entry = flattenNewlines(row.value);
+    if (entry.length) {
+      historyFor(row.channel).add(entry);
       // Префикс возвращается в строку в латинском виде: разбор каналов
       // остаётся на сервере и о раскладке игрока ничего не знает.
-      const entry
-        = prefix.current && iterator.current.isSay()
-          ? prefix.current.token + typed
-          : typed;
-      sendMessage('entry', { channel: target, entry });
+      const payload
+        = row.prefix && isSayChannel(row.channel)
+          ? row.prefix.token + entry
+          : entry;
+      sendMessage('entry', { channel: row.channel, entry: payload });
     }
-    drafts.current.clear(target);
-    close(false);
+    dropRow(row.id);
   };
 
-  const switchChannel = () => {
-    drafts.current.save(iterator.current.current(), currentValue());
-    const next = iterator.current.next();
-    prefix.current = null;
-    setLabel(next);
-    setValue(drafts.current.load(next));
-    history.current.reset();
-    sendMessage('channel', { channel: next });
+  const cycleChannel = (row: Row) => {
+    setState(previous =>
+      updateRow(previous, row.id, {
+        channel: nextFreeChannel(previous, row.id),
+        prefix: null,
+      }),
+    );
+    focusLater(row.id);
   };
 
-  const handleInput = (typed: string) => {
-    // Индикатор печати зажигается по набору, а не по открытию окна: иначе
-    // пузырь висит над теми, кто открыл окно и передумал.
-    if (iterator.current.isVisible() && shouldSendTyping(Date.now())) {
+  const step = (delta: number) => {
+    setState(previous => {
+      const next = stepActive(previous, delta);
+      focusLater(next.activeId);
+      return next;
+    });
+  };
+
+  const handleInput = (row: Row, typed: string) => {
+    // Индикатор печати зажигается по набору, а не по открытию панели: иначе
+    // пузырь висит над теми, кто открыл её и передумал.
+    if (isVisibleChannel(row.channel) && shouldSendTyping(Date.now())) {
       sendMessage('typing');
     }
-    // Префикс ловим только в Say и только пока он не выбран: дальше символы
+    // Префикс ловим только в речи и только пока он не выбран: дальше символы
     // ":" и ";" — это обычный текст.
-    if (!prefix.current && iterator.current.isSay()) {
+    if (!row.prefix && isSayChannel(row.channel)) {
       const found = getPrefix(typed);
       if (found) {
-        prefix.current = found;
-        setLabel(found.label);
-        setValue(stripPrefix(typed));
+        setState(previous =>
+          updateRow(previous, row.id, {
+            prefix: found,
+            value: stripPrefix(typed),
+          }),
+        );
         return;
       }
     }
-    setValue(typed);
+    setValue(row.id, typed);
   };
 
-  /** Стирание на пустом поле снимает выбранный префикс рации. */
-  const handleErase = () => {
-    if (prefix.current && !currentValue().length) {
-      clearPrefix();
-    }
-  };
-
-  const browseHistory = (
-    direction: typeof KEY_ARROW_UP | typeof KEY_ARROW_DOWN,
-  ) => {
-    if (direction === KEY_ARROW_UP) {
-      if (history.current.isAtLatest()) {
-        history.current.saveTemp(currentValue());
+  const browseHistory = (row: Row, direction: number) => {
+    const history = historyFor(row.channel);
+    if (direction < 0) {
+      if (history.isAtLatest()) {
+        history.saveTemp(row.value);
       }
-      const older = history.current.getOlderMessage();
+      const older = history.getOlderMessage();
       if (older !== null) {
-        setValue(older);
+        setValue(row.id, older);
       }
       return;
     }
-    const newer = history.current.getNewerMessage();
-    setValue(newer !== null ? newer : history.current.getTemp());
+    const newer = history.getNewerMessage();
+    setValue(row.id, newer !== null ? newer : history.getTemp());
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (row: Row) => (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    const element = event.currentTarget;
     switch (event.key) {
-      case KEY_ENTER:
+      case 'Enter':
         if (event.shiftKey) {
           return;
         }
         event.preventDefault();
-        submit();
+        submit(row);
         return;
-      case KEY_TAB:
+      case 'Tab':
         event.preventDefault();
-        switchChannel();
+        if (event.ctrlKey || event.shiftKey) {
+          step(event.shiftKey ? -1 : 1);
+          return;
+        }
+        cycleChannel(row);
         return;
-      case KEY_ARROW_UP:
-      case KEY_ARROW_DOWN:
+      case 'Escape':
         event.preventDefault();
-        browseHistory(event.key);
+        if (event.shiftKey) {
+          dropRow(row.id);
+          return;
+        }
+        hide();
         return;
-      case KEY_BACKSPACE:
-      case KEY_DELETE:
-        handleErase();
-        return;
-      case KEY_ESCAPE:
+      case 'ArrowUp':
+      case 'ArrowDown': {
+        const direction = event.key === 'ArrowUp' ? -1 : 1;
+        if (event.ctrlKey) {
+          event.preventDefault();
+          step(direction);
+          return;
+        }
+        const caret = {
+          value: element.value,
+          selectionStart: element.selectionStart,
+          selectionEnd: element.selectionEnd,
+        };
+        // В многострочном тексте стрелки сначала ходят по нему самому.
+        if (direction < 0 ? !isCaretOnFirstLine(caret) : !isCaretOnLastLine(caret)) {
+          return;
+        }
         event.preventDefault();
-        close();
+        browseHistory(row, direction);
+        return;
+      }
+      case 'Backspace':
+      case 'Delete':
+        // Стирание на пустом поле снимает выбранный префикс рации.
+        if (row.prefix && !row.value.length) {
+          setState(previous => updateRow(previous, row.id, { prefix: null }));
+        }
     }
   };
+
+  useEffect(() => {
+    handlers.current.open = openIn;
+    handlers.current.hide = hide;
+  });
 
   useEffect(() => {
     subscribeTo('props', (payload: PropsPayload) => {
@@ -183,19 +268,10 @@ export const TguiSay = () => {
       }
     });
     subscribeTo('open', (payload: OpenPayload) => {
-      iterator.current.set(payload?.channel || 'Say');
-      const opened = iterator.current.current();
-      prefix.current = null;
-      setLabel(opened);
-      setValue(drafts.current.load(opened));
-      history.current.reset();
-      windowOpen();
-      // Фокус ставим после того, как окно стало видимым: BYOND не отдаёт
-      // фокус скрытому элементу.
-      setTimeout(() => inputRef.current?.focus(), 0);
-      sendMessage('open', { channel: opened });
+      const channel = isChannel(payload?.channel) ? payload.channel : 'Say';
+      handlers.current.open(channel);
     });
-    subscribeTo('close', () => close());
+    subscribeTo('close', () => handlers.current.hide());
     // Сообщения, пришедшие до монтирования, лежат в очереди шима.
     window.update = dispatchMessage;
     while (true) {
@@ -205,67 +281,110 @@ export const TguiSay = () => {
       }
       dispatchMessage(queued);
     }
+    refreshMapSize();
     sendMessage('ready');
   }, []);
 
-  const suggestions = getEmoteSuggestions(value, emotes);
-  const customSay = splitCustomSay(value);
-  const bytes = encodedLength(value);
+  // Панель обязана быть ровно по высоте содержимого: лишняя высота закрывает
+  // собой карту чёрным прямоугольником.
+  useLayoutEffect(() => {
+    if (!visible) {
+      return;
+    }
+    const height = rootRef.current?.getBoundingClientRect().height || 0;
+    if (!height) {
+      return;
+    }
+    if (!revealRequested.current) {
+      resizePanel(height);
+      return;
+    }
+    revealRequested.current = false;
+    showPanel(height);
+    // Карту могли растянуть, пока панель была спрятана. Открытие этого не
+    // ждёт: панель появляется сразу, а на место встаёт следующим кадром.
+    refreshMapSize().then(() => {
+      const current = rootRef.current?.getBoundingClientRect().height || height;
+      resizePanel(current);
+    });
+  });
+
+  // Фокус ставим после того, как панель стала видимой: BYOND не отдаёт фокус
+  // скрытому элементу.
+  useLayoutEffect(() => {
+    const id = pendingFocus.current;
+    if (id === null || !visible) {
+      return;
+    }
+    pendingFocus.current = null;
+    const element = inputs.current.get(id);
+    if (!element) {
+      return;
+    }
+    setTimeout(() => {
+      element.focus();
+      const caret = element.value.length;
+      element.setSelectionRange(caret, caret);
+    }, 0);
+  });
+
+  // Последняя строка ушла — панели больше нечего показывать.
+  useEffect(() => {
+    if (visible && !state.rows.length) {
+      hide();
+    }
+  }, [state.rows.length, visible]);
+
+  // Индикатор печати идёт по активной строке: сервер обязан знать, куда
+  // именно человек сейчас пишет.
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+    const row = activeRow(state);
+    if (!row || row.channel === knownChannel.current) {
+      return;
+    }
+    knownChannel.current = row.channel;
+    sendMessage('channel', { channel: row.channel });
+  });
 
   return (
-    <div className="TguiSay">
-      {!!suggestions.length && (
-        <div className="TguiSay__hints">
-          {suggestions.map(emote => (
-            <button
-              className="TguiSay__hint"
-              key={emote}
-              onClick={() => {
-                setValue(`*${emote}`);
-                inputRef.current?.focus();
-              }}
-              type="button">
-              {emote}
-            </button>
-          ))}
-        </div>
-      )}
-      {!!customSay && (
-        <div className="TguiSay__hints">
-          <span className="TguiSay__syntax">
-            {customSay.verb}, «{customSay.message}»
-          </span>
-        </div>
-      )}
-      <div className="TguiSay__row">
-        <button
-          className="TguiSay__channel"
-          onClick={switchChannel}
-          type="button">
-          {label}
-        </button>
-        <textarea
-          className="TguiSay__input"
-          maxLength={maxLength}
-          onChange={event => handleInput(event.currentTarget.value)}
-          onKeyDown={handleKeyDown}
-          ref={inputRef}
-          spellCheck={false}
-          value={value}
-        />
-        <span
-          className={
-            bytes > SLOW_TRANSPORT_BYTES
-              ? 'TguiSay__counter TguiSay__counter--slow'
-              : 'TguiSay__counter'
-          }
-          title={
-            bytes > SLOW_TRANSPORT_BYTES
-              ? 'Сообщение придётся отправлять частями — это заметно дольше'
-              : undefined
-          }>
-          {value.length}
-        </span>
+    <div className="Say" ref={rootRef}>
+      <div className="Say__rows">
+        {state.rows.map(row => (
+          <MessageRow
+            active={row.id === state.activeId}
+            emotes={emotes}
+            key={row.id}
+            maxLength={maxLength}
+            onActivate={() => setState(previous => ({ ...previous, activeId: row.id }))}
+            onChange={value => handleInput(row, value)}
+            onClose={() => dropRow(row.id)}
+            onCycleChannel={() => cycleChannel(row)}
+            onKeyDown={handleKeyDown(row)}
+            onPick={emote => {
+              setValue(row.id, `*${emote}`);
+              focusLater(row.id);
+            }}
+            registerInput={element => {
+              if (element) {
+                inputs.current.set(row.id, element);
+              }
+              else {
+                inputs.current.delete(row.id);
+              }
+            }}
+            row={row}
+          />
+        ))}
+      </div>
+      <div className="Say__footer">
+        <span><b>Enter</b> отправить</span>
+        <span><b>Shift+Enter</b> перенос</span>
+        <span><b>Tab</b> канал</span>
+        {state.rows.length > 1 && <span><b>Ctrl+↑↓</b> между строками</span>}
+        <span><b>Esc</b> свернуть</span>
       </div>
     </div>
   );

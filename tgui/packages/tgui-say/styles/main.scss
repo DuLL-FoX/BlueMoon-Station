@@ -1,5 +1,16 @@
-// Окно ввода сообщений. Оно живёт поверх карты и должно выглядеть как одна
-// строка ввода, а не как окно tgui: никаких рамок, отступов и полос прокрутки.
+// Панель ввода сообщений.
+//
+// Панель живёт браузерным элементом внутри карты и по размеру равна своему
+// содержимому: всё, что нарисовано здесь, закрывает собой карту, поэтому
+// лишней высоты и лишних отступов быть не должно.
+
+@use './channels.scss';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
 html,
 body {
@@ -7,94 +18,197 @@ body {
   margin: 0;
   overflow: hidden;
   padding: 0;
+  // Элемент скина непрозрачен: фон страницы — это и есть рамка панели.
+  background-color: #0c0e13;
+  color: #dfe4ee;
+  font-family: Verdana, 'DejaVu Sans', sans-serif;
+  font-size: 12px;
+  user-select: none;
 }
 
-.TguiSay {
-  background-color: #131313;
-  border-radius: 4px;
-  box-sizing: border-box;
+.Say {
   display: flex;
   flex-direction: column;
-  font-family: Verdana, sans-serif;
-  font-size: 13px;
-  height: 100%;
-  padding: 3px;
+  gap: 3px;
+  padding: 4px 5px 3px;
   width: 100%;
 }
 
-.TguiSay__row {
-  align-items: stretch;
+.Say__rows {
   display: flex;
-  flex: 1 1 auto;
-  gap: 4px;
-  min-height: 0;
+  flex-direction: column;
+  gap: 3px;
 }
 
-.TguiSay__hints {
-  align-items: center;
+// Запасные значения живут на корне: правила каналов идут выше по файлу, и на
+// одинаковой специфичности победило бы то, что ниже, — то есть заглушка.
+:root {
+  --channel: #dfe4ee;
+  --channel-soft: rgba(223, 228, 238, 0.13);
+  --channel-hover: rgba(223, 228, 238, 0.22);
+  --channel-line: rgba(223, 228, 238, 0.42);
+  --channel-dim: rgba(223, 228, 238, 0.55);
+}
+
+.Say__row {
+  background-color: #12151c;
+  border-left: 3px solid var(--channel-dim);
+  border-radius: 5px;
+  opacity: 0.55;
+  padding: 2px 4px 2px 5px;
+  transition: opacity 90ms linear, background-color 90ms linear;
+}
+
+// Активная строка выделена не рамкой, а плотностью: рамка на тёмном фоне
+// теряется, а разница в яркости видна боковым зрением.
+.Say__row--active {
+  background-color: #1a1f2a;
+  border-left-color: var(--channel);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04);
+  opacity: 1;
+}
+
+.Say__line {
+  align-items: flex-start;
+  display: flex;
+  gap: 6px;
+}
+
+.Say__channel {
+  background-color: var(--channel-soft);
+  border: 1px solid var(--channel-line);
+  border-radius: 4px;
+  color: var(--channel);
+  cursor: pointer;
   display: flex;
   flex: 0 0 auto;
-  flex-wrap: nowrap;
-  gap: 4px;
-  overflow-x: auto;
+  flex-direction: column;
+  font-family: inherit;
+  justify-content: center;
+  line-height: 1.1;
+  min-height: 22px;
+  min-width: 78px;
+  padding: 2px 6px;
+  text-align: left;
+}
+
+.Say__channel:hover {
+  background-color: var(--channel-hover);
+}
+
+.Say__channelLabel {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.Say__channelHint {
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+.Say__input {
+  background-color: transparent;
+  border: none;
+  color: var(--channel);
+  flex: 1 1 auto;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  margin: 0;
+  min-width: 0;
+  outline: none;
+  padding: 2px 0;
+  resize: none;
+  user-select: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.Say__row--emote .Say__input,
+.Say__row--whisper .Say__input {
+  font-style: italic;
+}
+
+// Неактивная строка сжата до одной строки и не показывает полосу прокрутки:
+// стопка из четырёх сообщений иначе занимает половину экрана.
+.Say__row:not(.Say__row--active) .Say__input {
+  overflow: hidden;
+  white-space: pre;
+}
+
+.Say__counter {
+  align-self: flex-end;
+  color: #626b7d;
+  flex: 0 0 auto;
+  font-size: 10px;
   padding-bottom: 3px;
 }
 
-.TguiSay__hint {
-  background-color: #2a2a2a;
+.Say__counter--slow {
+  color: #c8a25c;
+}
+
+.Say__close {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: #4e5766;
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 14px;
+  line-height: 1;
+  padding: 3px 2px;
+}
+
+.Say__close:hover {
+  color: #d8666a;
+}
+
+.Say__hints {
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 1px 0 3px;
+}
+
+.Say__hint {
+  background-color: #232936;
   border: none;
   border-radius: 3px;
-  color: #9ad;
+  color: #9ab4d4;
   cursor: pointer;
   flex: 0 0 auto;
   font-family: inherit;
   font-size: 11px;
-  padding: 1px 5px;
+  padding: 1px 6px;
 }
 
-.TguiSay__syntax {
-  color: #8a8a8a;
+.Say__hint:hover {
+  background-color: #2f3745;
+}
+
+.Say__syntax {
+  color: #7c8496;
   font-size: 11px;
   white-space: nowrap;
 }
 
-.TguiSay__counter {
-  align-self: center;
-  color: #6a6a6a;
-  flex: 0 0 auto;
-  font-size: 11px;
-  min-width: 26px;
-  text-align: right;
+// Подсказки по клавишам: панель завела свои сочетания, и без строки под полем
+// о них не догадаться.
+.Say__footer {
+  color: #454d5c;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 10px;
+  gap: 10px;
+  padding: 0 2px;
 }
 
-.TguiSay__counter--slow {
-  color: #c8a25c;
-}
-
-.TguiSay__channel {
-  background-color: #2a2a2a;
-  border: none;
-  border-radius: 3px;
-  color: #dcdcdc;
-  cursor: pointer;
-  flex: 0 0 auto;
-  font-family: inherit;
-  font-size: 12px;
-  min-width: 54px;
-  padding: 0 6px;
-}
-
-.TguiSay__input {
-  background-color: #1c1c1c;
-  border: none;
-  border-radius: 3px;
-  box-sizing: border-box;
-  color: #dcdcdc;
-  flex: 1 1 auto;
-  font-family: inherit;
-  font-size: inherit;
-  outline: none;
-  overflow-y: auto;
-  padding: 3px 5px;
-  resize: none;
+.Say__footer b {
+  color: #6f7a8f;
+  font-weight: 700;
 }

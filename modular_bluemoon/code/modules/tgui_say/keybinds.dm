@@ -1,20 +1,4 @@
-/**
- * Верб открытия окна ввода.
- *
- * Вызывается макросом клавиши, поэтому канал приходит параметром прямо в
- * команде макроса: "tgui-say-open Say".
- */
-/client/verb/tgui_say_open_verb(channel as text)
-	set name = "tgui-say-open"
-	set hidden = TRUE
-	set instant = TRUE
-	tgui_say_open(channel)
-
-/// Открывает ли этот клиент каналы связи в новом окне.
-/client/proc/tgui_say_enabled()
-	return prefs?.say_input_mode == SAY_INPUT_MODE_WINDOW && tgui_say?.window
-
-/// Канал окна ввода, соответствующий этой привязке.
+/// Канал панели ввода, соответствующий этой привязке.
 /datum/keybinding/client/communication/proc/say_channel()
 	return null
 
@@ -28,10 +12,18 @@
 /datum/keybinding/client/communication/proc/native_command()
 	return null
 
+/**
+ * Команда клавиши канала связи.
+ *
+ * Пока панель ввода не догрузилась, команды нет вовсе: клавиша уходит в
+ * серверную обработку и открывает старый ввод. Как только панель доложит о
+ * готовности, макросы пересобираются и клавиша начинает открывать её сама,
+ * без обращения к серверу.
+ */
 /datum/keybinding/client/communication/get_clientside_command(client/user)
 	var/channel = say_channel()
-	if(channel && user.tgui_say_enabled())
-		return "tgui-say-open [channel]"
+	if(channel && user.tgui_say_ready())
+		return user.tgui_say_open_command(channel)
 	if(channel && user.prefs?.say_input_mode == SAY_INPUT_MODE_NATIVE)
 		var/native = native_command()
 		if(native)
@@ -44,17 +36,26 @@
 /datum/keybinding/client/communication/say/native_command()
 	return "Speak"
 
+/datum/keybinding/client/communication/say_with_indicator/say_channel()
+	return TGUI_SAY_CHANNEL_SAY
+
 /datum/keybinding/client/communication/me/say_channel()
 	return TGUI_SAY_CHANNEL_ME
 
 /datum/keybinding/client/communication/me/native_command()
 	return "Emote"
 
+/datum/keybinding/client/communication/me_with_indicator/say_channel()
+	return TGUI_SAY_CHANNEL_ME
+
 /datum/keybinding/client/communication/whisper/say_channel()
 	return TGUI_SAY_CHANNEL_WHISPER
 
 /datum/keybinding/client/communication/whisper/native_command()
 	return "Whisper-Text"
+
+/datum/keybinding/client/communication/whisper_with_indicator/say_channel()
+	return TGUI_SAY_CHANNEL_WHISPER
 
 /datum/keybinding/client/communication/ooc/say_channel()
 	return TGUI_SAY_CHANNEL_OOC

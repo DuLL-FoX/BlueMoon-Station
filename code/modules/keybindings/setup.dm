@@ -86,6 +86,12 @@
 		)
 	// Collect special clientside keybinds
 	var/list/clientside = update_special_keybinds(prefs_override)
+	// Все клавиши, за которыми что-то стоит. Комбинация, назначенная игроком,
+	// не имеет права попасть в пустышку анти-коллизии: Ctrl+T (Say) иначе
+	// глушит голую T (Say с индикатором), и клавиша перестаёт работать вовсе.
+	var/list/explicit_keys = list()
+	for(var/key in prefs_override.key_bindings)
+		explicit_keys += keybind_to_macro_key(key)
 	// ANTI COLLISION SYSTEM:
 	// If hotkey, do "standard" anti collision permutation
 	// We fully permutate alt/ctrl/shift with the key and then subtract the key's actual binding.
@@ -96,17 +102,12 @@
 		for(var/keybind in clientside)
 			var/command = clientside[keybind]
 			var/alt = findtext(keybind, "Alt")
-			if(alt)
-				keybind = copytext(keybind, 1, alt) + copytext(keybind, alt + 3, 0)
 			var/ctrl = findtext(keybind, "Ctrl")
-			if(ctrl)
-				keybind = copytext(keybind, 1, ctrl) + copytext(keybind, ctrl + 4, 0)
 			var/shift = findtext(keybind, "Shift")
-			if(shift)
-				keybind = copytext(keybind, 1, shift) + copytext(keybind, shift + 5, 0)
-			var/actual = "[alt? "Alt+" : ""][ctrl? "Ctrl+" : ""][shift? "Shift+" : ""][keybind]"
-			var/list/overriding = keybind_modifier_permutation(keybind, alt, ctrl, shift, TRUE)
+			var/actual = keybind_to_macro_key(keybind)
+			var/list/overriding = keybind_modifier_permutation(keybind_strip_modifiers(keybind), alt, ctrl, shift, TRUE)
 			overriding -= actual
+			overriding -= explicit_keys
 			for(var/macroset in macrosets)
 				var/list/the_set = macrosets[macroset]
 				the_set[actual] = command
@@ -142,6 +143,36 @@
 		apply_macro_set(macroset, macrosets[macroset])
 	// Finally, set hotkeys.
 	set_hotkeys_preference(prefs_override)
+
+/**
+ * Убирает из ключа привязки названия модификаторов.
+ *
+ * "CtrlShiftT" -> "T". Привязки хранятся слитно, а макросы BYOND ждут ключ
+ * отдельно от модификаторов, поэтому разбор нужен в обе стороны.
+ */
+/proc/keybind_strip_modifiers(keybind)
+	var/alt = findtext(keybind, "Alt")
+	if(alt)
+		keybind = copytext(keybind, 1, alt) + copytext(keybind, alt + 3, 0)
+	var/ctrl = findtext(keybind, "Ctrl")
+	if(ctrl)
+		keybind = copytext(keybind, 1, ctrl) + copytext(keybind, ctrl + 4, 0)
+	var/shift = findtext(keybind, "Shift")
+	if(shift)
+		keybind = copytext(keybind, 1, shift) + copytext(keybind, shift + 5, 0)
+	return keybind
+
+/**
+ * Приводит ключ привязки к виду макроса: "CtrlShiftT" -> "Ctrl+Shift+T".
+ *
+ * Порядок модификаторов обязан совпадать с тем, в каком их собирает
+ * keybind_modifier_permutation: списки этих строк вычитаются друг из друга.
+ */
+/proc/keybind_to_macro_key(keybind)
+	var/alt = findtext(keybind, "Alt")
+	var/ctrl = findtext(keybind, "Ctrl")
+	var/shift = findtext(keybind, "Shift")
+	return "[alt ? "Alt+" : ""][ctrl ? "Ctrl+" : ""][shift ? "Shift+" : ""][keybind_strip_modifiers(keybind)]"
 
 /proc/keybind_modifier_permutation(key, alt = FALSE, ctrl = FALSE, shift = FALSE, self = TRUE)
 	var/list/permutations = list()
@@ -194,10 +225,11 @@
 					movement_keys[key] = SOUTH
 				else
 					var/datum/keybinding/KB = GLOB.keybindings_by_name[kb_name]
-					if(!KB.clientside)
+					if(!KB)
 						continue
 					// Команда берётся через процедуру: у каналов связи она
-					// зависит от выбранного игроком способа ввода.
+					// зависит от выбранного игроком способа ввода, а у части
+					// привязок появляется только после загрузки панели ввода.
 					var/command = KB.get_clientside_command(src)
 					if(!command)
 						continue

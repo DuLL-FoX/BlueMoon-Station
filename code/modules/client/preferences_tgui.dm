@@ -508,9 +508,13 @@
 					tgui_input_verbs = (value == "TGUI" ? TRUE : FALSE)
 				if("say_input_mode")
 					say_input_mode = sanitize_inlist(value, GLOB.say_input_modes, initial(say_input_mode))
-					// Клавиши каналов связи ведут либо в окно, либо в верб —
+					// Клавиши каналов связи ведут либо в панель, либо в верб —
 					// без пересборки макросов смена настройки ничего не даст.
-					user?.client?.full_macro_assert()
+					user?.client?.ensure_keys_set()
+					if(say_input_mode != SAY_INPUT_MODE_WINDOW)
+						// Открытую панель игрок уже никак не закроет: её клавиши
+						// только что уехали в старый ввод.
+						user?.client?.tgui_say?.hide()
 				if("UI_style")
 					UI_style = value
 					if(user?.hud_used)

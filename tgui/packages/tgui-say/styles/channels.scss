@@ -1,0 +1,37 @@
+// Цвета каналов.
+//
+// Взяты из стилей чата (packages/tgui-panel/styles/goon/chat-dark.scss): текст
+// в поле ввода обязан быть того же цвета, каким сообщение появится в логе.
+// Иначе цветовая кодировка ничего не даёт — её приходится запоминать отдельно.
+//
+// Оттенки считаются здесь, а не в color-mix(): WebView2 в BYOND 516 — это Edge
+// 109, а color-mix() появился только в 111.
+
+$channels: (
+  say: #dfe4ee,
+  radio: #1ecc43,
+  comradio: #fcdf03,
+  sciradio: #c68cfa,
+  medradio: #57b8f0,
+  engradio: #f37746,
+  secradio: #dd3535,
+  suppradio: #b88646,
+  servradio: #6ca729,
+  syndradio: #8f4a4b,
+  centcomradio: #2681a5,
+  whisper: #97a3bd,
+  emote: #d6d6e0,
+  looc: #6699cc,
+  ooc: #cca300,
+  aooc: #b8002e,
+);
+
+@each $name, $color in $channels {
+  .Say__row--#{$name} {
+    --channel: #{$color};
+    --channel-soft: #{rgba($color, 0.13)};
+    --channel-hover: #{rgba($color, 0.22)};
+    --channel-line: #{rgba($color, 0.42)};
+    --channel-dim: #{rgba($color, 0.55)};
+  }
+}

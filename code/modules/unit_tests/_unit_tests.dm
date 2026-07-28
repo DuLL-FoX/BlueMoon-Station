@@ -104,6 +104,7 @@
 // #include "hydroponics_harvest.dm"
 #include "jetpack_thrust.dm"
 // #include "keybinding_init.dm"
+#include "keybinding_macro_keys.dm"
 #include "keybindings_stuck_keys.dm"
 // #include "language_transfer.dm"
 #include "lighting.dm"

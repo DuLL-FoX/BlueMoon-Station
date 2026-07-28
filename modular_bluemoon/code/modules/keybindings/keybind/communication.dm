@@ -14,7 +14,7 @@
 	full_name = "Whisper with Typing Indicator"
 
 /datum/keybinding/client/communication/whisper_with_indicator/down(client/user)
-	if(user.tgui_say_enabled() && user.tgui_say_open(TGUI_SAY_CHANNEL_WHISPER))
+	if(user.tgui_say_ready() && user.tgui_say_open(TGUI_SAY_CHANNEL_WHISPER))
 		return TRUE
 	var/mob/M = user.mob
 	M.whisper_typing_indicator()
