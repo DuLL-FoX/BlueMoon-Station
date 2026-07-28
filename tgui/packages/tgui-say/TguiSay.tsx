@@ -6,6 +6,11 @@ import { DraftStore } from './drafts';
 import { windowClose, windowOpen } from './helpers';
 import { dispatchMessage, sendMessage, subscribeTo } from './messages';
 import { getPrefix, type RadioPrefix, stripPrefix } from './prefixes';
+import {
+  encodedLength,
+  getEmoteSuggestions,
+  splitCustomSay,
+} from './suggestions';
 import { resetTypingThrottle, shouldSendTyping } from './timers';
 
 type OpenPayload = {
@@ -14,7 +19,15 @@ type OpenPayload = {
 
 type PropsPayload = {
   maxLength: number;
+  emotes: string[];
 };
+
+/**
+ * Порог, за которым сообщение перестаёт помещаться в один запрос к клиенту и
+ * начинает резаться на куски. У кириллицы это примерно каждый третий символ,
+ * поэтому считаем в байтах, а не в символах.
+ */
+const SLOW_TRANSPORT_BYTES = 1800;
 
 const KEY_ARROW_DOWN = 'ArrowDown';
 const KEY_ARROW_UP = 'ArrowUp';
@@ -34,6 +47,7 @@ export const TguiSay = () => {
   const [label, setLabel] = useState<string>('Say');
   const [maxLength, setMaxLength] = useState(4096);
   const [value, setValue] = useState('');
+  const [emotes, setEmotes] = useState<string[]>([]);
 
   /** Текущий текст поля. Читаем из DOM: состояние отстаёт на один кадр. */
   const currentValue = () => inputRef.current?.value || '';
@@ -164,6 +178,9 @@ export const TguiSay = () => {
       if (payload?.maxLength) {
         setMaxLength(payload.maxLength);
       }
+      if (payload?.emotes) {
+        setEmotes(payload.emotes);
+      }
     });
     subscribeTo('open', (payload: OpenPayload) => {
       iterator.current.set(payload?.channel || 'Say');
@@ -191,23 +208,65 @@ export const TguiSay = () => {
     sendMessage('ready');
   }, []);
 
+  const suggestions = getEmoteSuggestions(value, emotes);
+  const customSay = splitCustomSay(value);
+  const bytes = encodedLength(value);
+
   return (
     <div className="TguiSay">
-      <button
-        className="TguiSay__channel"
-        onClick={switchChannel}
-        type="button">
-        {label}
-      </button>
-      <textarea
-        className="TguiSay__input"
-        maxLength={maxLength}
-        onChange={event => handleInput(event.currentTarget.value)}
-        onKeyDown={handleKeyDown}
-        ref={inputRef}
-        spellCheck={false}
-        value={value}
-      />
+      {!!suggestions.length && (
+        <div className="TguiSay__hints">
+          {suggestions.map(emote => (
+            <button
+              className="TguiSay__hint"
+              key={emote}
+              onClick={() => {
+                setValue(`*${emote}`);
+                inputRef.current?.focus();
+              }}
+              type="button">
+              {emote}
+            </button>
+          ))}
+        </div>
+      )}
+      {!!customSay && (
+        <div className="TguiSay__hints">
+          <span className="TguiSay__syntax">
+            {customSay.verb}, «{customSay.message}»
+          </span>
+        </div>
+      )}
+      <div className="TguiSay__row">
+        <button
+          className="TguiSay__channel"
+          onClick={switchChannel}
+          type="button">
+          {label}
+        </button>
+        <textarea
+          className="TguiSay__input"
+          maxLength={maxLength}
+          onChange={event => handleInput(event.currentTarget.value)}
+          onKeyDown={handleKeyDown}
+          ref={inputRef}
+          spellCheck={false}
+          value={value}
+        />
+        <span
+          className={
+            bytes > SLOW_TRANSPORT_BYTES
+              ? 'TguiSay__counter TguiSay__counter--slow'
+              : 'TguiSay__counter'
+          }
+          title={
+            bytes > SLOW_TRANSPORT_BYTES
+              ? 'Сообщение придётся отправлять частями — это заметно дольше'
+              : undefined
+          }>
+          {value.length}
+        </span>
+      </div>
     </div>
   );
 };

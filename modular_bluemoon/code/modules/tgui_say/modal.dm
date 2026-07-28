@@ -76,8 +76,23 @@ GLOBAL_LIST_INIT(say_input_modes, list(
 		winset(client, TGUI_SAY_WINDOW_ID, "is-visible=0")
 	window?.send_message("props", list(
 		"maxLength" = max_length,
+		"emotes" = get_emote_keys(),
 	))
 	return TRUE
+
+/**
+ * Ключи эмоций для подсказок в окне.
+ *
+ * Список берётся у панели эмоций, чтобы не заводить второй источник: она
+ * собирает его один раз на весь раунд.
+ */
+/datum/tgui_say/proc/get_emote_keys()
+	var/list/keys = list()
+	if(!client?.tgui_panel)
+		return keys
+	for(var/key in client.tgui_panel.all_emotes)
+		keys += key
+	return sortTim(keys, GLOBAL_PROC_REF(cmp_text_asc))
 
 /**
  * Окно доложило, что открылось.

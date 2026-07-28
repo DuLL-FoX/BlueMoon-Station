@@ -10,17 +10,65 @@ body {
 }
 
 .TguiSay {
-  align-items: stretch;
   background-color: #131313;
   border-radius: 4px;
   box-sizing: border-box;
   display: flex;
+  flex-direction: column;
   font-family: Verdana, sans-serif;
   font-size: 13px;
-  gap: 4px;
   height: 100%;
   padding: 3px;
   width: 100%;
+}
+
+.TguiSay__row {
+  align-items: stretch;
+  display: flex;
+  flex: 1 1 auto;
+  gap: 4px;
+  min-height: 0;
+}
+
+.TguiSay__hints {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 3px;
+}
+
+.TguiSay__hint {
+  background-color: #2a2a2a;
+  border: none;
+  border-radius: 3px;
+  color: #9ad;
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-family: inherit;
+  font-size: 11px;
+  padding: 1px 5px;
+}
+
+.TguiSay__syntax {
+  color: #8a8a8a;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.TguiSay__counter {
+  align-self: center;
+  color: #6a6a6a;
+  flex: 0 0 auto;
+  font-size: 11px;
+  min-width: 26px;
+  text-align: right;
+}
+
+.TguiSay__counter--slow {
+  color: #c8a25c;
 }
 
 .TguiSay__channel {
