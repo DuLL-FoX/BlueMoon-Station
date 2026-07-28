@@ -76,12 +76,15 @@ export const Hints = (props: Props) => {
     token: hint.token,
     name: CHANNEL_NAMES[hint.name] || hint.name,
   }));
+  // Единственный язык выбирать не из чего: префикс на нём только занимает
+  // место. Рации без гарнитуры — то же самое.
+  const languages = props.languages.length > 1 ? props.languages : [];
 
   return (
     <div className="Say__hintPanel">
       <Group items={radios} label="Рация" onPick={props.onPick} />
       <Group items={MODIFIERS} label="Текст" onPick={props.onPick} />
-      <Group items={props.languages} label="Язык" onPick={props.onPick} />
+      <Group items={languages} label="Язык" onPick={props.onPick} />
       <div className="Say__hintGroup">
         <span className="Say__hintLabel">Ещё</span>
         <span className="Say__hintNote">

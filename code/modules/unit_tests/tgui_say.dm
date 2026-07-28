@@ -102,6 +102,26 @@
 	TEST_ASSERT(say_modal.delegate_speech("незаметно", TGUI_SAY_CHANNEL_SUBTLER), "subtler не принял текст")
 	TEST_ASSERT_EQUAL(speaker.last_emote_act, "subtler", "subtler ушёл не в тот act")
 
+	TEST_ASSERT(say_modal.delegate_speech("дверь скрипит", TGUI_SAY_CHANNEL_NARRATE), "нарратив не принял текст")
+	TEST_ASSERT_EQUAL(speaker.last_emote_act, "narrate", "нарратив ушёл не в тот act")
+	TEST_ASSERT_EQUAL(speaker.last_emote_message, "дверь скрипит", "нарратив потерял текст")
+
+	TEST_ASSERT(say_modal.delegate_speech("шорох за стеной", TGUI_SAY_CHANNEL_NARRATE_SUBTLER), "скрытый нарратив не принял текст")
+	TEST_ASSERT_EQUAL(speaker.last_emote_act, "narrate_subtler", "скрытый нарратив ушёл не в тот act")
+
+	qdel(say_modal)
+
+/// Молитва — не внутриигровая речь: над игроком не должен висеть пузырь, а
+/// блокировка речи администрацией её не касается.
+/datum/unit_test/tgui_say_pray_channel
+
+/datum/unit_test/tgui_say_pray_channel/Run()
+	var/datum/tgui_say/unit_test_probe/say_modal = new(null, null)
+
+	TEST_ASSERT(!say_modal.is_ic_channel(TGUI_SAY_CHANNEL_PRAY), "молитва считается внутриигровой речью")
+	TEST_ASSERT(!say_modal.is_emote_channel(TGUI_SAY_CHANNEL_PRAY), "молитва показывает пузырь эмоции")
+	TEST_ASSERT(say_modal.is_emote_channel(TGUI_SAY_CHANNEL_NARRATE), "нарратив не показывает пузырь эмоции")
+
 	qdel(say_modal)
 
 /// Индикатор печати обязан зажигаться по первому набранному символу, а не по

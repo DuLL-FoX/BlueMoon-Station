@@ -70,9 +70,11 @@
 	if(GLOB.say_disabled)
 		to_chat(usr, "<span class='danger'>Speech is currently admin-disabled.</span>")
 		return
+	if(open_say_panel(TGUI_SAY_CHANNEL_NARRATE_SUBTLER))
+		return
 	display_typing_indicator(isMe = TRUE)
 	var/message = ""
-	if(client?.prefs.tgui_input_verbs)
+	if(client?.prefs.say_input_mode == SAY_INPUT_MODE_MODAL)
 		message = tgui_input_text(src, "Опишите действие или событие. Альтернатива эмоции, когда ваша эмоция не должна начинаться с вашего имени. Видно только игрокам поблизости, исключая призраков.", "Narrate Subtler (Player)", null, MAX_MESSAGE_LEN, TRUE, TRUE)
 	else
 		message = stripped_multiline_input_or_reflect(src, "Опишите действие или событие. Альтернатива эмоции, когда ваша эмоция не должна начинаться с вашего имени. Видно только игрокам поблизости, исключая призраков.", "Narrate Subtler (Player)")

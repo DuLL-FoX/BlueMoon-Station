@@ -4,10 +4,12 @@
 	if(GLOB.say_disabled)
 		to_chat(usr, span_danger("Speech is currently admin-disabled."))
 		return
+	if(open_say_panel(TGUI_SAY_CHANNEL_SUBTLER))
+		return
 	display_typing_indicator(isMe = TRUE)
 
 	var/message = ""
-	if(client?.prefs.tgui_input_verbs)
+	if(client?.prefs.say_input_mode == SAY_INPUT_MODE_MODAL)
 		message = tgui_input_text(src, "Введите сообщение, которое увидят персонажи в упор к вам. Призраки его не увидят.", "Введите скрытое сообщение", null, MAX_MESSAGE_LEN, TRUE, TRUE)
 	else
 		message = stripped_multiline_input_or_reflect(src, "Введите сообщение, которое увидят персонажи в упор к вам. Призраки его не увидят.", "Введите скрытое сообщение")

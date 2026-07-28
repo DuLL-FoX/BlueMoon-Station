@@ -20,6 +20,8 @@ GLOBAL_VAR_INIT(normal_looc_colour, "#6699CC")
 
 	if(QDELETED(src) || !mob)
 		return
+	if(mob.open_say_panel(TGUI_SAY_CHANNEL_LOOC))
+		return
 
 	var/message = ""
 	if(prefs.say_input_mode == SAY_INPUT_MODE_MODAL)

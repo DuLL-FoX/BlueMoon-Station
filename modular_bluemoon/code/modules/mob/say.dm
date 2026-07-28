@@ -24,8 +24,10 @@
 	if(GLOB.say_disabled)	//This is here to try to identify lag problems
 		to_chat(usr, "<span class='danger'>Speech is currently admin-disabled.</span>")
 		return
+	if(open_say_panel(TGUI_SAY_CHANNEL_WHISPER))
+		return
 	display_typing_indicator(isSay = TRUE)
-	
+
 	var/message = ""
 	if(client?.prefs.say_input_mode == SAY_INPUT_MODE_MODAL)
 		message = tgui_input_text(src, "", "Whisper (Indicator)", null, MAX_MESSAGE_LEN, encode = TRUE)

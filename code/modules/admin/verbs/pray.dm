@@ -5,40 +5,54 @@
 	if(GLOB.say_disabled)	//This is here to try to identify lag problems
 		to_chat(usr, "<span class='danger'>Speech is currently admin-disabled.</span>", confidential = TRUE)
 		return
+	if(open_say_panel(TGUI_SAY_CHANNEL_PRAY))
+		return
 
 	var/message = ""
-	if(client?.prefs.tgui_input_verbs)
+	if(client?.prefs.say_input_mode == SAY_INPUT_MODE_MODAL)
 		message = tgui_input_text(usr, "", "Pray", null, MAX_MESSAGE_LEN, TRUE, TRUE)
 	else
 		message = stripped_multiline_input_or_reflect(usr, "", "Pray")
 
 	if(!length(message))
 		return
-	log_prayer("[src.key]/([src.name]): [message]")
-	if(usr.client)
-		if(usr.client.prefs.muted & MUTE_PRAY)
-			to_chat(usr, "<span class='danger'>You cannot pray (muted).</span>", confidential = TRUE)
+	pray_message(message)
+
+/**
+ * Отправка молитвы.
+ *
+ * Отделено от верба, чтобы готовый текст мог прийти не только из диалога, но и
+ * из панели ввода. Проверки, которые обязаны отработать до набора текста,
+ * остаются в вербе.
+ */
+/mob/proc/pray_message(message)
+	if(!length(message))
+		return
+	log_prayer("[key]/([name]): [message]")
+	if(client)
+		if(client.prefs.muted & MUTE_PRAY)
+			to_chat(src, "<span class='danger'>You cannot pray (muted).</span>", confidential = TRUE)
 			return
-		if(src.client.handle_spam_prevention(message, MUTE_PRAY))
+		if(client.handle_spam_prevention(message, MUTE_PRAY))
 			return
 
 	var/mutable_appearance/cross = mutable_appearance('icons/obj/storage.dmi', "bible")
 	var/font_color = "purple"
 	var/prayer_type = "PRAYER"
 	var/deity
-	if(usr.job == "Chaplain")
+	if(job == "Chaplain")
 		cross.icon_state = "kingyellow"
 		font_color = "blue"
 		prayer_type = "CHAPLAIN PRAYER"
 		if(GLOB.deity)
 			deity = GLOB.deity
-	else if(iscultist(usr))
+	else if(iscultist(src))
 		cross.icon_state = "tome"
 		font_color = "red"
 		prayer_type = "CULTIST PRAYER"
 		deity = "Nar'Sie"
-	else if(isliving(usr))
-		var/mob/living/L = usr
+	else if(isliving(src))
+		var/mob/living/L = src
 		if(HAS_TRAIT(L, TRAIT_SPIRITUAL))
 			cross.icon_state = "holylight"
 			font_color = "blue"
@@ -52,11 +66,11 @@
 			to_chat(C, message, confidential = TRUE)
 			if(C.prefs.toggles & SOUND_PRAYERS)
 				var/pray_vol = C.prefs?.get_sound_volume("prayers")
-				if(usr.job == "Chaplain")
+				if(job == "Chaplain")
 					SEND_SOUND(C, sound('sound/effects/pray.ogg', volume = pray_vol))
 				else
 					SEND_SOUND(C, sound('sound/effects/ding.ogg', volume = pray_vol))
-	to_chat(usr, "<span class='info'>You pray to the gods: \"[msg_tmp]\"</span>", confidential = TRUE)
+	to_chat(src, "<span class='info'>You pray to the gods: \"[msg_tmp]\"</span>", confidential = TRUE)
 
 	SSblackbox.record_feedback("tally", "admin_verb", 1, "Prayer") //If you are copy-pasting this, ensure the 2nd parameter is unique to the new proc!
 	//log_admin("HELP: [key_name(src)]: [msg]")

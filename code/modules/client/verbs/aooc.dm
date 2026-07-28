@@ -19,6 +19,8 @@ GLOBAL_VAR_INIT(normal_aooc_colour, "#ce254f")
 	if(jobban_isbanned(mob, "OOC"))
 		to_chat(src, "<span class='danger'>You have been banned from OOC.</span>")
 		return
+	if(mob.open_say_panel(TGUI_SAY_CHANNEL_AOOC))
+		return
 
 	var/message = ""
 	if(prefs.say_input_mode == SAY_INPUT_MODE_MODAL)

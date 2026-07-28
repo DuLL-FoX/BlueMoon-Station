@@ -29,6 +29,9 @@
 	if(GLOB.say_disabled)	//This is here to try to identify lag problems
 		to_chat(usr, "<span class='danger'>Speech is currently admin-disabled.</span>")
 		return
+	// Панель ввода сама зажигает индикатор по первому символу.
+	if(open_say_panel(TGUI_SAY_CHANNEL_SAY))
+		return
 	display_typing_indicator(isSay = TRUE)
 
 	// say() вызывает sanitize() сам, поэтому на вход отдаём сырой текст, чтобы не получить двойное экранирование (&amp;&amp;, &lt;, и т.д.)
@@ -50,6 +53,8 @@
 	set category = "Say"
 	if(GLOB.say_disabled)	//This is here to try to identify lag problems
 		to_chat(usr, "<span class='danger'>Speech is currently admin-disabled.</span>")
+		return
+	if(open_say_panel(TGUI_SAY_CHANNEL_SAY))
 		return
 
 	var/message = ""
@@ -84,6 +89,8 @@
 	if(GLOB.say_disabled)	//This is here to try to identify lag problems
 		to_chat(usr, "<span class='danger'>Speech is currently admin-disabled.</span>")
 		return
+	if(open_say_panel(TGUI_SAY_CHANNEL_ME))
+		return
 	display_typing_indicator(isMe = TRUE)
 
 	var/message = ""
@@ -106,6 +113,8 @@
 	set category = "Say"
 	if(GLOB.say_disabled)	//This is here to try to identify lag problems
 		to_chat(usr, "<span class='danger'>Speech is currently admin-disabled.</span>")
+		return
+	if(open_say_panel(TGUI_SAY_CHANNEL_ME))
 		return
 
 	var/message = ""
@@ -179,6 +188,8 @@
 	set category = "Say"
 	if(GLOB.say_disabled)	//This is here to try to identify lag problems
 		to_chat(usr, "<span class='danger'>Speech is currently admin-disabled.</span>")
+		return
+	if(open_say_panel(TGUI_SAY_CHANNEL_WHISPER))
 		return
 
 	// whisper() уходит в say(), который санитизит сам — отдаём сырой текст

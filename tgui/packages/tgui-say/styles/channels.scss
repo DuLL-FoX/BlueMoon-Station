@@ -24,6 +24,7 @@ $channels: (
   looc: #6699cc,
   ooc: #cca300,
   aooc: #b8002e,
+  pray: #b18cd9,
 );
 
 @each $name, $color in $channels {

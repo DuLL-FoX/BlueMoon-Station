@@ -6,7 +6,7 @@
 /// администрацией, и показ индикатора печати.
 /datum/tgui_say/proc/is_ic_channel(channel)
 	switch(channel)
-		if(TGUI_SAY_CHANNEL_LOOC, TGUI_SAY_CHANNEL_OOC, TGUI_SAY_CHANNEL_AOOC)
+		if(TGUI_SAY_CHANNEL_LOOC, TGUI_SAY_CHANNEL_OOC, TGUI_SAY_CHANNEL_AOOC, TGUI_SAY_CHANNEL_PRAY)
 			return FALSE
 	return TRUE
 
@@ -35,17 +35,30 @@
 		if(TGUI_SAY_CHANNEL_ME)
 			speaker.emote("me", 1, entry, TRUE)
 			return TRUE
+		// Скрытые эмоции зовём ровно так же, как их вербы: тип эмоции и
+		// признак намеренности у них не выставляются, и подменять их нельзя —
+		// от них зависят проверки внутри самих эмоций.
 		if(TGUI_SAY_CHANNEL_SUBTLE)
-			speaker.emote("subtle", 1, entry, TRUE)
+			speaker.emote("subtle", message = entry)
 			return TRUE
 		if(TGUI_SAY_CHANNEL_SUBTLER)
-			speaker.emote("subtler", 1, entry, TRUE)
+			speaker.emote("subtler", message = entry)
 			return TRUE
 		if(TGUI_SAY_CHANNEL_SUBTLER_TABLE)
-			speaker.emote("subtler_table", 1, entry, TRUE)
+			speaker.emote("subtler_table", message = entry)
 			return TRUE
 		if(TGUI_SAY_CHANNEL_SUBTLER_TARGET)
-			speaker.emote("subtler_target", 1, list("text" = entry), TRUE)
+			// Цель эмоции спрашивается уже после текста, самой эмоцией.
+			speaker.emote("subtler_target", message = list("text" = entry))
+			return TRUE
+		if(TGUI_SAY_CHANNEL_NARRATE)
+			speaker.emote("narrate", message = entry)
+			return TRUE
+		if(TGUI_SAY_CHANNEL_NARRATE_SUBTLER)
+			speaker.emote("narrate_subtler", message = entry)
+			return TRUE
+		if(TGUI_SAY_CHANNEL_PRAY)
+			speaker.pray_message(entry)
 			return TRUE
 		if(TGUI_SAY_CHANNEL_LOOC)
 			if(!client)

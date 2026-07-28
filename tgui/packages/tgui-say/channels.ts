@@ -20,9 +20,12 @@ export type Channel =
   | 'Subtler'
   | 'SubtlerTable'
   | 'SubtlerTarget'
+  | 'Narrate'
+  | 'NarrateSubtler'
   | 'LOOC'
   | 'OOC'
-  | 'AOOC';
+  | 'AOOC'
+  | 'Pray';
 
 type ChannelMeta = {
   /** Подпись на плашке слева. */
@@ -44,9 +47,12 @@ export const CHANNEL_META: Record<Channel, ChannelMeta> = {
   Subtler: { label: 'Subtler', theme: 'emote', hint: 'без духов', visible: true },
   SubtlerTable: { label: 'Subtler', theme: 'emote', hint: 'через стол', visible: true },
   SubtlerTarget: { label: 'Subtler', theme: 'emote', hint: 'для цели', visible: true },
+  Narrate: { label: 'Нарратив', theme: 'emote', hint: 'без имени', visible: true },
+  NarrateSubtler: { label: 'Нарратив', theme: 'emote', hint: 'рядом, без духов', visible: true },
   LOOC: { label: 'LOOC', theme: 'looc', visible: false },
   OOC: { label: 'OOC', theme: 'ooc', visible: false },
   AOOC: { label: 'AOOC', theme: 'aooc', visible: false },
+  Pray: { label: 'Молитва', theme: 'pray', hint: 'админам', visible: false },
 };
 
 /**

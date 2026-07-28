@@ -76,9 +76,11 @@
 	if(GLOB.say_disabled)
 		to_chat(usr, "<span class='danger'>Speech is currently admin-disabled.</span>")
 		return
+	if(open_say_panel(TGUI_SAY_CHANNEL_NARRATE))
+		return
 	display_typing_indicator(isMe = TRUE)
 	var/message = ""
-	if(client?.prefs.tgui_input_verbs)
+	if(client?.prefs.say_input_mode == SAY_INPUT_MODE_MODAL)
 		message = tgui_input_text(src, "Опишите действие или событие. Альтернатива эмоции, когда ваша эмоция не должна начинаться с вашего имени.", "Narrate (Player)", null, MAX_MESSAGE_LEN, TRUE, TRUE)
 	else
 		message = stripped_multiline_input_or_reflect(src, "Опишите действие или событие. Альтернатива эмоции, когда ваша эмоция не должна начинаться с вашего имени.", "Narrate (Player)")
@@ -99,10 +101,12 @@
 		// Warn user and return
 		to_chat(usr, span_danger("Speech is currently admin-disabled."))
 		return
+	if(open_say_panel(TGUI_SAY_CHANNEL_SUBTLE))
+		return
 	display_typing_indicator(isMe = TRUE)
 
 	var/message = ""
-	if(client?.prefs.tgui_input_verbs)
+	if(client?.prefs.say_input_mode == SAY_INPUT_MODE_MODAL)
 		message = tgui_input_text(src, "Введите сообщение, которое увидят персонажи в упор к вам и призраки.", "Subtle (Indicator)", null, MAX_MESSAGE_LEN, TRUE, TRUE)
 	else
 		message = stripped_multiline_input_or_reflect(src, "Введите сообщение, которое увидят персонажи в упор к вам и призраки.", "Subtle (Indicator)")

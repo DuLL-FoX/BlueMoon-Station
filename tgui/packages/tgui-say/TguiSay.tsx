@@ -434,7 +434,13 @@ export const TguiSay = () => {
   const current = activeRow(state);
   // Подсказки показываются, пока строка пуста: открыл панель — увидел свои
   // каналы, начал печатать — они ушли, чтобы не занимать полкарты.
-  const hintsShown = hintsPinned || (!!current && !current.value.length);
+  //
+  // И только в речи: префиксы разбираются на её пути, а в эмоции или OOC
+  // ведут себя как обычный текст — подсказывать там нечего.
+  const hintsShown
+    = !!current
+    && isSayChannel(current.channel)
+    && (hintsPinned || !current.value.length);
 
   const insertToken = (token: string) => {
     if (!current) {

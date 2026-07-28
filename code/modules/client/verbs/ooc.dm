@@ -35,6 +35,9 @@ GLOBAL_VAR_INIT(normal_ooc_colour, "#002eb8")
 		return
 	if(QDELETED(src))
 		return
+	// Проверки выше отработали, набирать текст можно — уводим в панель ввода.
+	if(mob.open_say_panel(TGUI_SAY_CHANNEL_OOC))
+		return
 
 	var/message = ""
 	if(prefs.say_input_mode == SAY_INPUT_MODE_MODAL)

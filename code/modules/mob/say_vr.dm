@@ -38,7 +38,7 @@
 		return FALSE
 	else if(!params)
 		var/subtle_emote = ""
-		if(user.client?.prefs.tgui_input_verbs)
+		if(user.client?.prefs.say_input_mode == SAY_INPUT_MODE_MODAL)
 			subtle_emote = tgui_input_text(user, "Введите сообщение, которое увидят персонажи в упор к вам и призраки.", "Subtle", null, MAX_MESSAGE_LEN, TRUE, TRUE)
 		else
 			subtle_emote = stripped_multiline_input_or_reflect(user, "Введите сообщение, которое увидят персонажи в упор к вам и призраки.", "Subtle")
@@ -91,7 +91,7 @@
 		return FALSE
 	else if(!params)
 		var/subtle_emote = ""
-		if(user.client?.prefs.tgui_input_verbs)
+		if(user.client?.prefs.say_input_mode == SAY_INPUT_MODE_MODAL)
 			subtle_emote = tgui_input_text(user, "Введите сообщение, которое увидят персонажи в упор к вам. Призраки его не увидят.", "Введите скрытое сообщение", null, MAX_MESSAGE_LEN, TRUE, TRUE)
 		else
 			subtle_emote = stripped_multiline_input_or_reflect(user, "Введите сообщение, которое увидят персонажи в упор к вам. Призраки его не увидят.", "Введите скрытое сообщение")
@@ -167,7 +167,7 @@
 		return FALSE
 	else if(!params)
 		var/subtle_emote = ""
-		if(user.client?.prefs.tgui_input_verbs)
+		if(user.client?.prefs.say_input_mode == SAY_INPUT_MODE_MODAL)
 			subtle_emote = tgui_input_text(user, "Choose an emote to display.", "Subtler Around Table", null, MAX_MESSAGE_LEN, TRUE, TRUE)
 		else
 			subtle_emote = stripped_multiline_input_or_reflect(user, "Choose an emote to display.", "Subtler Around Table")
@@ -282,7 +282,7 @@
 			user.display_typing_indicator(isMe = TRUE)
 		// Вводим сообщение
 		var/subtle_emote = ""
-		if(user.client?.prefs.tgui_input_verbs)
+		if(user.client?.prefs.say_input_mode == SAY_INPUT_MODE_MODAL)
 			subtle_emote = tgui_input_text(user, "Введите сообщение, которое увидит, ТОЛЬКО [target_name].", "Введите скрытое сообщение", null, MAX_MESSAGE_LEN, TRUE, TRUE)
 		else
 			subtle_emote = stripped_multiline_input_or_reflect(user, "Введите сообщение, которое увидит, ТОЛЬКО [target_name].", "Введите скрытое сообщение")
@@ -317,6 +317,8 @@
 	if(GLOB.say_disabled)	//This is here to try to identify lag problems
 		to_chat(usr, "<span class='danger'>Speech is currently admin-disabled.</span>")
 		return
+	if(open_say_panel(TGUI_SAY_CHANNEL_SUBTLE))
+		return
 	usr.emote("subtle")
 
 ///////////////// VERB CODE 2
@@ -326,6 +328,8 @@
 	if(GLOB.say_disabled)	//This is here to try to identify lag problems
 		to_chat(usr, "<span class='danger'>Speech is currently admin-disabled.</span>")
 		return
+	if(open_say_panel(TGUI_SAY_CHANNEL_SUBTLER))
+		return
 	usr.emote("subtler")
 
 ///////////////// VERB CODE 3
@@ -334,6 +338,8 @@
 	set category = "Say"
 	if(GLOB.say_disabled)	//This is dumb but it's here because heehoo copypaste, who the FUCK uses this to identify lag?
 		to_chat(usr, "<span class='danger'>Speech is currently admin-disabled.</span>")
+		return
+	if(open_say_panel(TGUI_SAY_CHANNEL_SUBTLER_TABLE))
 		return
 	usr.emote("subtler_table")
 
@@ -345,6 +351,8 @@
 	if(GLOB.say_disabled)	//This is dumb but it's here because heehoo copypaste, who the FUCK uses this to identify lag?
 		to_chat(usr, span_danger("Speech is currently admin-disabled."))
 		return
+	if(open_say_panel(TGUI_SAY_CHANNEL_SUBTLER_TARGET))
+		return
 
 	usr.emote("subtler_target", message = list("indicator" = FALSE))
 
@@ -355,6 +363,9 @@
 	if(GLOB.say_disabled)
 		// Warn user and return
 		to_chat(usr, span_danger("Speech is currently admin-disabled."))
+		return
+	// Панель ввода сама ведёт индикатор печати.
+	if(open_say_panel(TGUI_SAY_CHANNEL_SUBTLER_TARGET))
 		return
 
 	usr.emote("subtler_target", message = list("indicator" = TRUE))
