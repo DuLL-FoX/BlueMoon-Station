@@ -153,4 +153,12 @@ interface Window {
    * replaced by the bundle once it boots.
    */
   update: (message: string) => void;
+
+  /**
+   * Boot markers read by the watchdog in tgui.html. A bundle that never sets
+   * them gets a debug overlay dropped on top of it after eight seconds.
+   */
+  __tguiBundleLoaded__: boolean;
+  __tguiAppBooted__: boolean;
+  __pushTguiDebugEvent__?: (kind: string, payload?: unknown) => void;
 }

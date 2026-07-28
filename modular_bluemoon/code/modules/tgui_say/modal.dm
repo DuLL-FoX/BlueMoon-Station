@@ -5,6 +5,13 @@ GLOBAL_LIST_INIT(say_input_modes, list(
 	SAY_INPUT_MODE_MODAL,
 ))
 
+/// Места, куда игрок может поставить панель ввода.
+GLOBAL_LIST_INIT(say_input_anchors, list(
+	SAY_INPUT_ANCHOR_HUD,
+	SAY_INPUT_ANCHOR_BOTTOM,
+	SAY_INPUT_ANCHOR_TOP,
+))
+
 /// Панель ввода сообщений, привязанная к клиенту.
 /client/var/datum/tgui_say/tgui_say
 
@@ -84,11 +91,106 @@ GLOBAL_LIST_INIT(say_input_modes, list(
 		// речи. Пересборка макросов сама выберет нужные команды.
 		if(client.prefs?.say_input_mode == SAY_INPUT_MODE_WINDOW)
 			client.ensure_keys_set()
-	window?.send_message("props", list(
+	window?.send_message("props", get_props())
+	return TRUE
+
+/**
+ * Параметры панели.
+ *
+ * Уезжают целиком и при загрузке, и при каждом открытии: между открытиями
+ * игрок мог снять гарнитуру, сменить настройку или пересесть за другого моба.
+ */
+/datum/tgui_say/proc/get_props()
+	return list(
 		"maxLength" = max_length,
 		"emotes" = get_emote_keys(),
-	))
-	return TRUE
+		"anchor" = client?.prefs?.say_input_anchor || SAY_INPUT_ANCHOR_HUD,
+		"viewTiles" = get_view_tiles(),
+		"hudTiles" = TGUI_SAY_HUD_TILES,
+		"radios" = get_radio_hints(),
+		"languages" = get_language_hints(),
+	)
+
+/**
+ * Высота обзора в клетках.
+ *
+ * По ней фронт считает, сколько пикселей карты занимает клетка, а значит и
+ * панель действий, над которой садится ввод.
+ */
+/datum/tgui_say/proc/get_view_tiles()
+	var/list/size = getviewsize(client?.view || world.view)
+	return size[2]
+
+/// Рации, до которых говорящий реально может дотянуться.
+/datum/tgui_say/proc/collect_radios()
+	var/list/radios = list()
+	var/mob/living/speaker = get_speaker()
+	if(!isliving(speaker))
+		return radios
+	var/obj/item/implant/radio/implant = locate() in speaker.implants
+	if(implant?.radio?.on)
+		radios += implant.radio
+	if(ishuman(speaker))
+		var/mob/living/carbon/human/human_speaker = speaker
+		if(istype(human_speaker.ears, /obj/item/radio))
+			radios += human_speaker.ears
+		if(istype(human_speaker.ears_extra, /obj/item/radio))
+			radios += human_speaker.ears_extra
+	else if(issilicon(speaker))
+		var/mob/living/silicon/silicon_speaker = speaker
+		if(silicon_speaker.radio)
+			radios += silicon_speaker.radio
+	return radios
+
+/**
+ * Подсказки по рациям: префикс и название канала.
+ *
+ * Список строится по тем же данным, что и разбор речи, поэтому в подсказках не
+ * может оказаться канала, в который говорить нельзя.
+ */
+/datum/tgui_say/proc/get_radio_hints()
+	var/list/hints = list()
+	var/list/seen = list()
+	for(var/obj/item/radio/radio as anything in collect_radios())
+		if(!radio.on)
+			continue
+		if(!seen[RADIO_KEY_COMMON])
+			seen[RADIO_KEY_COMMON] = TRUE
+			hints += list(list("token" = RADIO_KEY_COMMON, "name" = "Общий"))
+		var/first_channel = TRUE
+		for(var/channel_name in radio.channels)
+			if(!radio.channels[channel_name])
+				continue
+			// Первый канал гарнитуры — это и есть ":h", "свой отдел".
+			if(first_channel)
+				first_channel = FALSE
+				if(!seen[MODE_TOKEN_DEPARTMENT])
+					seen[MODE_TOKEN_DEPARTMENT] = TRUE
+					hints += list(list("token" = MODE_TOKEN_DEPARTMENT, "name" = "Отдел"))
+			var/token = GLOB.channel_tokens[channel_name]
+			if(!token || seen[token])
+				continue
+			seen[token] = TRUE
+			hints += list(list("token" = token, "name" = channel_name))
+	return hints
+
+/// Подсказки по языкам: префикс запятой и название.
+/datum/tgui_say/proc/get_language_hints()
+	var/list/hints = list()
+	var/mob/living/speaker = get_speaker()
+	if(!isliving(speaker))
+		return hints
+	var/datum/language_holder/holder = speaker.get_language_holder()
+	if(!holder)
+		return hints
+	for(var/datum/language/language as anything in holder.spoken_languages)
+		if(!holder.can_speak_language(language))
+			continue
+		var/key = initial(language.key)
+		if(!key)
+			continue
+		hints += list(list("token" = ",[key]", "name" = initial(language.name)))
+	return hints
 
 /**
  * Ключи эмоций для подсказок в панели.
@@ -116,6 +218,10 @@ GLOBAL_LIST_INIT(say_input_modes, list(
 	current_channel = payload?["channel"] || TGUI_SAY_CHANNEL_SAY
 	window_open = TRUE
 	client?.ForceAllKeysUp()
+	// Гарнитуру могли снять, а настройку — сменить: подсказки и место панели
+	// обновляем на каждом открытии, панель этого не ждёт.
+	if(client)
+		window?.send_message("props", get_props())
 	return TRUE
 
 /// Панель закрылась: игрок отправил сообщение или свернул её.

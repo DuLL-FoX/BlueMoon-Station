@@ -8,7 +8,14 @@
  * угодно, только теперь всё это живёт в одном месте и не теряется за окнами.
  */
 
-import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import { flattenNewlines, isCaretOnFirstLine, isCaretOnLastLine } from './caret';
 import {
@@ -18,7 +25,19 @@ import {
   isVisibleChannel,
 } from './channels';
 import { ChatHistory } from './ChatHistory';
-import { hidePanel, refreshMapSize, resizePanel, showPanel } from './helpers';
+import type { Offset } from './geometry';
+import {
+  commitOffset,
+  currentOffset,
+  dragPanelTo,
+  hidePanel,
+  refreshMapSize,
+  resetOffset,
+  resizePanel,
+  setPlacement,
+  showPanel,
+} from './helpers';
+import { type Hint, Hints } from './Hints';
 import { MessageRow } from './MessageRow';
 import { dispatchMessage, sendMessage, subscribeTo } from './messages';
 import { getPrefix, stripPrefix } from './prefixes';
@@ -41,6 +60,11 @@ type OpenPayload = {
 type PropsPayload = {
   maxLength: number;
   emotes: string[];
+  anchor: string;
+  viewTiles: number;
+  hudTiles: number;
+  radios: Hint[];
+  languages: Hint[];
 };
 
 /** Обработчики, которые подписки зовут через ref, а не через замыкание. */
@@ -54,6 +78,11 @@ export const TguiSay = () => {
   const [visible, setVisible] = useState(false);
   const [maxLength, setMaxLength] = useState(4096);
   const [emotes, setEmotes] = useState<string[]>([]);
+  const [radios, setRadios] = useState<Hint[]>([]);
+  const [languages, setLanguages] = useState<Hint[]>([]);
+  // Подсказки закреплены игроком. Иначе они видны, пока строка пуста, и
+  // убираются, как только он начал печатать.
+  const [hintsPinned, setHintsPinned] = useState(false);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const inputs = useRef(new Map<number, HTMLTextAreaElement>());
@@ -70,6 +99,40 @@ export const TguiSay = () => {
     open: () => {},
     hide: () => {},
   });
+
+  const panelHeight = () => rootRef.current?.getBoundingClientRect().height || 0;
+
+  /**
+   * Перетаскивание панели.
+   *
+   * Панель едет за курсором, поэтому курсор остаётся над ней и браузерный
+   * элемент продолжает получать события мыши: отпусти он их хоть на кадр —
+   * перетаскивание оборвалось бы на середине.
+   */
+  const startDrag = (event: ReactMouseEvent) => {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    const startX = event.screenX;
+    const startY = event.screenY;
+    const base: Offset = currentOffset();
+    const move = (moveEvent: MouseEvent) => {
+      dragPanelTo(
+        moveEvent.screenX - startX,
+        moveEvent.screenY - startY,
+        base,
+        panelHeight(),
+      );
+    };
+    const end = () => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', end);
+      commitOffset();
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', end);
+  };
 
   const historyFor = (channel: Channel): ChatHistory => {
     let history = histories.current.get(channel);
@@ -159,6 +222,12 @@ export const TguiSay = () => {
   };
 
   const handleInput = (row: Row, typed: string) => {
+    // Как только человек начал править вытащенное из истории, текст становится
+    // его собственным: дальше стрелки его уже не тронут.
+    const history = historyFor(row.channel);
+    if (!history.isAtLatest()) {
+      history.reset();
+    }
     // Индикатор печати зажигается по набору, а не по открытию панели: иначе
     // пузырь висит над теми, кто открыл её и передумал.
     if (isVisibleChannel(row.channel) && shouldSendTyping(Date.now())) {
@@ -231,6 +300,12 @@ export const TguiSay = () => {
           step(direction);
           return;
         }
+        // Набранное дороже истории. Пока в поле лежит свой текст, стрелка не
+        // имеет права его подменить: случайное нажатие стирало реплику,
+        // которую человек писал минуту.
+        if (row.value.length && historyFor(row.channel).isAtLatest()) {
+          return;
+        }
         const caret = {
           value: element.value,
           selectionStart: element.selectionStart,
@@ -265,6 +340,13 @@ export const TguiSay = () => {
       }
       if (payload?.emotes) {
         setEmotes(payload.emotes);
+      }
+      setRadios(payload?.radios || []);
+      setLanguages(payload?.languages || []);
+      setPlacement(payload?.anchor, payload?.viewTiles, payload?.hudTiles);
+      // Настройку могли сменить прямо сейчас, глядя на панель.
+      if (rootRef.current) {
+        resizePanel(rootRef.current.getBoundingClientRect().height);
       }
     });
     subscribeTo('open', (payload: OpenPayload) => {
@@ -349,8 +431,24 @@ export const TguiSay = () => {
     sendMessage('channel', { channel: row.channel });
   });
 
+  const current = activeRow(state);
+  // Подсказки показываются, пока строка пуста: открыл панель — увидел свои
+  // каналы, начал печатать — они ушли, чтобы не занимать полкарты.
+  const hintsShown = hintsPinned || (!!current && !current.value.length);
+
+  const insertToken = (token: string) => {
+    if (!current) {
+      return;
+    }
+    setValue(current.id, token + current.value);
+    focusLater(current.id);
+  };
+
   return (
     <div className="Say" ref={rootRef}>
+      {hintsShown && (
+        <Hints languages={languages} onPick={insertToken} radios={radios} />
+      )}
       <div className="Say__rows">
         {state.rows.map(row => (
           <MessageRow
@@ -379,12 +477,25 @@ export const TguiSay = () => {
           />
         ))}
       </div>
-      <div className="Say__footer">
+      <div
+        className="Say__footer"
+        onDoubleClick={() => resetOffset(panelHeight())}
+        onMouseDown={startDrag}
+        title="Перетащи, чтобы передвинуть панель. Двойной щелчок вернёт её на место">
+        <span className="Say__grip">⠿</span>
         <span><b>Enter</b> отправить</span>
         <span><b>Shift+Enter</b> перенос</span>
         <span><b>Tab</b> канал</span>
         {state.rows.length > 1 && <span><b>Ctrl+↑↓</b> между строками</span>}
         <span><b>Esc</b> свернуть</span>
+        <button
+          className={`Say__help${hintsPinned ? ' Say__help--on' : ''}`}
+          onClick={() => setHintsPinned(pinned => !pinned)}
+          onMouseDown={event => event.stopPropagation()}
+          title="Подсказки по префиксам"
+          type="button">
+          ?
+        </button>
       </div>
     </div>
   );

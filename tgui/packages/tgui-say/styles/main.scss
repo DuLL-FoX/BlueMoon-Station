@@ -131,6 +131,31 @@ body {
   font-style: italic;
 }
 
+// Системная полоса прокрутки со стрелками на панели в 30 пикселей высотой
+// выглядит как поломка. WebView2 — Chromium, псевдоэлементы работают.
+.Say__input::-webkit-scrollbar {
+  width: 6px;
+}
+
+.Say__input::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+.Say__input::-webkit-scrollbar-thumb {
+  background-color: var(--channel-line);
+  border-radius: 3px;
+}
+
+.Say__input::-webkit-scrollbar-thumb:hover {
+  background-color: var(--channel);
+}
+
+.Say__input::-webkit-scrollbar-button {
+  display: none;
+  height: 0;
+  width: 0;
+}
+
 // Неактивная строка сжата до одной строки и не показывает полосу прокрутки:
 // стопка из четырёх сообщений иначе занимает половину экрана.
 .Say__row:not(.Say__row--active) .Say__input {
@@ -197,18 +222,79 @@ body {
   white-space: nowrap;
 }
 
+// Подсказки по префиксам. Набор каналов у каждого свой, а модификаторы речи
+// нигде в игре не перечислены — без этой панели о них узнают из вики.
+.Say__hintPanel {
+  border-bottom: 1px solid #1c2129;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 1px 2px 4px;
+}
+
+.Say__hintGroup {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.Say__hintLabel {
+  color: #4d5563;
+  flex: 0 0 auto;
+  font-size: 10px;
+  min-width: 42px;
+}
+
+.Say__hintNote {
+  color: #6b7385;
+  font-size: 10px;
+}
+
+.Say__hintNote b {
+  color: #9ab4d4;
+}
+
 // Подсказки по клавишам: панель завела свои сочетания, и без строки под полем
-// о них не догадаться.
+// о них не догадаться. Эта же строка — ручка перетаскивания.
 .Say__footer {
+  align-items: center;
   color: #454d5c;
+  cursor: move;
   display: flex;
   flex-wrap: wrap;
   font-size: 10px;
   gap: 10px;
-  padding: 0 2px;
+  padding: 1px 2px 0;
+  user-select: none;
 }
 
 .Say__footer b {
   color: #6f7a8f;
   font-weight: 700;
+}
+
+.Say__grip {
+  color: #39404e;
+  font-size: 11px;
+  letter-spacing: -1px;
+}
+
+.Say__help {
+  background-color: transparent;
+  border: 1px solid #333b48;
+  border-radius: 3px;
+  color: #6f7a8f;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1;
+  margin-left: auto;
+  padding: 1px 5px;
+}
+
+.Say__help:hover,
+.Say__help--on {
+  border-color: #4f5b6e;
+  color: #9ab4d4;
 }

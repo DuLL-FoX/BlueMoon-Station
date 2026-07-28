@@ -27,6 +27,7 @@ type ChatData = {
   tgui_input_mode: boolean;
   tgui_input_verbs: boolean;
   say_input_mode: string;
+  say_input_anchor: string;
   max_chat_length: number;
   auto_capitalize_enabled: boolean;
 };
@@ -34,15 +35,28 @@ type ChatData = {
 // Значения должны совпадать с SAY_INPUT_MODE_* в
 // code/__BLUEMOONCODE/_DEFINES/tgui_say.dm.
 const SAY_INPUT_MODES: Record<string, string> = {
-  'Отдельное окно': 'window',
+  'Панель над картой': 'window',
   'Обычный ввод BYOND': 'native',
   'Старое окно TGUI': 'modal',
 };
 
 const SAY_INPUT_MODE_LABELS: Record<string, string> = {
-  window: 'Отдельное окно',
+  window: 'Панель над картой',
   native: 'Обычный ввод BYOND',
   modal: 'Старое окно TGUI',
+};
+
+// Значения должны совпадать с SAY_INPUT_ANCHOR_* в тех же дефайнах.
+const SAY_INPUT_ANCHORS: Record<string, string> = {
+  'Над панелью действий': 'hud',
+  'У нижнего края': 'bottom',
+  'Сверху карты': 'top',
+};
+
+const SAY_INPUT_ANCHOR_LABELS: Record<string, string> = {
+  hud: 'Над панелью действий',
+  bottom: 'У нижнего края',
+  top: 'Сверху карты',
 };
 
 // React's onChange fires continuously while dragging inside the color
@@ -300,20 +314,43 @@ export const ChatSection = (props) => {
               <Stack.Item grow basis={0}>
                 <div className="GamePreferences__label">Ввод сообщений (SAY, ME, рация...)</div>
                 <div className="GamePreferences__hint">
-                  Отдельное окно: загружено заранее, помнит историю по стрелкам,
-                  переключает каналы по Tab и хранит черновик на каждый канал.
-                  Обычный ввод BYOND: диалог рисует сам клиент, можно держать
-                  несколько открытых сразу. Старое окно TGUI — прежнее поведение
+                  Панель над картой: загружена заранее, держит несколько
+                  сообщений сразу, помнит историю и подсказывает каналы рации.
+                  Обычный ввод BYOND: диалог рисует сам клиент. Старое окно
+                  TGUI — прежнее поведение
                 </div>
               </Stack.Item>
               <Stack.Item>
                 <Dropdown
                   width="160px"
                   options={Object.keys(SAY_INPUT_MODES)}
-                  selected={SAY_INPUT_MODE_LABELS[data.say_input_mode] ?? 'Отдельное окно'}
+                  selected={SAY_INPUT_MODE_LABELS[data.say_input_mode] ?? 'Панель над картой'}
                   onSelected={value => act('set_ui_pref', {
                     flag: 'say_input_mode',
                     value: SAY_INPUT_MODES[value],
+                  })}
+                />
+              </Stack.Item>
+            </Stack>
+          </Stack.Item>
+          <Stack.Item>
+            <Stack align="center" fill className="GamePreferences__row">
+              <Stack.Item grow basis={0}>
+                <div className="GamePreferences__label">Место панели ввода</div>
+                <div className="GamePreferences__hint">
+                  Панель можно ещё и таскать мышью за нижнюю строку с
+                  подсказками — место запоминается, двойной щелчок по ней
+                  возвращает панель на выбранное здесь
+                </div>
+              </Stack.Item>
+              <Stack.Item>
+                <Dropdown
+                  width="160px"
+                  options={Object.keys(SAY_INPUT_ANCHORS)}
+                  selected={SAY_INPUT_ANCHOR_LABELS[data.say_input_anchor] ?? 'Над панелью действий'}
+                  onSelected={value => act('set_ui_pref', {
+                    flag: 'say_input_anchor',
+                    value: SAY_INPUT_ANCHORS[value],
                   })}
                 />
               </Stack.Item>

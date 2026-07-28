@@ -18,6 +18,24 @@ import {
 
 export type Size = { x: number; y: number };
 export type Rect = { x: number; y: number; width: number; height: number };
+export type Offset = { x: number; y: number };
+
+/** Куда панель прижимается, пока игрок не сдвинул её сам. */
+export type Anchor = 'hud' | 'bottom' | 'top';
+
+export type Placement = {
+  anchor: Anchor;
+  /** Сколько пикселей снизу занимает панель действий игрока. */
+  hudReserve: number;
+  /** Сдвиг, который игрок задал перетаскиванием. */
+  offset: Offset;
+};
+
+const DEFAULT_PLACEMENT: Placement = {
+  anchor: 'hud',
+  hudReserve: 0,
+  offset: { x: 0, y: 0 },
+};
 
 /**
  * Разбирает то, что вернул winget.
@@ -46,19 +64,56 @@ export const parseSize = (raw: unknown): Size | null => {
   return { x: Number(match[1]), y: Number(match[2]) };
 };
 
-/** Прямоугольник панели: по центру карты, над статус-строкой. */
-export const panelRect = (map: Size, height: number): Rect => {
+/**
+ * Высота панели действий в пикселях.
+ *
+ * HUD игрока нарисован прямо на карте, поэтому его высота считается в клетках:
+ * пиксель клетки — это высота карты, поделённая на обзор.
+ */
+export const hudReserveFor = (map: Size, viewTiles: number, hudTiles: number): number => {
+  if (!(viewTiles > 0) || !(hudTiles > 0)) {
+    return 0;
+  }
+  return Math.round((map.y / viewTiles) * hudTiles);
+};
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, value));
+
+/** Прямоугольник панели: по центру карты, у выбранного края. */
+export const panelRect = (
+  map: Size,
+  height: number,
+  placement: Partial<Placement> = {},
+): Rect => {
+  const { anchor, hudReserve, offset } = { ...DEFAULT_PLACEMENT, ...placement };
   const width = Math.max(
     Math.min(PANEL_MIN_WIDTH, map.x),
     Math.min(map.x, PANEL_MAX_WIDTH),
   );
   const available = Math.max(1, map.y - STATUS_BAR_HEIGHT - PANEL_TOP_MARGIN);
-  const clamped = Math.max(1, Math.min(Math.round(height), available));
+  const clampedHeight = Math.max(1, Math.min(Math.round(height), available));
+
+  let y: number;
+  if (anchor === 'top') {
+    y = 0;
+  }
+  else if (anchor === 'bottom') {
+    y = map.y - STATUS_BAR_HEIGHT - clampedHeight;
+  }
+  else {
+    y = map.y - STATUS_BAR_HEIGHT - hudReserve - clampedHeight;
+  }
+
   return {
-    x: Math.max(0, Math.round((map.x - width) / 2)),
-    y: Math.max(0, map.y - STATUS_BAR_HEIGHT - clamped),
+    x: clamp(
+      Math.round((map.x - width) / 2 + offset.x),
+      0,
+      Math.max(0, map.x - width),
+    ),
+    y: clamp(Math.round(y + offset.y), 0, Math.max(0, map.y - clampedHeight)),
     width,
-    height: clamped,
+    height: clampedHeight,
   };
 };
 

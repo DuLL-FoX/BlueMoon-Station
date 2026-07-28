@@ -163,6 +163,7 @@
 	.["tgui_input_mode"] = tgui_input_mode
 	.["tgui_input_verbs"] = tgui_input_verbs
 	.["say_input_mode"] = say_input_mode
+	.["say_input_anchor"] = say_input_anchor
 	.["UI_style"] = UI_style
 	.["auto_capitalize_enabled"] = auto_capitalize_enabled
 	.["preferred_chaos_level"] = preferred_chaos_level
@@ -515,6 +516,13 @@
 						// Открытую панель игрок уже никак не закроет: её клавиши
 						// только что уехали в старый ввод.
 						user?.client?.tgui_say?.hide()
+				if("say_input_anchor")
+					say_input_anchor = sanitize_inlist(value, GLOB.say_input_anchors, initial(say_input_anchor))
+					// Панель переедет на новое место сразу, а не со следующего
+					// открытия: настройку крутят как раз глядя на неё.
+					var/datum/tgui_say/say_panel = user?.client?.tgui_say
+					if(say_panel?.window_ready)
+						say_panel.window?.send_message("props", say_panel.get_props())
 				if("UI_style")
 					UI_style = value
 					if(user?.hud_used)

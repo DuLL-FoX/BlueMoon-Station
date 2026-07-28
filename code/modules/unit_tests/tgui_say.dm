@@ -238,6 +238,33 @@
 
 	qdel(say_modal)
 
+/// Подсказки по рациям строятся по тем же данным, что и разбор речи: в них не
+/// может оказаться канала, в который говорить нельзя, и не может потеряться
+/// канал, который у игрока есть.
+/datum/unit_test/tgui_say_radio_hints
+
+/datum/unit_test/tgui_say_radio_hints/Run()
+	var/mob/living/carbon/human/speaker = allocate(/mob/living/carbon/human)
+	var/datum/tgui_say/unit_test_probe/say_modal = new(null, null)
+	say_modal.probe_mob = speaker
+
+	TEST_ASSERT_EQUAL(length(say_modal.get_radio_hints()), 0, "подсказки по рациям нашлись без самой рации")
+
+	var/obj/item/radio/headset/headset = allocate(/obj/item/radio/headset/headset_sec)
+	speaker.equip_to_slot_or_del(headset, ITEM_SLOT_EARS_LEFT)
+	TEST_ASSERT_EQUAL(speaker.ears, headset, "гарнитура не надета — проверять нечего")
+
+	var/list/tokens = list()
+	for(var/list/hint in say_modal.get_radio_hints())
+		tokens += hint["token"]
+
+	TEST_ASSERT((RADIO_KEY_COMMON in tokens), "в подсказках нет общего канала")
+	TEST_ASSERT((MODE_TOKEN_DEPARTMENT in tokens), "в подсказках нет канала своего отдела")
+	TEST_ASSERT((RADIO_TOKEN_SECURITY in tokens), "в подсказках нет канала гарнитуры СБ")
+	TEST_ASSERT(!(RADIO_TOKEN_SYNDICATE in tokens), "в подсказках оказался канал, которого у игрока нет")
+
+	qdel(say_modal)
+
 /// Открытие и закрытие обязаны вести состояние канала, иначе после закрытия
 /// сервер продолжит считать игрока печатающим.
 /datum/unit_test/tgui_say_open_close_state

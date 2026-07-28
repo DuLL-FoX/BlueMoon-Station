@@ -86,6 +86,8 @@ GLOBAL_LIST_EMPTY(preferences_datums)
 	/// Способ ввода сообщений в каналы связи: отдельное окно, обычный диалог
 	/// BYOND или старое окно TGUI. См. SAY_INPUT_MODE_*.
 	var/say_input_mode = SAY_INPUT_MODE_WINDOW
+	/// Где панель ввода стоит на карте. См. SAY_INPUT_ANCHOR_*.
+	var/say_input_anchor = SAY_INPUT_ANCHOR_HUD
 	var/tgui_large_buttons = TRUE
 	var/tgui_swapped_buttons = FALSE
 	var/tgui_panel_theme = "default"

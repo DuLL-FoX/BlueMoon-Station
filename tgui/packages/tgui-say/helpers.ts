@@ -8,16 +8,76 @@
  * между ними панель успевает оказаться в полуоткрытом состоянии.
  */
 
-import { panelRect, parseSize, type Rect, type Size, toByondPixels } from './geometry';
+import {
+  type Anchor,
+  hudReserveFor,
+  type Offset,
+  panelRect,
+  parseSize,
+  type Rect,
+  type Size,
+  toByondPixels,
+} from './geometry';
 
 const WINDOW_ID = 'tgui_say';
 const MAP_WINDOW_ID = 'mapwindow';
 const MAP_ID = 'map';
+const OFFSET_STORAGE_KEY = 'tgui-say-offset';
 
 let mapSize: Size | null = null;
 let lastRect: Rect | null = null;
+let anchor: Anchor = 'hud';
+let viewTiles = 0;
+let hudTiles = 0;
+let offset: Offset = { x: 0, y: 0 };
 
 const pixelRatio = () => window.devicePixelRatio || 1;
+
+const readOffset = (): Offset => {
+  try {
+    const raw = window.localStorage?.getItem(OFFSET_STORAGE_KEY);
+    if (!raw) {
+      return { x: 0, y: 0 };
+    }
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') {
+      return { x: parsed.x, y: parsed.y };
+    }
+  }
+  catch (err) {
+    // Сдвиг — не то, ради чего стоит ронять ввод.
+  }
+  return { x: 0, y: 0 };
+};
+
+offset = readOffset();
+
+const writeOffset = () => {
+  try {
+    window.localStorage?.setItem(OFFSET_STORAGE_KEY, JSON.stringify(offset));
+  }
+  catch (err) {
+    // Место панели переживёт раунд и без записи.
+  }
+};
+
+/** Настройки размещения приходят с сервера вместе с остальными props. */
+export const setPlacement = (
+  nextAnchor: unknown,
+  nextViewTiles: unknown,
+  nextHudTiles: unknown,
+) => {
+  if (nextAnchor === 'hud' || nextAnchor === 'bottom' || nextAnchor === 'top') {
+    anchor = nextAnchor;
+  }
+  if (typeof nextViewTiles === 'number' && nextViewTiles > 0) {
+    viewTiles = nextViewTiles;
+  }
+  if (typeof nextHudTiles === 'number' && nextHudTiles > 0) {
+    hudTiles = nextHudTiles;
+  }
+  lastRect = null;
+};
 
 const askSize = async (id: string): Promise<Size | null> => {
   try {
@@ -36,19 +96,22 @@ export const refreshMapSize = async (): Promise<Size | null> => {
   return mapSize;
 };
 
-/** Ширина, на которую панель может рассчитывать при вёрстке, в пикселях CSS. */
-export const panelWidthCss = (): number | null => {
+const rectFor = (heightCss: number): Rect | null => {
   if (!mapSize) {
     return null;
   }
-  return panelRect(mapSize, 1).width / pixelRatio();
+  return panelRect(mapSize, toByondPixels(heightCss, pixelRatio()), {
+    anchor,
+    hudReserve: hudReserveFor(mapSize, viewTiles, hudTiles),
+    offset,
+  });
 };
 
 const geometryProps = (heightCss: number): Record<string, string> => {
-  if (!mapSize) {
+  const rect = rectFor(heightCss);
+  if (!rect) {
     return {};
   }
-  const rect = panelRect(mapSize, toByondPixels(heightCss, pixelRatio()));
   if (
     lastRect
     && lastRect.x === rect.x
@@ -97,8 +160,37 @@ export const hidePanel = () => {
   });
 };
 
+/**
+ * Сдвигает панель на заданное расстояние от места по умолчанию.
+ *
+ * Сдвиг считается в пикселях экрана: панель едет за курсором, поэтому курсор
+ * остаётся над ней и браузер продолжает получать события мыши. Отпустил бы он
+ * их хоть на кадр — перетаскивание оборвалось бы на середине.
+ */
+export const dragPanelTo = (deltaCssX: number, deltaCssY: number, base: Offset, heightCss: number) => {
+  const ratio = pixelRatio();
+  offset = {
+    x: Math.round(base.x + deltaCssX * ratio),
+    y: Math.round(base.y + deltaCssY * ratio),
+  };
+  resizePanel(heightCss);
+};
+
+export const currentOffset = (): Offset => ({ ...offset });
+
+/** Запоминает место панели между раундами. */
+export const commitOffset = () => writeOffset();
+
+/** Возвращает панель на место, выбранное в настройках. */
+export const resetOffset = (heightCss: number) => {
+  offset = { x: 0, y: 0 };
+  writeOffset();
+  resizePanel(heightCss);
+};
+
 /** Сбрасывает запомненную геометрию. Нужно тестам. */
 export const resetGeometryCache = () => {
   mapSize = null;
   lastRect = null;
+  offset = { x: 0, y: 0 };
 };
