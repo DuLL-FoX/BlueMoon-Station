@@ -9,7 +9,8 @@
 /area/ruin/space/has_grav/MimicResrch)
 "aK" = (
 /obj/structure/lattice/catwalk,
-/turf/open/lava/plasma/ice_moon)
+/turf/open/lava/plasma/ice_moon,
+/area/ruin/space/has_grav/MimicResrch)
 "aX" = (
 /obj/machinery/light/broken/directional/north,
 /obj/effect/turf_decal/tile/purple/opposingcorners,
@@ -590,7 +591,8 @@
 /turf/closed/wall,
 /area/ruin/space/has_grav/MimicResrch)
 "xE" = (
-/turf/open/lava/plasma/ice_moon)
+/turf/open/lava/plasma/ice_moon,
+/area/ruin/space/has_grav/MimicResrch)
 "xQ" = (
 /obj/item/kirbyplants/random,
 /obj/effect/turf_decal/tile/purple/opposingcorners,
@@ -727,7 +729,8 @@
 /area/ruin/space/has_grav/MimicResrch)
 "Eo" = (
 /obj/structure/lattice,
-/turf/open/lava/plasma/ice_moon)
+/turf/open/lava/plasma/ice_moon,
+/area/ruin/space/has_grav/MimicResrch)
 "Et" = (
 /obj/effect/turf_decal/tile/yellow/half/contrasted{
 	dir = 1
@@ -949,7 +952,8 @@
 /turf/open/floor/plating,
 /area/ruin/space/has_grav/MimicResrch)
 "MJ" = (
-/turf/closed/wall/r_wall)
+/turf/closed/wall/r_wall,
+/area/ruin/space/has_grav/MimicResrch)
 "MN" = (
 /obj/machinery/light/floor,
 /turf/open/floor/plating/asteroid/airless,
@@ -963,7 +967,8 @@
 /turf/closed/mineral/snowmountain/cavern,
 /area/ruin/space/has_grav/MimicResrch)
 "ND" = (
-/turf/closed/wall)
+/turf/closed/wall,
+/area/ruin/space/has_grav/MimicResrch)
 "NP" = (
 /obj/effect/turf_decal/tile/yellow/anticorner/contrasted{
 	dir = 8
@@ -1183,7 +1188,8 @@
 /turf/open/floor/plating/asteroid/airless,
 /area/space)
 "Ya" = (
-/turf/closed/mineral/snowmountain/cavern)
+/turf/closed/mineral/snowmountain/cavern,
+/area/ruin/space/has_grav/MimicResrch)
 "Ys" = (
 /mob/living/simple_animal/hostile/mimic,
 /obj/item/stock_parts/matter_bin/darkmatter,
@@ -1218,7 +1224,8 @@
 /turf/open/floor/plating,
 /area/ruin/space/has_grav/MimicResrch)
 "ZJ" = (
-)
+/turf/open/floor/plating/asteroid/airless,
+/area/ruin/space/has_grav/MimicResrch)
 "ZM" = (
 /turf/closed/mineral/snowmountain/cavern,
 /area/space)

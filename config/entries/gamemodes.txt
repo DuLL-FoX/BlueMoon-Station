@@ -25,7 +25,6 @@ PROBABILITY CHANGELING 2
 PROBABILITY WIZARD 4
 PROBABILITY MONKEY 0
 PROBABILITY METEOR 0
-PROBABILITY EXTENDED 0
 PROBABILITY SECRET_EXTENDED 0
 PROBABILITY DEVIL 0
 PROBABILITY DEVIL_AGENTS 0
@@ -56,7 +55,6 @@ CONTINUOUS DYNAMIC
 ##Note: do not toggle continuous off for these modes, as they have no antagonists and would thus end immediately!
 
 CONTINUOUS METEOR
-CONTINUOUS EXTENDED
 CONTINUOUS SECRET_EXTENDED
 
 ## Toggles for allowing midround antagonists (aka mulligan antagonists).
