@@ -18,6 +18,59 @@
 /proc/ping_server_component(rtt_ms, tick_ms)
 	return max(rtt_ms - tick_ms, 0)
 
+/// Player-facing average follows the already filtered rolling median. Raw RTT keeps
+/// its own slow EMA for diagnostics, but must not pin the UI to a login outlier for a
+/// minute after the native channel recovered. Crossing UI_READY is a hard reset:
+/// every earlier sample was taken while DreamSeeker was still loading its interface.
+/proc/ping_display_average(previous_average, stable_ping, resource_became_ready = FALSE)
+	if(isnull(previous_average) || resource_became_ready)
+		return stable_ping
+	return MC_AVERAGE_FAST(previous_average, stable_ping)
+
+/// Pure sequence bookkeeping kept outside /client so regressions can exercise it.
+/proc/ping_sequence_observe(last_received, sequence)
+	var/list/result = list(
+		"valid" = FALSE,
+		"next_received" = last_received,
+		"skip" = 0,
+		"out_of_order" = FALSE,
+	)
+	if(!isnum(sequence))
+		return result
+	sequence = round(sequence)
+	if(sequence <= 0)
+		return result
+	result["valid"] = TRUE
+	if(sequence <= last_received)
+		result["out_of_order"] = TRUE
+		return result
+	result["skip"] = max(sequence - last_received - 1, 0)
+	result["next_received"] = sequence
+	return result
+
+/**
+ * Produces deliberately conservative suspects for a native ping spike.
+ * Multiple causes are retained: e.g. a slow Topic during resource delivery is
+ * more useful than forcing the event into one guessed bucket.
+ */
+/proc/ping_diagnostic_suspects(server_ms, resource_stage, skin_age_ds, topic_age_ds, browser_age_ds, sequence_skip = 0, out_of_order = FALSE)
+	var/list/suspects = list()
+	if(server_ms >= CLIENT_LATENCY_SERVER_STALL_WARN_MS)
+		suspects += "server_stall"
+	if(isnum(topic_age_ds) && topic_age_ds <= CLIENT_LATENCY_CORRELATION_WINDOW)
+		suspects += "slow_client_topic"
+	if(isnum(skin_age_ds) && skin_age_ds <= CLIENT_LATENCY_CORRELATION_WINDOW)
+		suspects += "skin_roundtrip"
+	if(isnum(browser_age_ds) && browser_age_ds <= CLIENT_LATENCY_CORRELATION_WINDOW)
+		suspects += "browser_event_loop_or_bridge"
+	if(resource_stage < CLIENT_RESOURCE_STAGE_UI_READY)
+		suspects += "resource_delivery"
+	if(sequence_skip || out_of_order)
+		suspects += "client_command_queue"
+	if(!length(suspects))
+		suspects += "client_or_transport_queue"
+	return suspects
+
 /// Pushes a sample into a FIFO window while incrementally maintaining its sorted mirror.
 /// Returns the median of the window. Replaces a full copy+TimSort per sample.
 /proc/rtt_window_push(list/window, list/sorted, value, max_size)
@@ -62,15 +115,76 @@
 		ping_rtt_sorted = list()
 	return rtt_window_push(ping_rtt_window, ping_rtt_sorted, raw_rtt_ping, PING_RTT_WINDOW_SIZE)
 
-/client/verb/update_ping(tickstamp as num, sent_realtime as null|num)
+/// Called only for skin IPC which already exceeded the slow-work threshold.
+/client/proc/record_skin_latency(kind, detail, cost_ms, started_world)
+	last_skin_latency_at = world.time
+	last_skin_latency_kind = kind
+	last_skin_latency_ms = cost_ms
+	last_skin_latency_detail = detail
+	log_client_latency("skin_roundtrip", src, list(
+		"kind" = kind,
+		"detail" = detail,
+		"latency_ms" = cost_ms,
+		"started_world_time" = started_world,
+		"world_elapsed_ds" = isnull(started_world) ? null : max(world.time - started_world, 0),
+	))
+
+/// Mirrors record_slow_topic into the latency timeline for cross-event correlation.
+/client/proc/record_topic_latency(context, href_preview, cost_ms)
+	last_slow_topic_at = world.time
+	last_slow_topic_context = context
+	last_slow_topic_ms = cost_ms
+	log_client_latency("slow_client_topic", src, list(
+		"context" = context,
+		"href" = href_preview,
+		"latency_ms" = cost_ms,
+	))
+
+/**
+ * Accepts independent latency reports from statbrowser and tgui-panel.
+ * Browser data is untrusted, so sources, bounds and per-source rate are checked.
+ */
+/client/proc/record_browser_latency(source, latency_ms, hidden, focused)
+	if(!(source in list("statbrowser_event_loop", "tgui_bridge")))
+		return FALSE
+	if(!isnum(latency_ms) || latency_ms < CLIENT_LATENCY_BROWSER_WARN_MS || latency_ms > 300000)
+		return FALSE
+	var/last_report_at = browser_latency_report_times[source]
+	if(!isnull(last_report_at) && world.time - last_report_at < CLIENT_LATENCY_BROWSER_REPORT_COOLDOWN)
+		return FALSE
+	browser_latency_report_times[source] = world.time
+
+	latency_ms = round(latency_ms, 0.1)
+	last_browser_latency_at = world.time
+	last_browser_latency_source = source
+	last_browser_latency_ms = latency_ms
+	last_browser_latency_hidden = !!hidden
+	last_browser_latency_focused = !!focused
+	SStime_track?.record_browser_latency(latency_ms)
+	log_client_latency("browser_latency", src, list(
+		"source" = source,
+		"latency_ms" = latency_ms,
+		"document_hidden" = !!hidden,
+		"document_focused" = !!focused,
+	))
+	return TRUE
+
+/client/verb/client_latency_report(source as text, latency_ms as num, hidden as num, focused as num)
+	set instant = TRUE
+	set hidden = TRUE
+	set name = ".client-latency-report"
+	record_browser_latency(source, latency_ms, hidden, focused)
+
+/client/verb/update_ping(tickstamp as num, sent_realtime as null|num, sequence as null|num)
 	set instant = TRUE
 	set name = ".update_ping"
 
 	// Helper procs are inlined here: this verb runs roughly once per 2 seconds per client.
 	var/tick_ping = (world.time + world.tick_lag * TICK_USAGE_REAL / 100 - tickstamp) * 100
+	var/reply_realtime = REALTIMEOFDAY
 	var/rtt_ping_raw
 	if(isnum(sent_realtime))
-		rtt_ping_raw = max((REALTIMEOFDAY - sent_realtime) * 100, 0)
+		rtt_ping_raw = max((reply_realtime - sent_realtime) * 100, 0)
 	else
 		// Backward compatibility with one-argument invocations.
 		rtt_ping_raw = tick_ping
@@ -80,6 +194,12 @@
 	// and its own step grows to 6.25ms once it climbs past 14:33 GMT. Fall back to the
 	// tick-based measurement, which sits at a far smaller magnitude and stays finer.
 	var/best_ping = rtt_ping_raw ? rtt_ping_raw : tick_ping
+
+	var/previous_rtt = lastping_rtt_raw
+	var/reply_gap_ms = lastping_realtimeofday ? max((reply_realtime - lastping_realtimeofday) * 100, 0) : null
+	var/list/sequence_result = ping_sequence_observe(ping_sequence_received, sequence)
+	if(sequence_result["valid"])
+		ping_sequence_received = sequence_result["next_received"]
 
 	var/rtt_ping = stabilize_rtt_ping(best_ping)
 	var/server_ping = ping_server_component(best_ping, tick_ping)
@@ -95,15 +215,19 @@
 	lastping_rtt_raw = best_ping
 	lastping_server = server_ping
 	lastping = rtt_ping
+	lastping_realtimeofday = reply_realtime
 	// Отметка свежести: у подвисшего клиента значения остаются на месте навсегда, и сводка
 	// по миру (SStime_track) залипала на его максимуме до конца раунда.
 	lastping_at = world.time
 	ping_updated = TRUE
+	// Ответ на пинг доказывает, что скин round-trip'ится нормально. Только вместе с
+	// поднятым статбраузером - иначе первый же пинг объявил бы интерфейс готовым у
+	// клиента, у которого он так и не загрузился.
+	var/resource_became_ready = statbrowser_ready && resource_stage < CLIENT_RESOURCE_STAGE_UI_READY
+	if(statbrowser_ready)
+		advance_resource_stage(CLIENT_RESOURCE_STAGE_UI_READY)
 
-	if(isnull(avgping_rtt))
-		avgping_rtt = best_ping
-	else
-		avgping_rtt = MC_AVG_FAST_UP_SLOW_DOWN(avgping_rtt, best_ping)
+	avgping_rtt = ping_display_average(avgping_rtt, rtt_ping, resource_became_ready)
 
 	if(isnull(avgping_rtt_raw))
 		avgping_rtt_raw = best_ping
@@ -117,6 +241,36 @@
 
 	// Keep the legacy fields as the player-facing RTT value.
 	avgping = avgping_rtt
+
+	var/sequence_skip = sequence_result["skip"]
+	var/sequence_out_of_order = sequence_result["out_of_order"]
+	SStime_track?.record_ping_reply(best_ping, tick_ping, server_ping, sequence_skip, sequence_out_of_order)
+	var/is_noteworthy = best_ping >= CLIENT_LATENCY_RTT_WARN_MS || server_ping >= CLIENT_LATENCY_SERVER_STALL_WARN_MS || sequence_skip || sequence_out_of_order
+	var/can_report = isnull(last_ping_latency_report_at) || world.time - last_ping_latency_report_at >= CLIENT_LATENCY_NATIVE_REPORT_COOLDOWN
+	if(is_noteworthy && can_report)
+		last_ping_latency_report_at = world.time
+		var/skin_age = last_skin_latency_at ? max(world.time - last_skin_latency_at, 0) : null
+		var/topic_age = last_slow_topic_at ? max(world.time - last_slow_topic_at, 0) : null
+		var/browser_age = last_browser_latency_at ? max(world.time - last_browser_latency_at, 0) : null
+		var/list/suspects = ping_diagnostic_suspects(server_ping, resource_stage, skin_age, topic_age, browser_age, sequence_skip, sequence_out_of_order)
+		log_client_latency("native_ping_spike", src, list(
+			"sequence" = sequence_result["valid"] ? round(sequence) : null,
+			"sequence_sent" = ping_sequence_sent,
+			"sequence_received" = ping_sequence_received,
+			"sequence_skip" = sequence_skip,
+			"sequence_out_of_order" = !!sequence_out_of_order,
+			"rtt_ms" = best_ping,
+			"stable_median_ms" = rtt_ping,
+			"display_average_ms" = avgping_rtt,
+			"tick_clock_ms" = tick_ping,
+			"server_stall_ms" = server_ping,
+			"nonstall_roundtrip_ms" = max(best_ping - server_ping, 0),
+			"previous_rtt_ms" = previous_rtt,
+			"reply_gap_ms" = reply_gap_ms,
+			"sent_tickstamp" = tickstamp,
+			"sent_realtime_ds" = sent_realtime,
+			"suspects" = suspects,
+		))
 
 /client/verb/display_ping(tickstamp as num, sent_realtime as null|num)
 	set instant = TRUE

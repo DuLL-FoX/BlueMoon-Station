@@ -140,6 +140,11 @@ SUBSYSTEM_DEF(air)
 
 	var/list/currentrun = list()
 	var/currentpart = SSAIR_REBUILD_PIPENETS
+	/// Last phase which completed, retained for the tick-spike report. currentpart
+	/// alone can already point at the next phase when the detector runs.
+	var/diagnostic_last_part
+	var/diagnostic_last_part_cost_ms = 0
+	var/diagnostic_last_part_world_time = 0
 
 	var/map_loading = TRUE
 
@@ -345,6 +350,45 @@ SUBSYSTEM_DEF(air)
 	msg += "C:{HP:[round(cost_highpressure,1)]|HS:[round(cost_hotspots,1)]|SC:[round(cost_superconductivity,1)]|PN:[round(cost_pipenets,1)]|AM:[round(cost_atmos_machinery,1)]|AO:[round(cost_atmos_atoms,1)]} TC:{AT:[round(cost_turfs,1)]|DC:[round(cost_decompression,1)]|EG:[round(cost_groups,1)]|EQ:[round(cost_equalize,1)]|PO:[round(cost_post_process,1)]}TH:[round(thread_wait_ticks,1)]|HS:[hotspots.len]|PN:[networks.len]|RBQ:[pipenets_needing_rebuilt.len]/[expansion_queue.len]|AO:[atom_process.len]|HP:[high_pressure_delta.len]|HT:[high_pressure_turfs]|LT:[low_pressure_turfs]|DA:[num_decompression_areas]|ET:[num_equalize_processed]|GT:[num_group_turfs_processed]|GA:[gas_mixes_count]|MG:[gas_mixes_allocated]"
 	return ..()
 
+/datum/controller/subsystem/air/proc/phase_name(part)
+	switch(part)
+		if(SSAIR_REBUILD_PIPENETS)
+			return "rebuild pipenets"
+		if(SSAIR_PIPENETS)
+			return "pipenets"
+		if(SSAIR_ATMOSMACHINERY)
+			return "machinery"
+		if(SSAIR_ACTIVETURFS)
+			return "active turfs"
+		if(SSAIR_DECOMPRESSION)
+			return "decompression"
+		if(SSAIR_EQUALIZE)
+			return "equalize"
+		if(SSAIR_EXCITEDGROUPS)
+			return "excited groups"
+		if(SSAIR_FINALIZE_TURFS)
+			return "finalize turfs"
+		if(SSAIR_ATOMS)
+			return "atmos atoms"
+		if(SSAIR_HIGHPRESSURE)
+			return "high pressure"
+		if(SSAIR_HOTSPOTS)
+			return "hotspots"
+		if(SSAIR_TURF_CONDUCTION)
+			return "turf conduction"
+	return "unknown ([part])"
+
+/datum/controller/subsystem/air/proc/record_phase_completion(part, cost_ms)
+	diagnostic_last_part = part
+	diagnostic_last_part_cost_ms = cost_ms
+	diagnostic_last_part_world_time = world.time
+
+/// Cheap snapshot for SStick_spikes: only scalar fields and list lengths, with no
+/// world scan or profiler refresh that could make the diagnostic cause a spike.
+/datum/controller/subsystem/air/proc/build_spike_diagnostic()
+	var/last_phase = diagnostic_last_part ? phase_name(diagnostic_last_part) : "none"
+	return "phase [phase_name(currentpart)], remaining [length(currentrun)]; last [last_phase] [round(diagnostic_last_part_cost_ms, 0.1)]ms at wt [diagnostic_last_part_world_time]; active [length(active_turfs)], groups [length(excited_groups)], high-pressure [length(high_pressure_delta)], hotspots [length(hotspots)], pipenets [length(networks)], rebuilds [length(pipenets_needing_rebuilt)]"
+
 /datum/controller/subsystem/air/Initialize(timeofday)
 	map_loading = FALSE
 	setup_allturfs()
@@ -507,6 +551,7 @@ SUBSYSTEM_DEF(air)
 		if(state != SS_RUNNING)
 			return
 		cost_rebuilds = MC_AVERAGE(cost_rebuilds, TICK_DELTA_TO_MS(cached_cost))
+		record_phase_completion(SSAIR_REBUILD_PIPENETS, TICK_DELTA_TO_MS(cached_cost))
 		resumed = FALSE
 		currentpart = SSAIR_PIPENETS
 
@@ -520,6 +565,7 @@ SUBSYSTEM_DEF(air)
 		if(state != SS_RUNNING)
 			return
 		cost_pipenets = MC_AVERAGE(cost_pipenets, TICK_DELTA_TO_MS(cached_cost))
+		record_phase_completion(SSAIR_PIPENETS, TICK_DELTA_TO_MS(cached_cost))
 		resumed = 0
 		currentpart = SSAIR_ATMOSMACHINERY
 
@@ -534,6 +580,7 @@ SUBSYSTEM_DEF(air)
 			return
 		resumed = 0
 		cost_atmos_machinery = MC_AVERAGE(cost_atmos_machinery, TICK_DELTA_TO_MS(cached_cost))
+		record_phase_completion(SSAIR_ATMOSMACHINERY, TICK_DELTA_TO_MS(cached_cost))
 		currentpart = SSAIR_ACTIVETURFS
 
 	if(currentpart == SSAIR_ACTIVETURFS)
@@ -551,6 +598,7 @@ SUBSYSTEM_DEF(air)
 		// profiler has to be checked against.
 		cost_turfs_last = TICK_DELTA_TO_MS(cached_cost)
 		cost_turfs = MC_AVERAGE(cost_turfs, cost_turfs_last)
+		record_phase_completion(SSAIR_ACTIVETURFS, cost_turfs_last)
 		resumed = 0
 		currentpart = SSAIR_DECOMPRESSION
 
@@ -566,6 +614,7 @@ SUBSYSTEM_DEF(air)
 		if(state != SS_RUNNING)
 			return
 		cost_decompression = MC_AVERAGE(cost_decompression, TICK_DELTA_TO_MS(cached_cost))
+		record_phase_completion(SSAIR_DECOMPRESSION, TICK_DELTA_TO_MS(cached_cost))
 		resumed = 0
 		// The valve check keeps the stage reachable with the config flag off:
 		// a giant excited group means diffusion alone will not finish the job.
@@ -594,6 +643,7 @@ SUBSYSTEM_DEF(air)
 		if(state != SS_RUNNING)
 			return
 		cost_equalize = MC_AVERAGE(cost_equalize, TICK_DELTA_TO_MS(cached_cost))
+		record_phase_completion(SSAIR_EQUALIZE, TICK_DELTA_TO_MS(cached_cost))
 		resumed = 0
 		currentpart = SSAIR_EXCITEDGROUPS
 
@@ -607,6 +657,7 @@ SUBSYSTEM_DEF(air)
 		if(state != SS_RUNNING)
 			return
 		cost_groups = MC_AVERAGE(cost_groups, TICK_DELTA_TO_MS(cached_cost))
+		record_phase_completion(SSAIR_EXCITEDGROUPS, TICK_DELTA_TO_MS(cached_cost))
 		resumed = 0
 		currentpart = SSAIR_FINALIZE_TURFS
 
@@ -620,6 +671,7 @@ SUBSYSTEM_DEF(air)
 		if(state != SS_RUNNING)
 			return
 		cost_post_process = MC_AVERAGE(cost_post_process, TICK_DELTA_TO_MS(cached_cost))
+		record_phase_completion(SSAIR_FINALIZE_TURFS, TICK_DELTA_TO_MS(cached_cost))
 		resumed = 0
 		currentpart = SSAIR_ATOMS
 
@@ -633,6 +685,7 @@ SUBSYSTEM_DEF(air)
 		if(state != SS_RUNNING)
 			return
 		cost_atmos_atoms = MC_AVERAGE(cost_atmos_atoms, TICK_DELTA_TO_MS(cached_cost))
+		record_phase_completion(SSAIR_ATOMS, TICK_DELTA_TO_MS(cached_cost))
 		resumed = FALSE
 		currentpart = SSAIR_HIGHPRESSURE
 
@@ -646,6 +699,7 @@ SUBSYSTEM_DEF(air)
 		if(state != SS_RUNNING)
 			return
 		cost_highpressure = MC_AVERAGE(cost_highpressure, TICK_DELTA_TO_MS(cached_cost))
+		record_phase_completion(SSAIR_HIGHPRESSURE, TICK_DELTA_TO_MS(cached_cost))
 		resumed = 0
 		currentpart = SSAIR_HOTSPOTS
 
@@ -659,6 +713,7 @@ SUBSYSTEM_DEF(air)
 		if(state != SS_RUNNING)
 			return
 		cost_hotspots = MC_AVERAGE(cost_hotspots, TICK_DELTA_TO_MS(cached_cost))
+		record_phase_completion(SSAIR_HOTSPOTS, TICK_DELTA_TO_MS(cached_cost))
 		resumed = 0
 		if(!heat_enabled)
 			// Same reason as the skipped equalize stage above: a stage that did
@@ -683,6 +738,7 @@ SUBSYSTEM_DEF(air)
 		if(state != SS_RUNNING)
 			return
 		cost_superconductivity = MC_AVERAGE(cost_superconductivity, TICK_DELTA_TO_MS(cached_cost))
+		record_phase_completion(SSAIR_TURF_CONDUCTION, TICK_DELTA_TO_MS(cached_cost))
 		resumed = 0
 		finish_pass()
 		currentpart = SSAIR_REBUILD_PIPENETS

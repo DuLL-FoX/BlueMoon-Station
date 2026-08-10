@@ -1,4 +1,6 @@
 /datum/plug13_connection
+	/// All Plug13 requests are external and optional; never retain native jobs indefinitely.
+	var/static/http_timeout = 10 SECONDS
 	var/is_connected = FALSE
 	var/pending = FALSE
 	var/error
@@ -12,6 +14,18 @@
 	if (!owner)
 		CRASH("Plug13 connection was created without an owner!")
 	src.owner = owner
+	RegisterSignal(owner, COMSIG_PARENT_QDELETING, PROC_REF(on_owner_qdeleting))
+
+/datum/plug13_connection/Destroy()
+	if(owner)
+		UnregisterSignal(owner, COMSIG_PARENT_QDELETING)
+	owner = null
+	return ..()
+
+/// Break the owner cycle before /client's hard deletion and make sleeping requests harmless.
+/datum/plug13_connection/proc/on_owner_qdeleting()
+	SIGNAL_HANDLER
+	owner = null
 
 /datum/plug13_connection/proc/connect()
 	if (is_connected || !code || pending) return
@@ -30,24 +44,26 @@
 		"key" = owner.key
 	)
 
-	var/datum/http_request/request = new
-	request.prepare(RUSTG_HTTP_METHOD_POST, "[CONFIG_GET(string/plug13_url)]/api/game/connect", json_encode(body))
-	request.begin_async()
-	UNTIL(request.is_complete() || !owner)
-	if (!owner) return
-
-	var/datum/http_response/response = request.into_response()
+	var/datum/http_response/response = world_safe_http_request(RUSTG_HTTP_METHOD_POST, "[CONFIG_GET(string/plug13_url)]/api/game/connect", json_encode(body), timeout = http_timeout)
 	pending = FALSE
+	if(!owner)
+		return
 
-	if (response.errored || response.status_code != 200)
+	if(isnull(response) || response.errored || response.status_code != 200)
 		error = "Ошибка соединения с Plug13"
 		return
 
-	var/data = json_decode(response.body)
+	var/list/data = safe_json_decode_list(response.body)
+	if(isnull(data))
+		error = "Plug13 вернул некорректный ответ"
+		return
 
 	if (data["error"])
 		error = data["error"]
 		failed_code_tries++
+		return
+	if(!istext(data["username"]) || !length(data["username"]))
+		error = "Plug13 вернул ответ без имени пользователя"
 		return
 
 	is_connected = TRUE
@@ -83,15 +99,11 @@
 		"key" = owner.key
 	)
 
-	var/datum/http_request/request = new
-	request.prepare(RUSTG_HTTP_METHOD_POST, "[CONFIG_GET(string/plug13_url)]/api/game/emote", json_encode(body))
-	request.begin_async()
-	UNTIL(request.is_complete() || !owner)
-	if (!owner) return
+	var/datum/http_response/response = world_safe_http_request(RUSTG_HTTP_METHOD_POST, "[CONFIG_GET(string/plug13_url)]/api/game/emote", json_encode(body), timeout = http_timeout)
+	if(!owner)
+		return
 
-	var/datum/http_response/response = request.into_response()
-
-	if (response.errored || FLOOR(response.status_code/100, 1) != 2) // 2xx codes
+	if(isnull(response) || response.errored || FLOOR(response.status_code/100, 1) != 2) // 2xx codes
 		if (++emote_sends_failed > 10)
 			error = "Слишком много неудачных запросов"
 			disconnect()

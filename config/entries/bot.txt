@@ -15,3 +15,9 @@
 
 ## Role ID that, when present, will be pinged every round end.
 #CHAT_REBOOT_ROLE
+
+## Tokens accepted by the JSON world/Topic bot API.
+## Format: TOPIC_TOKENS secret endpoint_a,endpoint_b
+## Use "all" instead of the comma-separated endpoint list only for a fully trusted bot.
+## The token text is normalized to lowercase by the configuration parser.
+#TOPIC_TOKENS topic_token ping,status

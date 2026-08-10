@@ -14,6 +14,30 @@
  */
 #define TGUI_TELEMETRY_RESPONSE_WINDOW 30 SECONDS
 
+/// Browser telemetry is untrusted. Values outside ordinary OS/browser scaling ranges
+/// are ignored rather than being allowed to distort every subsequently opened UI.
+#define TGUI_DEVICE_PIXEL_RATIO_MIN 0.5
+#define TGUI_DEVICE_PIXEL_RATIO_MAX 4
+
+/// Returns a bounded two-decimal scaling value, or null for an untrusted value.
+/proc/sanitize_tgui_device_pixel_ratio(value)
+	if(!isnum(value) || value < TGUI_DEVICE_PIXEL_RATIO_MIN || value > TGUI_DEVICE_PIXEL_RATIO_MAX)
+		return null
+	return round(value, 0.01)
+
+/// Applies browser-reported scaling and lets the pending login fallback become a no-op.
+/client/proc/apply_tgui_device_pixel_ratio(value)
+	var/sanitized_ratio = sanitize_tgui_device_pixel_ratio(value)
+	if(isnull(sanitized_ratio))
+		return FALSE
+	window_scaling = sanitized_ratio
+	window_scaling_retry_count = 0
+	dpi_telemetry_received = TRUE
+	ensure_resource_session().set_capability(CLIENT_CAPABILITY_SKIN, CLIENT_CAPABILITY_READY, "tgui devicePixelRatio")
+	if(tgui_panel?.handshake_done)
+		tgui_panel.send_client_config()
+	return TRUE
+
 /// Time of telemetry request
 /datum/tgui_panel/var/telemetry_requested_at
 /// Time of telemetry analysis completion
@@ -50,8 +74,9 @@
 		message_admins("[key_name(client)] sent telemetry more than once.")
 		return
 	telemetry_analyzed_at = world.time
-	if(!payload)
+	if(!islist(payload))
 		return
+	client?.apply_tgui_device_pixel_ratio(payload["pixelRatio"])
 	telemetry_connections = payload["connections"]
 	var/len = length(telemetry_connections)
 	if(len == 0)
@@ -82,3 +107,6 @@
 			log_admin_private(msg)
 			log_suspicious_login(msg, access_log_mirror = FALSE)
 	// BLUEMOON EDIT END: Telemetry
+
+#undef TGUI_DEVICE_PIXEL_RATIO_MIN
+#undef TGUI_DEVICE_PIXEL_RATIO_MAX

@@ -1,4 +1,3 @@
-/* NO, this ait work for ya, replaced with normal one in modular_bluemoon\code\controllers\topic.dm
 SUBSYSTEM_DEF(fail2topic)
 	name = "Fail2Topic"
 	init_order = INIT_ORDER_FAIL2TOPIC
@@ -34,7 +33,7 @@ SUBSYSTEM_DEF(fail2topic)
 		while(i <= length(rate_limiting))
 			var/ip = rate_limiting[i]
 			var/last_attempt = rate_limiting[ip]
-			if(REALTIMEOFDAY - last_attempt > rate_limit)
+			if(world.time - last_attempt > rate_limit)
 				rate_limiting -= ip
 				fail_counts -= ip
 			else		//if we remove that, and the next element is in its place. check that instead of incrementing.
@@ -60,28 +59,26 @@ SUBSYSTEM_DEF(fail2topic)
 				return FALSE
 
 /datum/controller/subsystem/fail2topic/proc/IsRateLimited(ip)
+	if(!enabled)
+		return FALSE
 	if(IsAdminAdvancedProcCall())
 		return FALSE
 
 	var/last_attempt = rate_limiting[ip]
 
-	var/static/datum/config_entry/keyed_list/topic_rate_limit_whitelist/cached_whitelist_entry
-	if(!istype(cached_whitelist_entry))
-		cached_whitelist_entry = CONFIG_GET(keyed_list/topic_rate_limit_whitelist)
-
-	if(istype(cached_whitelist_entry))
-		if(cached_whitelist_entry.config_entry_value[ip])
-			return FALSE
+	var/list/whitelist = CONFIG_GET(keyed_list/topic_rate_limit_whitelist)
+	if(whitelist[ip])
+		return FALSE
 
 	if (active_bans[ip])
 		return TRUE
 
-	rate_limiting[ip] = REALTIMEOFDAY
+	rate_limiting[ip] = world.time
 
 	if (isnull(last_attempt))
 		return FALSE
 
-	if (REALTIMEOFDAY - last_attempt > rate_limit)
+	if (world.time - last_attempt > rate_limit)
 		fail_counts -= ip
 		return FALSE
 	else
@@ -90,7 +87,7 @@ SUBSYSTEM_DEF(fail2topic)
 		if (isnull(failures))
 			fail_counts[ip] = 1
 			return TRUE
-		else if (failures > max_fails)
+		else if (failures >= max_fails)
 			BanFromFirewall(ip)
 			return TRUE
 		else
@@ -103,7 +100,7 @@ SUBSYSTEM_DEF(fail2topic)
 	if(IsAdminAdvancedProcCall())
 		return
 
-	active_bans[ip] = REALTIMEOFDAY
+	active_bans[ip] = world.time
 	fail_counts -= ip
 	rate_limiting -= ip
 
@@ -136,4 +133,3 @@ SUBSYSTEM_DEF(fail2topic)
 		subsystem_log("Failed to invoke shell for firewall rule drop.")
 	else
 		subsystem_log("Firewall rule dropped.")
-*/

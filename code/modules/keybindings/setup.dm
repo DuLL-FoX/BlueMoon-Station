@@ -3,9 +3,14 @@
 /// это winget (ожидание ответа скина) плюс сотни winset: пять правок подряд стоили
 /// пять полных проходов.
 #define MACRO_ASSERT_COALESCE_DELAY (0.5 SECONDS)
+/// Automatic macro setup shares DreamSeeker's native command queue with resource
+/// delivery. Keep retrying cheaply instead of starting a blocking winget there.
+#define MACRO_ASSERT_BUSY_RETRY_DELAY (1 SECONDS)
+#define MACRO_ASSERT_BUSY_RETRIES 20
 
 /// Таймер отложенной перестройки макросов, чтобы верб "Fix Keybindings" мог его снять.
 /client/var/macro_assert_timer
+/client/var/macro_assert_busy_retries = 0
 
 /datum/proc/key_down(key, client/user, full_key) // Called when a key is pressed down initially
 	SHOULD_CALL_PARENT(TRUE)
@@ -81,13 +86,23 @@
 		if(macro_assert_timer)
 			deltimer(macro_assert_timer)
 			macro_assert_timer = null
-		INVOKE_ASYNC(src, PROC_REF(do_full_macro_assert), prefs_override)		// winget sleeps.
+		macro_assert_busy_retries = 0
+		INVOKE_ASYNC(src, PROC_REF(do_full_macro_assert), prefs_override, FALSE)		// winget sleeps.
 		return
+	macro_assert_busy_retries = MACRO_ASSERT_BUSY_RETRIES
 	macro_assert_timer = addtimer(CALLBACK(src, PROC_REF(do_full_macro_assert), prefs_override), MACRO_ASSERT_COALESCE_DELAY, TIMER_UNIQUE|TIMER_OVERRIDE|TIMER_STOPPABLE)
 
 // TODO: OVERHAUL ALL OF THIS AGAIN. While this works this is flatout horrid with the "use list but also don't use lists" crap. I hate my life.
-/client/proc/do_full_macro_assert(datum/preferences/prefs_override = prefs)
+/client/proc/do_full_macro_assert(datum/preferences/prefs_override = prefs, defer_while_busy = TRUE)
 	macro_assert_timer = null
+	if(defer_while_busy && !client_skin_responsive(src) && macro_assert_busy_retries > 0)
+		SStick_spikes?.record_skipped_blocking_call("winget")
+		macro_assert_busy_retries--
+		macro_assert_timer = addtimer(CALLBACK(src, PROC_REF(do_full_macro_assert), prefs_override, TRUE), MACRO_ASSERT_BUSY_RETRY_DELAY, TIMER_UNIQUE|TIMER_OVERRIDE|TIMER_STOPPABLE)
+		return
+	// A permanently high-latency player must still receive working keybindings.
+	// The bounded retries only keep this winget away from the connection burst.
+	macro_assert_busy_retries = 0
 	// Ensure macrosets exist before trying to erase them (prevents "Element hotkeys not found" on first connect)
 	if(prefs_override?.hotkeys)
 		winclone(src, "default", SKIN_MACROSET_HOTKEYS)
@@ -262,3 +277,5 @@
 	// 	keyUp(key_combos_held[key])
 
 #undef MACRO_ASSERT_COALESCE_DELAY
+#undef MACRO_ASSERT_BUSY_RETRY_DELAY
+#undef MACRO_ASSERT_BUSY_RETRIES

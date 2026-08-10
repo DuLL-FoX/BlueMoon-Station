@@ -215,6 +215,12 @@ SUBSYSTEM_DEF(tick_spikes)
 	var/blocking_sync_ms = 0
 	/// Разбивка по типу вызова: kind -> list("count" = N, "ms" = X, "max" = Y)
 	var/list/blocking_by_kind
+	/// Обращения к скину, которых мы НЕ сделали: клиент не отвечал, и вызов пропустили.
+	/// kind -> количество. Держим отдельно от blocking_by_kind, потому что пропуск не
+	/// стоил ни миллисекунды; без этой строки упавшее число winget выглядело бы как
+	/// необъяснимая пропажа замеров.
+	var/list/blocking_skipped_by_kind
+	var/blocking_skipped_calls = 0
 	/// world.time ЗАВЕРШЕНИЯ последнего блокирующего вызова, перешагнувшего slow_work_threshold_ms
 	var/last_blocking_world = 0
 	/// world.time НАЧАЛА того же вызова. У синхронных примитивов равен финишу (мир
@@ -370,6 +376,8 @@ SUBSYSTEM_DEF(tick_spikes)
 	blocking_sync_calls = 0
 	blocking_sync_ms = 0
 	blocking_by_kind = list()
+	blocking_skipped_by_kind = list()
+	blocking_skipped_calls = 0
 	last_blocking_world = 0
 	last_blocking_started_world = 0
 	last_blocking_cost = 0
@@ -544,6 +552,20 @@ SUBSYSTEM_DEF(tick_spikes)
  * мгновенным (start == finish): для синхронных примитивов это точная правда, мир
  * при них не тикает.
  */
+/**
+ * Запись обращения к скину, которого мы не стали делать.
+ *
+ * Пропуск не стоит времени и потому не попадает ни в один из счётчиков стоимости.
+ * Считаем его отдельно, чтобы в сводке было видно: winget'ов стало меньше не потому,
+ * что клиенты подобрели, а потому что мы перестали к ним ходить.
+ */
+/datum/controller/subsystem/tick_spikes/proc/record_skipped_blocking_call(kind)
+	blocking_skipped_calls++
+	if(!blocking_skipped_by_kind)
+		blocking_skipped_by_kind = list()
+	var/seen = blocking_skipped_by_kind[kind]
+	blocking_skipped_by_kind[kind] = (isnull(seen) ? 0 : seen) + 1
+
 /datum/controller/subsystem/tick_spikes/proc/record_blocking_call(kind, desc, cost_ms, started_world)
 	if(cost_ms < 0) //часы переехали - лучше потерять замер, чем испортить статистику
 		return
@@ -891,7 +913,8 @@ SUBSYSTEM_DEF(tick_spikes)
 		for(var/level in 1 to GC_QUEUE_COUNT)
 			gc_depths += SSgarbage.GetQueueDepth(level)
 		gc_queues = gc_depths.Join("/")
-	return "размеры: клиентов [length(GLOB.clients)], таймеров [length(SStimer?.timer_id_dict)], очередь GC [gc_queues], fps [world.fps], tick_lag [world.tick_lag]дс"
+	var/air_state = SSair ? "; SSair: [SSair.build_spike_diagnostic()]" : ""
+	return "размеры: клиентов [length(GLOB.clients)], таймеров [length(SStimer?.timer_id_dict)], очередь GC [gc_queues], fps [world.fps], tick_lag [world.tick_lag]дс[air_state]"
 
 /**
  * Два числа sendmaps-профиля прямо в строку блока: кумулятивные value/calls и дельта с
@@ -1175,9 +1198,19 @@ SUBSYSTEM_DEF(tick_spikes)
  *
  * Возвращает список строк: каждая уходит в лог отдельно, со своим таймстампом.
  */
+/// Строка про пропущенные обращения к скину. Пустая, если пропусков не было.
+/datum/controller/subsystem/tick_spikes/proc/build_skipped_blocking_line()
+	if(!blocking_skipped_calls)
+		return null
+	var/list/parts = list()
+	for(var/kind in blocking_skipped_by_kind)
+		parts += "[kind] x[blocking_skipped_by_kind[kind]]"
+	return "обращения к скину пропущены (клиент не отвечал, вызов не делали): [blocking_skipped_calls] | [parts.Join(" | ")]"
+
 /datum/controller/subsystem/tick_spikes/proc/build_blocking_summary_lines()
 	if(!blocking_calls)
-		return list("блокирующие вызовы: замеров нет")
+		var/skipped_only = build_skipped_blocking_line()
+		return skipped_only ? list("блокирующие вызовы: замеров нет", skipped_only) : list("блокирующие вызовы: замеров нет")
 	var/list/sleeping_parts = list()
 	var/list/sync_parts = list()
 	for(var/kind in blocking_by_kind)
@@ -1199,6 +1232,9 @@ SUBSYSTEM_DEF(tick_spikes)
 	var/list/lines = list()
 	lines += "блокирующие вызовы, ожидание прока (усыпляют вызывающего, миру НЕ мешают - МК крутится дальше, дрифту не соответствуют): [blocking_sleeping_calls] на [round(blocking_sleeping_ms)]мс[sleeping_tail]"
 	lines += "блокирующие вызовы, синхронные (морозят весь процесс): [blocking_sync_calls] на [round(blocking_sync_ms)]мс[share][sync_tail]"
+	var/skipped_line = build_skipped_blocking_line()
+	if(skipped_line)
+		lines += skipped_line
 	return lines
 
 /// Тот же итог одной строкой (для отчёта верба и для юнит-теста)

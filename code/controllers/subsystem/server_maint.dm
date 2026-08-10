@@ -88,12 +88,14 @@ SUBSYSTEM_DEF(server_maint)
 				continue
 
 		if (ping_send_this_fire && !(world.time - C.connection_time < PING_BUFFER_TIME || C.inactivity >= 3000))
-			winset(C, null, "command=.update_ping+[ping_wire_num(world.time+world.tick_lag*TICK_USAGE_REAL/100)]+[ping_wire_num(REALTIMEOFDAY)]")
+			C.ping_sequence_sent++
+			winset(C, null, "command=.update_ping+[ping_wire_num(world.time+world.tick_lag*TICK_USAGE_REAL/100)]+[ping_wire_num(REALTIMEOFDAY)]+[C.ping_sequence_sent]")
 
 		MC_TICK_CHECK
 
 /datum/controller/subsystem/server_maint/Shutdown()
 	log_connection_churn_summary() //до кика лоббистов, иначе он же и раздует статистику
+	log_personal_music_box_summary()
 	kick_clients_in_lobby("<span class='boldannounce'>The round came to an end with you in the lobby.</span>", TRUE) //second parameter ensures only afk clients are kicked
 	var/server = CONFIG_GET(string/server)
 	for(var/thing in GLOB.clients)

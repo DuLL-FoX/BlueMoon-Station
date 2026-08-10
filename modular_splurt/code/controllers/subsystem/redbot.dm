@@ -7,8 +7,8 @@ SUBSYSTEM_DEF(redbot)
 	var/bot_ip = CONFIG_GET(string/bot_ip)
 	var/round_id = GLOB.round_id
 	if(config && bot_ip)
-		// Fire-and-forget через rustg: world.Export на мёртвый bot_ip держал весь мир
-		// до сетевого таймаута (~10с) прямо в фазе инициализации.
+		// Native fire-and-forget through rust-g: it creates no response job which DM
+		// would otherwise have to poll and consume later.
 		var/query = "http://[bot_ip]/?serverStart=1&roundID=[round_id]&key=[comms_key]"
 		world_safe_http_get_async(query)
 	return ..()

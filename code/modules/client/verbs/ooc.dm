@@ -279,12 +279,45 @@ GLOBAL_VAR_INIT(normal_ooc_colour, "#002eb8")
 /// наступает за нулевую или первую итерацию, а недосошедшийся сплиттер - это лишь
 /// пара лишних пикселей у карты, за которые не стоит держать клиента на линии.
 #define FIT_VIEWPORT_MAX_CORRECTIONS 3
+/// Сколько раз откладывать автоматическую подгонку, пока скин клиента занят.
+#define FIT_VIEWPORT_DEFER_ATTEMPTS 5
+/// Пауза между попытками. Пинг-сэмпл обновляется примерно раз в две секунды, так что
+/// за это окно состояние клиента успевает смениться.
+#define FIT_VIEWPORT_DEFER_DELAY (5 SECONDS)
+
+/**
+ * Автоматическая подгонка вьюпорта: у занятого клиента откладывается, а не выполняется.
+ *
+ * fit_viewport - самая дорогая пачка обращений к скину, что у нас есть: winget на
+ * размеры плюс до трёх round-trip'ов коррекции. В раунде 9870 на неё пришлось 197 из
+ * 337 медленных обращений и 316 секунд из ~630, а зовётся она ровно тогда, когда клиент
+ * занят больше всего - на логине и при смене вида. Результат при этом чисто
+ * косметический: пара лишних пикселей у карты.
+ *
+ * Поэтому автоматический путь ждёт, пока клиент начнёт отвечать, и только потом идёт к
+ * скину. Верб "Fit Viewport" этой проверки не делает: если игрок нажал сам, он готов
+ * подождать.
+ */
+/client/proc/fit_viewport_when_ready()
+	if(client_skin_responsive(src))
+		fit_viewport_defers = 0
+		fit_viewport_now()
+		return
+	SStick_spikes?.record_skipped_blocking_call("winget")
+	fit_viewport_defers++
+	if(fit_viewport_defers >= FIT_VIEWPORT_DEFER_ATTEMPTS)
+		fit_viewport_defers = 0
+		return
+	addtimer(CALLBACK(src, PROC_REF(fit_viewport_when_ready)), FIT_VIEWPORT_DEFER_DELAY, TIMER_UNIQUE | TIMER_OVERRIDE)
 
 /client/verb/fit_viewport()
 	set name = "Fit Viewport"
 	set category = "OOC"
 	set desc = "Fit the width of the map window to match the viewport"
 
+	fit_viewport_now()
+
+/client/proc/fit_viewport_now()
 	// Fetch aspect ratio
 	var/view_size = getviewsize(view)
 	var/aspect_ratio = view_size[1] / view_size[2]
@@ -330,6 +363,11 @@ GLOBAL_VAR_INIT(normal_ooc_colour, "#002eb8")
 	// Apply an ever-lowering offset until we finish or fail
 	var/delta
 	for(var/safety in 1 to FIT_VIEWPORT_MAX_CORRECTIONS)
+		// Клиент мог уйти в подкачку уже после первого замера. Каждая следующая итерация
+		// стоила бы столько же, сколько его текущий round-trip, а платим мы за пиксель.
+		if(!client_skin_responsive(src))
+			SStick_spikes?.record_skipped_blocking_call("winget")
+			return
 		var/after_size = tracked_winget(src, "mapwindow", "size")
 		map_size = splittext(after_size, "x")
 		if(length(map_size) != 2)
@@ -350,6 +388,8 @@ GLOBAL_VAR_INIT(normal_ooc_colour, "#002eb8")
 		winset(src, "mainwindow.split", "splitter=[pct]")
 
 #undef FIT_VIEWPORT_MAX_CORRECTIONS
+#undef FIT_VIEWPORT_DEFER_ATTEMPTS
+#undef FIT_VIEWPORT_DEFER_DELAY
 
 /client/verb/fix_stat_panel()
 	set name = "Fix Stat Panel"

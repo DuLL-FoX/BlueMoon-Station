@@ -462,6 +462,10 @@ SUBSYSTEM_DEF(job)
 		RejectPlayer(player)
 //Gives the player the stuff he should have with his rank
 /datum/controller/subsystem/job/proc/EquipRank(mob/M, rank, joined_late = FALSE)
+	var/client/equipping_client = joined_late ? M.client : null
+	var/list/equip_profile = joined_late ? client_latency_profile_start() : null
+	var/equip_profile_started_ms = equip_profile?["wall_ms"]
+	var/list/equip_phases = joined_late ? list() : null
 	var/mob/dead/new_player/N
 	var/mob/living/H
 	if(!joined_late)
@@ -487,6 +491,8 @@ SUBSYSTEM_DEF(job)
 	if(H.mind)
 		H.mind.assigned_role = rank
 		ambition_text = H.mind.assign_random_ambition()
+	if(joined_late)
+		equip_profile = client_latency_profile_checkpoint(equip_phases, "role_setup", equip_profile)
 
 	if(H.mind)
 		H.mind.assigned_role = rank
@@ -501,6 +507,8 @@ SUBSYSTEM_DEF(job)
 				N.new_character = H
 			else
 				M = H
+		if(joined_late)
+			equip_profile = client_latency_profile_checkpoint(equip_phases, "job_equip", equip_profile)
 
 		SSpersistence.antag_rep_change[M.client.ckey] += job.GetAntagRep()
 
@@ -509,6 +517,8 @@ SUBSYSTEM_DEF(job)
 				M.client.holder.auto_deadmin()
 			else
 				handle_auto_deadmin_roles(M.client, rank)
+	if(joined_late)
+		equip_profile = client_latency_profile_checkpoint(equip_phases, "role_admin", equip_profile)
 
 	var/display_rank = rank
 	if(M.client && M.client.prefs && M.client?.prefs?.alt_titles_preferences[rank])
@@ -531,6 +541,8 @@ SUBSYSTEM_DEF(job)
 		flavor_display_text += "\n<li>Номер вашего банковского аккаунта - [wageslave.account_id].</li>"
 		H.add_memory("Номер вашего банковского аккаунта - [wageslave.account_id].")
 	// BLUEMOON EDIT END
+	if(joined_late)
+		equip_profile = client_latency_profile_checkpoint(equip_phases, "spawn_text", equip_profile)
 	if(job && H)
 		if(job.dresscodecompliant)// CIT CHANGE - dress code compliance
 			equip_loadout(N, H) // CIT CHANGE - allows players to spawn with loadout items
@@ -551,6 +563,8 @@ SUBSYSTEM_DEF(job)
 		if(ishuman(H))
 			bm_deliver_metadollar_purchases(H, M.client)
 	to_chat(M, examine_block(flavor_display_text))
+	if(joined_late)
+		equip_profile = client_latency_profile_checkpoint(equip_phases, "after_spawn", equip_profile)
 
 	var/list/tcg_cards
 	if(ishuman(H))
@@ -576,9 +590,26 @@ SUBSYSTEM_DEF(job)
 		var/list/tcg_decks = H.client?.prefs?.tcg_decks || N?.client?.prefs?.tcg_decks
 		if(length(tcg_decks))
 			binder.decks = tcg_decks
+	if(joined_late)
+		equip_profile = client_latency_profile_checkpoint(equip_phases, "tcg", equip_profile)
 
 	if(ambition_text)
 		to_chat(M, span_notice(ambition_text))
+	if(joined_late)
+		equip_profile = client_latency_profile_checkpoint(equip_phases, "finish", equip_profile)
+		if(SStick_spikes && !isnull(equip_profile_started_ms) && islist(equip_profile))
+			var/equip_work_ms = 0
+			for(var/phase in equip_phases)
+				equip_work_ms += equip_phases[phase]
+			if(equip_work_ms >= SStick_spikes.slow_work_threshold_ms)
+				var/equip_wall_ms = max(equip_profile["wall_ms"] - equip_profile_started_ms, 0)
+				log_client_latency("slow_equip_rank", equipping_client, list(
+					"rank" = "[rank]",
+					"latency_ms" = round(equip_work_ms, 0.01),
+					"wall_latency_ms" = round(equip_wall_ms, 0.01),
+					"yield_ms" = round(max(equip_wall_ms - equip_work_ms, 0), 0.01),
+					"phases_ms" = equip_phases,
+				))
 
 	return H
 

@@ -7,17 +7,41 @@
 import { sendMessage } from 'tgui/backend';
 
 import { pingFail, pingSuccess } from './actions';
-import { PING_INTERVAL, PING_QUEUE_SIZE, PING_TIMEOUT } from './constants';
+import {
+  PING_DIAGNOSTIC_COOLDOWN,
+  PING_DIAGNOSTIC_THRESHOLD,
+  PING_INTERVAL,
+  PING_QUEUE_SIZE,
+  PING_TIMEOUT,
+} from './constants';
 
 export const pingMiddleware = store => {
   let initialized = false;
   let index = 0;
   let interval;
+  let lastDiagnosticAt = -PING_DIAGNOSTIC_COOLDOWN;
   const pings = [];
+  const reportLatency = latencyMs => {
+    const now = Date.now();
+    if (latencyMs < PING_DIAGNOSTIC_THRESHOLD
+        || now - lastDiagnosticAt < PING_DIAGNOSTIC_COOLDOWN) {
+      return;
+    }
+    lastDiagnosticAt = now;
+    sendMessage({
+      type: 'pingDiagnostic',
+      payload: {
+        latencyMs,
+        hidden: document.hidden ? 1 : 0,
+        focused: document.hasFocus?.() ? 1 : 0,
+      },
+    });
+  };
   const sendPing = () => {
     for (let i = 0; i < PING_QUEUE_SIZE; i++) {
       const ping = pings[i];
       if (ping && Date.now() - ping.sentAt > PING_TIMEOUT) {
+        reportLatency(Date.now() - ping.sentAt);
         pings[i] = null;
         store.dispatch(pingFail());
       }
@@ -51,6 +75,9 @@ export const pingMiddleware = store => {
         return;
       }
       pings[index] = null;
+      const now = Date.now();
+      const latencyMs = now - ping.sentAt;
+      reportLatency(latencyMs);
       return next(pingSuccess(ping));
     }
     return next(action);

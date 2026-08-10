@@ -90,7 +90,7 @@
 		var/status = response.status_code
 
 		if (status == 200)
-			var/list/parsed = json_decode(response.body)
+			var/list/parsed = safe_json_decode_list(response.body)
 			if (parsed)
 				if (parsed["status"] == "success")
 					var/intelnum = text2num(parsed["result"])
@@ -106,6 +106,11 @@
 					if (!retryed)
 						sleep(25)
 						return .(ip, 1)
+			else
+				ipintel_handle_error("Malformed response from server.", ip, retryed)
+				if(!retryed)
+					sleep(25)
+					return .(ip, 1)
 
 		else if (status == 429)
 			ipintel_handle_error("Error #429: We have exceeded the rate limit.", ip, 1)

@@ -58,6 +58,16 @@ SUBSYSTEM_DEF(time_track)
 	var/ping_server_last_avg = 0
 	var/ping_server_last_max = 0
 	var/ping_server_avg_avg = 0
+	/// Каждый ping reply пишет сюда сразу. В отличие от десятисекундного среза это
+	/// окно не теряет короткие пики, случившиеся между fire() SStime_track.
+	var/ping_replies_window = 0
+	var/ping_spikes_window = 0
+	var/ping_rtt_max_window = 0
+	var/ping_tick_max_window = 0
+	var/ping_sequence_skips_window = 0
+	var/ping_sequence_reorders_window = 0
+	var/browser_reports_window = 0
+	var/browser_latency_max_window = 0
 
 /datum/controller/subsystem/time_track/Initialize(start_timeofday)
 	. = ..()
@@ -173,11 +183,34 @@ SUBSYSTEM_DEF(time_track)
 			"raw_jitter_abs_max_window",
 			"server_max_window",
 			"glide_size_multiplier_current",
+			"reply_samples_window",
+			"rtt_spikes_window",
+			"rtt_max_window",
+			"tick_max_window",
+			"sequence_skips_window",
+			"sequence_reorders_window",
+			"browser_reports_window",
+			"browser_latency_max_window",
 		)
 	)
 
 /// Сэмпл старше этого считается протухшим и в сводку по миру не идёт.
 #define PING_SAMPLE_STALE_AFTER (90 SECONDS)
+
+/datum/controller/subsystem/time_track/proc/record_ping_reply(rtt_ms, tick_ms, server_ms, sequence_skip = 0, out_of_order = FALSE)
+	ping_replies_window++
+	ping_rtt_max_window = max(ping_rtt_max_window, rtt_ms)
+	ping_tick_max_window = max(ping_tick_max_window, tick_ms)
+	ping_server_max_window = max(ping_server_max_window, server_ms)
+	if(rtt_ms >= CLIENT_LATENCY_RTT_WARN_MS)
+		ping_spikes_window++
+	ping_sequence_skips_window += max(sequence_skip, 0)
+	if(out_of_order)
+		ping_sequence_reorders_window++
+
+/datum/controller/subsystem/time_track/proc/record_browser_latency(latency_ms)
+	browser_reports_window++
+	browser_latency_max_window = max(browser_latency_max_window, latency_ms)
 
 /datum/controller/subsystem/time_track/proc/update_ping_metrics()
 	ping_samples = 0
@@ -362,9 +395,11 @@ SUBSYSTEM_DEF(time_track)
 			SSair.sharing_turfs
 		)
 	)
-	var/should_log_ping_perf = ping_samples && (
+	var/has_ping_diagnostics = ping_samples || ping_replies_window || browser_reports_window
+	var/should_log_ping_perf = has_ping_diagnostics && (
 		(times_fired % PING_PERF_LOG_EVERY_TICKS == 0) || \
-		(ping_rtt_last_max >= PING_PERF_SPIKE_RTT_MS) || \
+		(ping_rtt_max_window >= PING_PERF_SPIKE_RTT_MS) || \
+		(browser_reports_window > 0) || \
 		(raw_multiplier_jitter_abs_max_window >= PING_PERF_SPIKE_JITTER_PCT) || \
 		(time_dilation_current >= PING_PERF_SPIKE_TIDI_PCT)
 	)
@@ -394,10 +429,26 @@ SUBSYSTEM_DEF(time_track)
 				raw_multiplier_jitter_abs_max_window,
 				ping_server_max_window,
 				glide_size_multiplier_current,
+				ping_replies_window,
+				ping_spikes_window,
+				ping_rtt_max_window,
+				ping_tick_max_window,
+				ping_sequence_skips_window,
+				ping_sequence_reorders_window,
+				browser_reports_window,
+				browser_latency_max_window,
 			)
 		)
 		raw_multiplier_jitter_abs_max_window = 0
 		ping_server_max_window = 0
+		ping_replies_window = 0
+		ping_spikes_window = 0
+		ping_rtt_max_window = 0
+		ping_tick_max_window = 0
+		ping_sequence_skips_window = 0
+		ping_sequence_reorders_window = 0
+		browser_reports_window = 0
+		browser_latency_max_window = 0
 
 #undef PING_PERF_LOG_EVERY_TICKS
 #undef PING_PERF_SPIKE_RTT_MS

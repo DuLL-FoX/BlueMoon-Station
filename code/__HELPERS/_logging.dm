@@ -241,6 +241,116 @@
 	. = "[perf_info.Join(",")]\n"
 	WRITE_LOG_NO_FORMAT(GLOB.ping_perf_log, .)
 
+/**
+ * Пишет одно самодостаточное JSONL-событие о клиентской задержке.
+ *
+ * Файл намеренно отдельный от tick_spikes.log: задержка DreamSeeker обычно не
+ * тормозит Master Controller и потому не обязана совпасть с серверным тик-спайком.
+ * Общий снимок делает события skin/browser/Topic/native ping сопоставимыми по
+ * world_time, ckey и состоянию клиента без дополнительных блокирующих winget.
+ */
+/proc/log_client_latency(event, client/target, list/details)
+	if(!GLOB.client_latency_log)
+		return
+
+	var/list/entry = list(
+		"event" = "[event]",
+		// world.realtime is already large enough to lose roughly 51 seconds per
+		// representable float step. Formatting it produced batches of events with
+		// the same stale timestamp. rust-g reads the host clock directly and keeps
+		// both milliseconds and the local UTC offset.
+		"timestamp" = rustg_formatted_timestamp("%Y-%m-%dT%H:%M:%S%.3f%:z"),
+		"round_id" = GLOB.round_id,
+		"world_time" = world.time,
+		"realtime_ds" = REALTIMEOFDAY,
+		"server_byond" = "[world.byond_version].[world.byond_build]",
+		"world_cpu" = world.cpu,
+		"tick_usage" = TICK_USAGE,
+		"maptick" = MAPTICK_LAST_INTERNAL_TICK_USAGE,
+		"mc_iteration" = Master?.iteration || 0,
+		"tidi" = SStime_track?.time_dilation_current || 0,
+		"tidi_fast" = SStime_track?.time_dilation_avg_fast || 0,
+	)
+
+	if(target)
+		var/turf/mob_turf = get_turf(target.mob)
+		var/atom/eye_atom = target.eye
+		var/turf/eye_turf = get_turf(eye_atom)
+		entry["ckey"] = target.ckey || "<none>"
+		entry["address"] = target.address
+		entry["client_byond"] = "[target.byond_version].[target.byond_build]"
+		entry["connection_age_ds"] = target.connection_time ? max(world.time - target.connection_time, 0) : null
+		entry["resource_stage"] = client_resource_stage_name(target.resource_stage)
+		entry["resource_session"] = target.resource_session?.snapshot()
+		entry["rsc_source"] = target.rsc_source_url || CLIENT_RSC_SOURCE_LOCAL
+		entry["statbrowser_ready"] = !!target.statbrowser_ready
+		entry["statbrowser_served_externally"] = !!target.statbrowser_served_externally
+		entry["statbrowser_local_fallback"] = !!target.statbrowser_local_fallback
+		entry["tgui_ready"] = !!target.tgui_panel?.is_ready()
+		entry["tgui_windows"] = length(target.tgui_windows)
+		entry["inactivity_ds"] = target.inactivity
+		entry["mob_type"] = target.mob ? "[target.mob.type]" : null
+		entry["mob_coord"] = mob_turf ? "[mob_turf.x],[mob_turf.y],[mob_turf.z]" : null
+		entry["eye_type"] = eye_atom ? "[eye_atom.type]" : null
+		entry["eye_coord"] = eye_turf ? "[eye_turf.x],[eye_turf.y],[eye_turf.z]" : null
+		entry["view"] = "[target.view]"
+		entry["screen_objects"] = length(target.screen)
+		entry["client_images"] = length(target.images)
+		entry["last_native_rtt_ms"] = target.lastping_rtt_raw
+		entry["last_native_tick_ms"] = target.lastping_tick
+		entry["last_native_server_ms"] = target.lastping_server
+		entry["last_native_age_ds"] = target.lastping_at ? max(world.time - target.lastping_at, 0) : null
+		entry["ping_sequence_sent"] = target.ping_sequence_sent
+		entry["ping_sequence_received"] = target.ping_sequence_received
+
+		if(target.last_skin_latency_at)
+			entry["recent_skin_age_ds"] = max(world.time - target.last_skin_latency_at, 0)
+			entry["recent_skin_kind"] = target.last_skin_latency_kind
+			entry["recent_skin_ms"] = target.last_skin_latency_ms
+			entry["recent_skin_detail"] = target.last_skin_latency_detail
+		if(target.last_slow_topic_at)
+			entry["recent_topic_age_ds"] = max(world.time - target.last_slow_topic_at, 0)
+			entry["recent_topic_context"] = target.last_slow_topic_context
+			entry["recent_topic_ms"] = target.last_slow_topic_ms
+		if(target.last_browser_latency_at)
+			entry["recent_browser_age_ds"] = max(world.time - target.last_browser_latency_at, 0)
+			entry["recent_browser_source"] = target.last_browser_latency_source
+			entry["recent_browser_ms"] = target.last_browser_latency_ms
+			entry["recent_browser_hidden"] = !!target.last_browser_latency_hidden
+			entry["recent_browser_focused"] = !!target.last_browser_latency_focused
+
+	if(islist(details))
+		for(var/key in details)
+			entry[key] = details[key]
+
+	WRITE_LOG_NO_FORMAT(GLOB.client_latency_log, "[json_encode(entry)]\n")
+
+/// Starts a low-frequency latency profile that can distinguish synchronous work from
+/// deliberate CHECK_TICK sleeps. TICK_USAGE cannot be used here because it resets on
+/// every server tick.
+/proc/client_latency_profile_start()
+	if(!SStick_spikes)
+		return
+	return list(
+		"wall_ms" = SStick_spikes.now_ms(),
+		"world_time" = world.time,
+	)
+
+/// Adds the synchronous part of one phase and advances the checkpoint. World time
+/// advances while stoplag() yields, so subtracting its progress prevents a healthy
+/// yield from being reported as expensive DM work.
+/proc/client_latency_profile_checkpoint(list/phases, label, list/previous)
+	if(!SStick_spikes || !islist(previous))
+		return previous
+	var/current_ms = SStick_spikes.now_ms()
+	var/current_world_time = world.time
+	var/wall_ms = max(current_ms - previous["wall_ms"], 0)
+	var/game_clock_ms = max(current_world_time - previous["world_time"], 0) * 100
+	phases[label] = round(ping_server_component(wall_ms, game_clock_ms), 0.01)
+	previous["wall_ms"] = current_ms
+	previous["world_time"] = current_world_time
+	return previous
+
 /proc/log_reagent(text)
 	if (CONFIG_GET(flag/log_reagents))
 		WRITE_LOG(GLOB.reagent_log, text)

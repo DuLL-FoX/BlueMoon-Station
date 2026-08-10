@@ -704,15 +704,15 @@ GLOBAL_DATUM_INIT(ahelp_tickets, /datum/admin_help_tickets, new)
  * * additional_data - An (optional) associated list of extra parameters and data to send with this world topic call
  */
 /proc/send2otherserver(source, msg, type = "Ahelp", target_servers, list/additional_data = list())
-	if(!CONFIG_GET(string/comms_key))
+	var/comms_key = CONFIG_GET(string/comms_key)
+	if(!comms_key)
 		debug_world_log("Server cross-comms message not sent for lack of configured key")
 		return
 
-	var/our_id = CONFIG_GET(string/cross_comms_name)
-	additional_data["message_sender"] = source
-	additional_data["message"] = msg
-	additional_data["source"] = "([our_id])"
-	additional_data += type
+	var/our_id = CONFIG_GET(string/cross_comms_name) || world.name
+	var/list/message = islist(additional_data) ? additional_data.Copy() : list()
+	message["message_sender"] = source
+	message["message"] = msg
 
 	var/list/servers = CONFIG_GET(keyed_list/cross_server)
 	for(var/I in servers)
@@ -720,25 +720,20 @@ GLOBAL_DATUM_INIT(ahelp_tickets, /datum/admin_help_tickets, new)
 			continue
 		if(target_servers && !(I in target_servers))
 			continue
-		world.send_cross_comms(I, additional_data)
+		world.send_cross_comms(I, type, message, comms_key, "([our_id])")
 
 /// Sends a message to a given cross comms server by name (by name for security).
-/world/proc/send_cross_comms(server_name, list/message, auth = TRUE)
+/world/proc/send_cross_comms(server_name, query, list/message, comms_key, source)
 	set waitfor = FALSE
-	if (auth)
-		var/comms_key = CONFIG_GET(string/comms_key)
-		if(!comms_key)
-			debug_world_log("Server cross-comms message not sent for lack of configured key")
-			return
-		message["key"] = comms_key
 	var/list/servers = CONFIG_GET(keyed_list/cross_server)
 	var/server_url = servers[server_name]
 	if (!server_url)
 		CRASH("Invalid cross comms config: [server_name]")
-	// world.Export держит весь мир на всё время HTTP-обмена с соседним сервером
-	var/blocking_started_ms = blocking_call_start()
-	world.Export("[server_url]?[list2params(message)]")
-	blocking_call_finish(blocking_started_ms, "world.Export", "кросс-сервер [server_name]")
+	// Это BYOND Topic, а не HTTP: заменить rust-g без смены межсерверного протокола
+	// нельзя. Обёртка оставляет неизбежный стоп мира видимым в tick_spikes.log.
+	var/list/result = tracked_byond_topic_request(server_url, query, comms_key, source, message, "кросс-сервер [server_name]")
+	if(result["statuscode"] != 200)
+		log_runtime("Cross-server Topic '[query]' to [server_name] failed: [result["statuscode"]] [result["response"]]")
 
 /proc/ircadminwho()
 	var/list/message = list("Admins: ")

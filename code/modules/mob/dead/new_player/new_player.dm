@@ -464,6 +464,11 @@
 	return JOB_AVAILABLE
 
 /mob/dead/new_player/proc/AttemptLateSpawn(rank)
+	var/client/joining_client = client
+	var/list/latejoin_phase_checkpoint = client_latency_profile_start()
+	var/latejoin_started_ms = latejoin_phase_checkpoint?["wall_ms"]
+	var/list/latejoin_phases = list()
+
 	var/error = IsJobUnavailable(rank)
 	if(error != JOB_AVAILABLE)
 		alert(src, get_job_unavailable_error_message(error, rank))
@@ -486,18 +491,23 @@
 		if(CONFIG_GET(flag/arrivals_shuttle_require_undocked))
 			SSshuttle.arrivals.RequireUndocked(src)
 		arrivals_docked = SSshuttle.arrivals.mode != SHUTTLE_CALL
+	latejoin_phase_checkpoint = client_latency_profile_checkpoint(latejoin_phases, "prechecks", latejoin_phase_checkpoint)
 
 	//Remove the player from the join queue if he was in one and reset the timer
 	SSticker.queued_players -= src
 	SSticker.queue_delay = 4
 
 	SSjob.AssignRole(src, rank, 1)
+	latejoin_phase_checkpoint = client_latency_profile_checkpoint(latejoin_phases, "assign_role", latejoin_phase_checkpoint)
 
 	var/mob/living/character = create_character(TRUE)	//creates the human and transfers vars and mind
 	var/datum/job/job = SSjob.GetJob(rank)
+	latejoin_phase_checkpoint = client_latency_profile_checkpoint(latejoin_phases, "create_character", latejoin_phase_checkpoint)
 
 	var/equip = SSjob.EquipRank(character, rank, TRUE)
+	latejoin_phase_checkpoint = client_latency_profile_checkpoint(latejoin_phases, "equip_rank", latejoin_phase_checkpoint)
 	job.after_latejoin_spawn(character)
+	latejoin_phase_checkpoint = client_latency_profile_checkpoint(latejoin_phases, "job_after_spawn", latejoin_phase_checkpoint)
 
 	if(isliving(equip))	//Borgs get borged in the equip, so we need to make sure we handle the new mob.
 		character = equip
@@ -508,17 +518,20 @@
 			var/atom/movable/screen/splash/Spl = new(null, character, character.client, TRUE)
 			Spl.Fade(TRUE)
 			character.playsound_local(get_turf(character), 'sound/voice/ApproachingTG.ogg', 25)
+	latejoin_phase_checkpoint = client_latency_profile_checkpoint(latejoin_phases, "place_character", latejoin_phase_checkpoint)
 
 	job.standard_assign_skills(character.mind)
 
 	SSticker.minds += character.mind
 	character.client.init_verbs() // init verbs for the late join
+	latejoin_phase_checkpoint = client_latency_profile_checkpoint(latejoin_phases, "skills_and_verbs", latejoin_phase_checkpoint)
 	var/mob/living/carbon/human/humanc
 	if(ishuman(character))
 		humanc = character	//Let's retypecast the var to be human,
 
 	if(humanc)	//These procs all expect humans
 		GLOB.data_core.manifest_inject(humanc, humanc.client, humanc.client.prefs)
+		latejoin_phase_checkpoint = client_latency_profile_checkpoint(latejoin_phases, "manifest_inject", latejoin_phase_checkpoint)
 		if(SSshuttle.arrivals)
 			SSshuttle.arrivals.QueueAnnounce(humanc, rank)
 		else
@@ -536,6 +549,7 @@
 			give_madness(humanc, GLOB.curse_of_madness_triggered)
 		if(humanc.client)
 			humanc.client.prefs.post_copy_to(humanc)
+	latejoin_phase_checkpoint = client_latency_profile_checkpoint(latejoin_phases, "arrival_and_preferences", latejoin_phase_checkpoint)
 
 	GLOB.joined_player_list += character.ckey
 	GLOB.latejoiners += character
@@ -559,6 +573,20 @@
 		SSlanguage.AssignLanguage(humanc, humanc.client, TRUE, FALSE, job, FALSE)
 
 	log_manifest(character.mind.key,character.mind,character,latejoin = TRUE)
+	latejoin_phase_checkpoint = client_latency_profile_checkpoint(latejoin_phases, "post_spawn", latejoin_phase_checkpoint)
+	if(SStick_spikes && !isnull(latejoin_started_ms) && islist(latejoin_phase_checkpoint))
+		var/latejoin_wall_ms = max(latejoin_phase_checkpoint["wall_ms"] - latejoin_started_ms, 0)
+		var/latejoin_work_ms = 0
+		for(var/phase in latejoin_phases)
+			latejoin_work_ms += latejoin_phases[phase]
+		if(latejoin_work_ms >= SStick_spikes.slow_work_threshold_ms)
+			log_client_latency("slow_latejoin", joining_client, list(
+				"rank" = "[rank]",
+				"latency_ms" = round(latejoin_work_ms, 0.01),
+				"wall_latency_ms" = round(latejoin_wall_ms, 0.01),
+				"yield_ms" = round(max(latejoin_wall_ms - latejoin_work_ms, 0), 0.01),
+				"phases_ms" = latejoin_phases,
+			))
 
 /mob/dead/new_player/proc/AddEmploymentContract(mob/living/carbon/human/employee)
 	//TODO:  figure out a way to exclude wizards/nukeops/demons from this.
@@ -725,6 +753,10 @@
 	. = H
 	new_character = .
 	if(transfer_after)
+		// Preference application can consume most of a tick. Yield while the new body
+		// is still keyless and the lobby mob is still alive; yielding after
+		// transfer_character() would leave this proc sleeping on a qdel'd src.
+		CHECK_TICK
 		transfer_character(TRUE)
 
 /mob/dead/new_player/proc/transfer_character(late_transfer = FALSE)

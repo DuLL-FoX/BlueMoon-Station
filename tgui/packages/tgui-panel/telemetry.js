@@ -36,6 +36,7 @@ export const telemetryMiddleware = store => {
         type: 'telemetry',
         payload: {
           connections,
+          pixelRatio: window.devicePixelRatio,
         },
       });
       return;

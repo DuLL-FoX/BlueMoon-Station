@@ -434,17 +434,14 @@ INITIALIZE_IMMEDIATE(/obj/effect/mapping_helpers/no_lava)
 	if(icon_cache[url])
 		return icon_cache[url]
 	log_asset("Custom Icon Helper fetching dmi from: [url]")
-	var/datum/http_request/request = new()
 	var/file_name = "tmp/custom_map_icon.dmi"
-	request.prepare(RUSTG_HTTP_METHOD_GET, url , "", "", file_name)
 	query_in_progress = TRUE
-	request.begin_async()
-	UNTIL(request.is_complete())
-	var/datum/http_response/response = request.into_response()
-	if(response.errored || response.status_code != 200)
-		query_in_progress = FALSE
-		CRASH("Failed to fetch mapped custom icon from url [url], code: [response.status_code], error: [response.error]")
+	var/datum/http_response/response = world_safe_http_request(RUSTG_HTTP_METHOD_GET, url, output_file = file_name, timeout = 30 SECONDS)
+	query_in_progress = FALSE
+	if(isnull(response) || response.errored || response.status_code != 200)
+		var/status_code = response?.status_code
+		var/request_error = response?.error || "timeout"
+		CRASH("Failed to fetch mapped custom icon from url [url], code: [status_code], error: [request_error]")
 	var/icon/I = new(file_name)
 	icon_cache[url] = I
-	query_in_progress = FALSE
 	return I

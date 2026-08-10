@@ -10,3 +10,7 @@ export const PING_MAX_FAILS = 3;
 export const PING_QUEUE_SIZE = 8;
 export const PING_ROUNDTRIP_BEST = 50;
 export const PING_ROUNDTRIP_WORST = 200;
+// Full browser -> DM -> browser round trip. The visible indicator intentionally
+// displays half of it, but diagnostics must preserve the real bridge delay.
+export const PING_DIAGNOSTIC_THRESHOLD = 100;
+export const PING_DIAGNOSTIC_COOLDOWN = 10000;

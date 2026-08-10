@@ -2,7 +2,7 @@
 	protection = CONFIG_ENTRY_HIDDEN
 
 /datum/config_entry/string/comms_key/ValidateAndSet(str_val)
-	return str_val != "default_pwd" && length(str_val) > 6 && ..()
+	return str_val != "default_pwd" && lowertext(str_val) != "anonymous" && length(str_val) > 6 && ..()
 
 /datum/config_entry/keyed_list/cross_server
 	key_mode = KEY_MODE_TEXT

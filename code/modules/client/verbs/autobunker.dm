@@ -18,27 +18,25 @@
 	var/comms_key = CONFIG_GET(string/comms_key)
 	if(!comms_key)
 		return
-	var/list/message = list()
-	message["ckey"] = key
-	message["source"] = "[CONFIG_GET(string/cross_comms_name)]"
-	message["key"] = comms_key
-	message["auto_bunker_override"] = TRUE
+	var/list/message = list("ckey" = ckey(key))
+	var/source = CONFIG_GET(string/cross_comms_name) || world.name
 	var/list/servers = CONFIG_GET(keyed_list/cross_server_bunker_override)
 	if(!length(servers))
 		to_chat(C, "<span class='boldwarning'>AUTOBUNKER: No servers are configured to receive from this one.</span>")
 		return
 	log_admin("[key] ([key_name(C)]) has initiated an autobunker authentication with linked servers.")
 	for(var/name in servers)
-		// world.Export держит весь мир на всё время HTTP-обмена, и это цикл по серверам
-		var/blocking_started_ms = blocking_call_start()
-		var/returned = world.Export("[servers[name]]?[list2params(message)]")
-		blocking_call_finish(blocking_started_ms, "world.Export", "автобункер [name]")
-		switch(returned)
-			if("Bad Key")
+		// Это BYOND Topic, не HTTP: rust-g его не понимает. Вызов всё ещё синхронно
+		// останавливает мир, поэтому держим его в явной измеряемой обёртке.
+		var/list/result = tracked_byond_topic_request(servers[name], "auto_bunker_override", comms_key, source, message, "автобункер [name]")
+		if(QDELETED(C))
+			return
+		switch(result["statuscode"])
+			if(401)
 				to_chat(C, "<span class='boldwarning'>AUTOBuNKER: [name] failed to authenticate with this server.</span>")
-			if("Function Disabled")
+			if(403)
 				to_chat(C, "<span class='boldwarning'>AUTOBUNKER: [name] has autobunker receive disabled.</span>")
-			if("Success")
+			if(200)
 				to_chat(C, "<span class='boldwarning'>AUTOBUNKER: Successfully authenticated with [name]. Panic bunker bypass granted to [key].</span>.")
 			else
-				to_chat(C, "<span class='boldwarning'>AUTOBUNKER: Unknown error ([name]).</span>")
+				to_chat(C, "<span class='boldwarning'>AUTOBUNKER: [name] failed: [result["response"]] ([result["statuscode"]]).</span>")

@@ -6,8 +6,10 @@
 		winset(src, "mainwindow", "is-maximized=false;can-resize=true;titlebar=true;menu=menu")
 		winset(src, "mainwindow", "is-maximized=true")
 	// Задержка обязана стоять аргументом addtimer: внутри CALLBACK она уходит
-	// в сам верб, и подгонка вьюпорта срабатывает мгновенно, дёргая winget.
-	addtimer(CALLBACK(src, VERB_REF(fit_viewport)), 1 SECONDS)
+	// в сам прок, и подгонка вьюпорта срабатывает мгновенно, дёргая winget. Дальше
+	// ждём, пока скин освободится: у занятого подкачкой клиента один winget стоил
+	// в раунде 9870 до 125 секунд, а подгонка тут чисто косметическая.
+	addtimer(CALLBACK(src, PROC_REF(fit_viewport_when_ready)), 1 SECONDS)
 
 /datum/keybinding/client/fullscreen_toggle
 	hotkey_keys = list("F11")

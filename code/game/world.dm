@@ -22,7 +22,10 @@ GLOBAL_LIST(topic_status_cache)
 	world.Profile(PROFILE_START)
 	log_world("World loaded at [TIME_STAMP("hh:mm:ss", FALSE)]!")
 
-	GLOB.config_error_log = GLOB.world_manifest_log = GLOB.world_pda_log = GLOB.world_job_debug_log = GLOB.sql_error_log = GLOB.world_href_log = GLOB.world_runtime_log = GLOB.world_attack_log = GLOB.world_game_log = "data/logs/config_error.[GUID()].log" //temporary file used to record errors with loading config, moved to log directory once logging is set bl
+	// world_asset_log участвует здесь потому, что транспорт ассетов выбирается
+	// при загрузке конфига, то есть до SetupLogs: без этого его строки уходили бы
+	// в никуда.
+	GLOB.config_error_log = GLOB.world_manifest_log = GLOB.world_pda_log = GLOB.world_job_debug_log = GLOB.sql_error_log = GLOB.world_href_log = GLOB.world_runtime_log = GLOB.world_attack_log = GLOB.world_asset_log = GLOB.world_game_log = "data/logs/config_error.[GUID()].log" //temporary file used to record errors with loading config, moved to log directory once logging is set bl
 
 	log_world("World loaded at [TIME_STAMP("hh:mm:ss", FALSE)]!")
 
@@ -74,7 +77,9 @@ GLOBAL_LIST(topic_status_cache)
 	#endif
 
 /world/proc/InitTgs()
-	TgsNew(new /datum/tgs_event_handler/impl, TGS_SECURITY_TRUSTED)
+	// The bundled default uses world.Export() and freezes DreamDaemon for every
+	// bridge round-trip. Our handler sleeps on a rust-g async request instead.
+	TgsNew(new /datum/tgs_event_handler/impl, TGS_SECURITY_TRUSTED, new /datum/tgs_http_handler/rustg)
 	GLOB.revdata.load_tgs_info()
 
 /world/proc/HandleTestRun()
@@ -137,6 +142,7 @@ GLOBAL_LIST(topic_status_cache)
 	GLOB.world_job_debug_log = "[GLOB.log_directory]/job_debug.log"
 	GLOB.world_paper_log = "[GLOB.log_directory]/paper.log"
 	GLOB.tgui_log = "[GLOB.log_directory]/tgui.log"
+	GLOB.client_latency_log = "[GLOB.log_directory]/client_latency.jsonl"
 	GLOB.subsystem_log = "[GLOB.log_directory]/subsystem.log"
 	GLOB.reagent_log = "[GLOB.log_directory]/reagents.log"
 	GLOB.world_crafting_log = "[GLOB.log_directory]/crafting.log"
@@ -162,6 +168,7 @@ GLOBAL_LIST(topic_status_cache)
 	start_log(GLOB.world_href_log)
 	start_log(GLOB.world_qdel_log)
 	start_log(GLOB.world_runtime_log)
+	start_log(GLOB.world_asset_log)
 	start_log(GLOB.world_job_debug_log)
 	start_log(GLOB.tgui_log)
 	start_log(GLOB.subsystem_log)
@@ -186,80 +193,97 @@ GLOBAL_LIST(topic_status_cache)
 /world/Topic(T, addr, master, key)
 	TGS_TOPIC	//redirect to server tools if necessary
 
-	var/static/list/req_ip_ids = list()
-	var/list/response = list()
-
 	if(length(T) > CONFIG_GET(number/topic_max_size))
-		response["statuscode"] = 413
-		response["response"] = "Payload too large"
-		return json_encode(response)
+		return world_topic_response(413, "Payload too large")
+
+	if(!SSfail2topic || !SStopic)
+		return world_topic_response(503, "Server not initialized")
+	if(SSfail2topic.IsRateLimited(addr))
+		return world_topic_response(429, "Rate limited")
 
 	var/logging = CONFIG_GET(flag/log_world_topic)
 	var/topic_decoded = rustg_url_decode(T)
 	if(!rustg_json_is_valid(topic_decoded))
 		if(logging)
-			log_topic("(NON-JSON) \"[topic_decoded]\", from:[addr], master:[master], key:[key]")
+			log_topic("(NON-JSON) bytes:[length(T)], from:[addr], master:[master], key:[key]")
 		// Fallback check for spacestation13.com requests
 		if(topic_decoded == "status")
 			return list2params(list("players" = length(GLOB.clients)))
-		response["statuscode"] = 400
-		response["response"] = "Bad Request - Invalid JSON format"
-		return json_encode(response)
+		return world_topic_response(400, "Bad Request - Invalid JSON format")
 
 	var/list/params = json_decode(topic_decoded)
+	if(!islist(params))
+		return world_topic_response(400, "Bad Request - JSON payload must be an object")
 	params["addr"] = addr
 	var/query = params["query"]
 	var/auth = params["auth"]
 	var/source = params["source"]
+	var/req_id = params["req_id"]
 
 	if(logging)
-		var/list/censored_params = params.Copy()
-		censored_params["auth"] = "***[copytext(params["auth"], -4)]"
-		log_topic("\"[json_encode(censored_params)]\", from:[addr], master:[master], auth:[censored_params["auth"]], key:[key], source:[source]")
+		var/auth_text = istext(auth) ? auth : ""
+		var/redacted_auth = length(auth_text) > 4 ? "***[copytext(auth_text, -4)]" : "***"
+		log_topic("query:[query], req_id:[req_id], bytes:[length(T)], from:[addr], master:[master], auth:[redacted_auth], key:[key], source:[source]")
 
-	var/req_id = params["req_id"]
-	response["req_id"] = req_id
-	if(!req_ip_ids[addr])
-		req_ip_ids[addr] = list()
-	if(req_ip_ids[addr][req_id])
-		response["statuscode"] = 202
-		response["response"] = "Bad Request - Already handled"
-		return json_encode(response)
-
-	req_ip_ids[addr] += req_id
-
-	if(!source)
-		response["statuscode"] = 400
-		response["response"] = "Bad Request - No source specified"
-		return json_encode(response)
-
-	if(!query)
-		response["statuscode"] = 400
-		response["response"] = "Bad Request - No endpoint specified"
-		return json_encode(response)
+	if(!istext(source) || !length(source) || length(source) > 128)
+		return world_topic_response(400, "Bad Request - Invalid or missing source", req_id = req_id)
+	if(!istext(query) || !length(query) || length(query) > 64)
+		return world_topic_response(400, "Bad Request - Invalid or missing endpoint", req_id = req_id)
+	if(!istext(auth) || !length(auth) || length(auth) > 512)
+		return world_topic_response(401, "Unauthorized - Bad auth", req_id = req_id)
+	if(!isnull(req_id) && (!istext(req_id) || !length(req_id) || length(req_id) > 128))
+		return world_topic_response(400, "Bad Request - Invalid request id")
 
 	if(!LAZYACCESS(GLOB.topic_tokens["[auth]"], "[query]"))
-		response["statuscode"] = 401
-		response["response"] = "Unauthorized - Bad auth"
-		return json_encode(response)
+		return world_topic_response(401, "Unauthorized - Bad auth", req_id = req_id)
 
-	var/datum/world_topic/command = GLOB.topic_commands["[query]"]
-	if(!command)
-		response["statuscode"] = 501
-		response["response"] = "Not Implemented"
-		return json_encode(response)
+	var/command_path = GLOB.topic_commands["[query]"]
+	if(!command_path)
+		return world_topic_response(501, "Not Implemented", req_id = req_id)
 
-	if(command.CheckParams(params))
-		response["statuscode"] = command.statuscode
-		response["response"] = command.response
-		response["data"] = command.data
-		return json_encode(response)
-	else
-		command.Run(params)
-		response["statuscode"] = command.statuscode
-		response["response"] = command.response
-		response["data"] = command.data
-		return json_encode(response)
+	var/cache_key
+	if(req_id && auth != "anonymous")
+		cache_key = SStopic.replay_key(auth, req_id)
+		var/cached_response = SStopic.get_replay_response(cache_key)
+		if(cached_response)
+			return cached_response
+		if(SStopic.is_request_inflight(cache_key))
+			return world_topic_response(409, "Request is already in progress", req_id = req_id)
+		SStopic.start_request(cache_key)
+
+	var/datum/world_topic/command
+	var/encoded_response
+	var/topic_status = 500
+	var/topic_started_ms = SStick_spikes?.now_ms()
+	try
+		command = new command_path()
+		if(command.CheckParams(params))
+			topic_status = command.statuscode
+			encoded_response = world_topic_response(command.statuscode, command.response, command.data, req_id)
+		else
+			command.Run(params)
+			topic_status = command.statuscode
+			encoded_response = world_topic_response(command.statuscode, command.response, command.data, req_id)
+	catch(var/exception/error)
+		topic_status = 500
+		stack_trace("World Topic '[query]' from [addr] runtimed: [error] on [error.file]:[error.line]")
+		encoded_response = world_topic_response(500, "Internal Server Error", req_id = req_id)
+	qdel(command)
+	if(!isnull(topic_started_ms))
+		var/topic_cost_ms = SStick_spikes.now_ms() - topic_started_ms
+		if(topic_cost_ms >= SStick_spikes.slow_work_threshold_ms)
+			log_client_latency("slow_world_topic", null, list(
+				"query" = query,
+				"source" = source,
+				"request_id" = req_id,
+				"address" = addr,
+				"status_code" = topic_status,
+				"latency_ms" = topic_cost_ms,
+			))
+
+	if(cache_key)
+		SStopic.finish_request(cache_key, encoded_response)
+	return encoded_response
 
 /world/proc/AnnouncePR(announcement, list/payload)
 	var/static/list/PRcounts = list()	//PR id -> number of times announced this round
