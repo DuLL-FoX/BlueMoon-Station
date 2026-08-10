@@ -175,7 +175,9 @@ GLOBAL_PROTECT(admin_verbs_server)
 	/client/proc/vpnbunker, //SPLURT
 	// /client/proc/toggle_interviews,
 	/client/proc/toggle_hub,
-	/client/proc/toggle_cdn
+	/client/proc/toggle_cdn,
+	/client/proc/toggle_external_rsc,
+	/client/proc/resource_delivery_report
 	)
 GLOBAL_LIST_INIT(admin_verbs_debug, world.AVerbsDebug())
 GLOBAL_PROTECT(admin_verbs_debug)
@@ -247,6 +249,8 @@ GLOBAL_PROTECT(admin_verbs_debug)
 	#endif
 	// /client/proc/check_timer_sources,
 	/client/proc/toggle_cdn,
+	/client/proc/toggle_external_rsc,
+	/client/proc/resource_delivery_report,
 	/client/proc/discordnulls,
 	/client/proc/generate_wikichem_list, //DO NOT PRESS UNLESS YOU WANT SUPERLAG
 	/client/proc/allow_browser_inspect,

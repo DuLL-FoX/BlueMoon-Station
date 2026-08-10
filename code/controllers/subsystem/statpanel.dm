@@ -785,7 +785,7 @@ SUBSYSTEM_DEF(statpanels)
 	set name = "Panel Ready"
 	set hidden = TRUE
 
-	statbrowser_ready = TRUE
+	ensure_resource_session().note_statbrowser_ready(reason = "panel_ready")
 	// Re-acknowledge protocol on each ready event so JS can detect a stale cached HTML.
 	statpanel_protocol_acked = FALSE
 	statpanel_last_sent.Cut()

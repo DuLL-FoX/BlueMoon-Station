@@ -122,6 +122,60 @@
 	var/avgping_server
 	var/avgping_jitter
 	var/ping_updated = FALSE
+	/// Монотонные номера нативных ping-команд: пропуски и перестановка показывают
+	/// очередь DreamSeeker, чего один timestamp определить не может.
+	var/ping_sequence_sent = 0
+	var/ping_sequence_received = 0
+	/// Стенные часы последнего ответа нужны для интервала между ответами. world.time
+	/// продолжает идти во время клиентского ожидания и скрывает такую паузу.
+	var/lastping_realtimeofday = 0
+	/// world.time последнего подробного native_ping_spike; null допускает первый отчёт.
+	var/last_ping_latency_report_at
+	/// Последний медленный round-trip до нативного скина (winget/winexists).
+	var/last_skin_latency_at = 0
+	var/last_skin_latency_kind
+	var/last_skin_latency_ms = 0
+	var/last_skin_latency_detail
+	/// Последний синхронно дорогой /client/Topic этого клиента.
+	var/last_slow_topic_at = 0
+	var/last_slow_topic_context
+	var/last_slow_topic_ms = 0
+	/// Последняя задержка, которую независимо увидел statbrowser или tgui-panel.
+	var/last_browser_latency_at = 0
+	var/last_browser_latency_source
+	var/last_browser_latency_ms = 0
+	var/last_browser_latency_hidden = FALSE
+	var/last_browser_latency_focused = FALSE
+	/// Источник -> world.time последнего принятого отчёта; отдельные WebView не
+	/// заглушают друг друга, но один источник не может заспамить лог.
+	var/list/browser_latency_report_times = list()
+	/// Докуда дошла выдача ресурсов этому клиенту, см. CLIENT_RESOURCE_STAGE_*. Нужен
+	/// строке Logout: BYOND про обрыв говорит только "code 0: no/unknown reason".
+	var/resource_stage = CLIENT_RESOURCE_STAGE_CONNECTED
+	/// "этап" -> REALTIMEOFDAY входа в него. Ключ текстовый: ассоциативный список с
+	/// числовым ключом BYOND читает как индекс. Счётчики этапов говорят, ГДЕ рвётся,
+	/// а эти метки - сколько выдача стоит тем, кто дошёл; считаем по живым клиентам.
+	var/list/resource_stage_times = list()
+	/// Independent per-connection browser/resource lifecycle. resource_stage and the
+	/// older booleans above remain compatibility projections for logs and callers.
+	var/datum/client_resource_session/resource_session
+	/// TRUE after validated browser devicePixelRatio telemetry was applied. Login DPI
+	/// timers use this to avoid a redundant blocking native winget.
+	var/dpi_telemetry_received = FALSE
+	/// Адрес внешнего зеркала .rsc, назначенный этому клиенту. null - раздача идёт
+	/// с DreamDaemon (внешних адресов нет либо выдача выключена).
+	var/rsc_source_url
+	/// TRUE, если окно статбраузера открывалось адресом наружу (webroot-транспорт).
+	/// Запоминаем в момент выдачи: к проверке транспорт мог уже сорваться, а клиент
+	/// всё равно держит выданный ему http-адрес.
+	var/statbrowser_served_externally = FALSE
+	/// TRUE после того, как статбраузер этому клиенту переоткрыли локально.
+	var/statbrowser_local_fallback = FALSE
+	/// Сколько раз игрок просил перезагрузить статбраузер ссылкой из чата.
+	var/statbrowser_reload_attempts = 0
+	/// Сколько раз подряд автоматическую подгонку вьюпорта уже отложили, потому что скин
+	/// не отвечал. Сбрасывается, как только подгонка состоялась.
+	var/fit_viewport_defers = 0
 	var/list/ping_rtt_window = list()
 	/// Incrementally maintained sorted mirror of ping_rtt_window, see rtt_window_push()
 	var/list/ping_rtt_sorted = list()

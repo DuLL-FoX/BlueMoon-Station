@@ -3,7 +3,34 @@
 # If you set this mutiple times, the server will rotate between the links.
 # To use this, the compile option PRELOAD_RSC must be set to 0 to keep byond from preloading resources
 
-EXTERNAL_RSC_URLS https://wiki.ss13-bluemoon.ru/images/5/5f/tgstationv2.zip
+# Production TGS builds use an immutable, versioned URL embedded by
+# tools/rsc_deploy and ignore the entry below. It stays as the fallback for
+# unmanaged builds: PostCompile relinks this unversioned name to the archive of
+# every deployment it publishes (RSC_LEGACY_ALIAS_NAME), so it does not go
+# stale. Because it is not content-addressed, do not serve it with an
+# "immutable" cache policy.
+EXTERNAL_RSC_URLS http://download.ss13-bluemoon.ru:8080/byond_rsc/Moon-Blue.zip
+
+# Рантайм-выключатель внешней выдачи .rsc. 0 - клиентам не выдаётся ни один
+# внешний адрес, архив ресурсов тянется с самого DreamDaemon.
+# Нужен потому, что адреса версионного архива зашиты в сборку деплоем: если архив
+# пропал с раздачи, без этого выключателя лечить пришлось бы перекомпиляцией.
+# Действует на НОВЫЕ подключения; уже вошедшим клиентам адрес выдан и не меняется.
+# Тот же переключатель есть в игре: админский верб "Toggle External RSC".
+#EXTERNAL_RSC_DELIVERY 0
+
+# Как часто (в секундах) активно проверять, жива ли внешняя раздача: версионный
+# архив .rsc, webroot браузерных ассетов и медиа лобби. 0 - проба выключена.
+# Без неё сервер узнаёт об упавшей раздаче только по жалобам игроков: клиенты
+# молча падают на локальный путь, и лобби просто открывается медленнее.
+# Проверяется только то, что в этой сборке действительно есть: архив - лишь когда
+# адрес зашит деплоем (адрес выше проба намеренно не трогает, он приезжает
+# с репозиторием и никем не выбран), ассеты - лишь при webroot-транспорте, медиа -
+# лишь при загруженном манифесте. Локальная сборка поэтому наружу не ходит вовсе.
+# Запрос идёт методом HEAD. Если раздача отвечает на него 405/501, проверить адрес
+# нечем: такую цель проба не считает ни живой, ни упавшей - не кричит о падении,
+# но и не снимает по ней глушение. Об этом пишется строка в asset.log.
+#CDN_PROBE_INTERVAL 300
 
 ########################
 # Browser Asset Config #
@@ -27,8 +54,9 @@ EXTERNAL_RSC_URLS https://wiki.ss13-bluemoon.ru/images/5/5f/tgstationv2.zip
 
 # Webroot asset transport configurable values.
 
-# Local folder to save assets to.
-# Assets will be saved in the format of asset.MD5HASH.EXT or in namespaces/hash/ as ASSET_FILE_NAME or asset.MD5HASH.EXT
+# Build-owned local folder containing published assets. DreamDaemon treats it as
+# read-only and sends missing/runtime-generated assets through browse_rsc.
+# Assets use asset.MD5HASH.EXT or namespaces/hash/ASSET_FILE_NAME paths.
 #ASSET_CDN_WEBROOT data/asset-store/
 
 # URL the folder from above can be accessed from.

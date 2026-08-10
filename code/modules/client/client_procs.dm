@@ -24,6 +24,40 @@ GLOBAL_LIST_EMPTY(recent_reconnects)
 /// world.time последнего крика про шторм, чтобы не спамить админам.
 GLOBAL_VAR_INIT(last_churn_alert, 0)
 
+/// "этап" -> сколько закрытых соединений умерло, не пройдя дальше него. Ключ текстовый:
+/// ассоциативный список с числовыми ключами BYOND трактует как индексы.
+GLOBAL_LIST_EMPTY(round_connection_stage_deaths)
+
+/// Источник .rsc -> list(закрытых соединений, из них не доживших до статбраузера).
+/// Ключ - адрес зеркала либо CLIENT_RSC_SOURCE_LOCAL. Отвечает на вопрос, который
+/// общие счётчики этапов не берут: рвётся у всех или только на одном зеркале.
+GLOBAL_LIST_EMPTY(round_connection_deaths_by_rsc_source)
+
+/// Человекочитаемое имя этапа выдачи ресурсов для логов.
+/proc/client_resource_stage_name(stage)
+	switch(stage)
+		if(CLIENT_RESOURCE_STAGE_CONNECTED)
+			return "соединение открыто"
+		if(CLIENT_RESOURCE_STAGE_REQUESTED)
+			return "ресурсы запрошены"
+		if(CLIENT_RESOURCE_STAGE_ASSETS_ACK)
+			return "кеш ассетов отозвался"
+		if(CLIENT_RESOURCE_STAGE_STATBROWSER)
+			return "статбраузер поднялся"
+		if(CLIENT_RESOURCE_STAGE_UI_READY)
+			return "интерфейс готов"
+	return "этап [stage]"
+
+/**
+ * Отмечает пройденный этап выдачи ресурсов.
+ *
+ * Только вперёд: statbrowser поднимается заново на каждом panel_ready (в том числе при
+ * ручном "Fix Stat Panel"), и без этого условия готовый клиент откатывался бы назад,
+ * а сводка считала бы живое соединение умершим на полпути.
+ */
+/client/proc/advance_resource_stage(stage)
+	ensure_resource_session().apply_legacy_stage(stage)
+
 /// Порог, с которого ckey попадает в поимённый список циклящихся в сводке раунда.
 #define CHURN_REPORT_THRESHOLD 10
 /// Сколько РАЗНЫХ ckey должны переподключиться за окно, чтобы это считалось штормом.
@@ -87,6 +121,7 @@ GLOBAL_VAR_INIT(last_churn_alert, 0)
 	log_access("CHURN: подключений за раунд [total_connections], уникальных ckey [length(GLOB.round_connection_counts)]; \
 		по одному входу [buckets["1"]], 2-4 входа [buckets["2-4"]], 5-9 входов [buckets["5-9"]], \
 		[CHURN_REPORT_THRESHOLD]+ входов [buckets["[CHURN_REPORT_THRESHOLD]+"]]")
+	log_connection_stage_summary()
 	for(var/ckey in heavy)
 		var/list/record = GLOB.round_connection_lifetimes[ckey]
 		if(!record || !record[1])
@@ -94,6 +129,149 @@ GLOBAL_VAR_INIT(last_churn_alert, 0)
 			continue
 		log_access("CHURN:   [ckey] - входов [GLOB.round_connection_counts[ckey]], \
 			среднее время жизни соединения [round(record[2] / record[1], 0.1)]с, самое короткое [round(record[3], 0.1)]с")
+
+/**
+ * На каком этапе выдачи ресурсов умирали закрытые соединения.
+ *
+ * Ради этой одной строки всё и заводилось. "Connection failed after handshake (code 0:
+ * no/unknown reason)" со стороны клиента не значит ничего, а здесь видно: если основная
+ * масса обрывов приходится на этапы до статбраузера, соединение не переживает того
+ * объёма, который мы наливаем в канал на входе, и лечится это переносом .rsc и ассетов
+ * на HTTP. Если же обрывы равномерно размазаны по всем этапам, включая "интерфейс готов",
+ * выдача ресурсов ни при чём.
+ *
+ * Источник .rsc пишем в ту же строку: без него сравнить раунд до переезда на версионный
+ * архив и после можно будет только по памяти.
+ */
+/proc/log_connection_stage_summary()
+	var/line = build_connection_stage_summary()
+	if(line)
+		log_access(line)
+	// Отдельной строкой: тайминги считаются по ЖИВЫМ клиентам и есть даже там, где за
+	// раунд не закрылось ни одного соединения и сводка по этапам пуста.
+	var/timings = build_resource_stage_timing_summary()
+	if(timings)
+		log_access("CHURN: [timings]")
+
+/// Строка сводки, отдельно от записи в лог - иначе её нечем проверить в тесте.
+/// Возвращает null, когда за раунд не закрылось ни одного соединения.
+/proc/build_connection_stage_summary()
+	var/total = 0
+	for(var/stage_key in GLOB.round_connection_stage_deaths)
+		total += GLOB.round_connection_stage_deaths[stage_key]
+	if(!total)
+		return null
+	var/died_on_delivery = 0
+	var/list/parts = list()
+	for(var/stage in CLIENT_RESOURCE_STAGE_CONNECTED to CLIENT_RESOURCE_STAGE_UI_READY)
+		var/count = GLOB.round_connection_stage_deaths["[stage]"]
+		if(!count)
+			continue
+		parts += "[client_resource_stage_name(stage)] [count]"
+		if(stage < CLIENT_RESOURCE_STAGE_SURVIVED)
+			died_on_delivery += count
+	var/rsc_source = "с DreamDaemon"
+	if(length(GLOB.external_rsc_url_list))
+		// Адреса есть, но выдача выключена вербом или конфигом - клиенты всё равно тянут
+		// архив с DreamDaemon. Без этой оговорки сводка выключенного раунда была бы
+		// неотличима от сводки раунда на версионном архиве.
+		if(GLOB.external_rsc_delivery_enabled)
+			rsc_source = GLOB.external_rsc_from_deployment ? "версионный архив, зашитый в сборку" : "конфиг EXTERNAL_RSC_URLS"
+		else
+			rsc_source = "с DreamDaemon (внешняя выдача выключена)"
+	var/line = "CHURN: закрытых соединений [total], из них не дожили до статбраузера [died_on_delivery] \
+		([round(died_on_delivery / total * 100)]%); по этапам: [parts.Join(", ")]; источник .rsc: [rsc_source]"
+	var/mirrors = build_rsc_mirror_death_breakdown()
+	if(mirrors)
+		line += "; по зеркалам: [mirrors]"
+	return line
+
+/// Разбивка закрытых соединений по зеркалу .rsc: "адрес - N из M", где N - те, что
+/// не дожили до статбраузера. Ровный процент смертей на всех зеркалах означает, что
+/// дело не в раздаче; выбивающееся зеркало видно сразу.
+/// Возвращает null, когда разбивать нечего.
+/proc/build_rsc_mirror_death_breakdown()
+	if(length(GLOB.round_connection_deaths_by_rsc_source) < 2)
+		return null
+	var/list/parts = list()
+	for(var/source_key in GLOB.round_connection_deaths_by_rsc_source)
+		var/list/record = GLOB.round_connection_deaths_by_rsc_source[source_key]
+		parts += "[source_key] - [record[2]] из [record[1]]"
+	return parts.Join(", ")
+
+/**
+ * Сколько выдача ресурсов стоит тем, кто её пережил.
+ *
+ * Счётчики этапов считают только закрытые соединения и отвечают на вопрос "где рвётся".
+ * Вопрос "сколько это длится" они не берут вовсе: клиент, дошедший до интерфейса за
+ * три минуты, в них неотличим от дошедшего за три секунды. Считаем по ЖИВЫМ клиентам,
+ * от первой метки этапа до каждой следующей.
+ *
+ * Медиана и p95, а не среднее: на десятке клиентов один подвисший задирает среднее так,
+ * что оно перестаёт описывать хоть кого-нибудь.
+ *
+ * Клиенты с единственной меткой этапа считаются отдельным хвостом: усреднять по ним
+ * нечего, но это ровно застрявшие на первом этапе, и молча выпадая из выборки они
+ * делали сводку тем оптимистичнее, чем хуже шла выдача.
+ */
+/proc/build_resource_stage_timing_summary()
+	var/list/samples_by_stage = list()
+	//этап -> list(клиентов, возраст самой старой метки в децисекундах)
+	var/list/stalled_by_stage = list()
+	var/counted_clients = 0
+	var/now = REALTIMEOFDAY
+	for(var/client/connected_client in GLOB.clients)
+		var/list/stage_times = connected_client.resource_stage_times
+		if(!length(stage_times))
+			continue
+		if(length(stage_times) < 2)
+			for(var/stage_key in stage_times)
+				var/list/stall_record = stalled_by_stage[stage_key]
+				if(!stall_record)
+					stall_record = list(0, 0)
+					stalled_by_stage[stage_key] = stall_record
+				stall_record[1]++
+				stall_record[2] = max(stall_record[2], now - stage_times[stage_key])
+			continue
+		var/baseline
+		for(var/stage_key in stage_times)
+			var/stamp = stage_times[stage_key]
+			if(isnull(baseline) || stamp < baseline)
+				baseline = stamp
+		counted_clients++
+		for(var/stage_key in stage_times)
+			var/list/samples = samples_by_stage[stage_key]
+			if(!samples)
+				samples = list()
+				samples_by_stage[stage_key] = samples
+			samples += max(stage_times[stage_key] - baseline, 0)
+	var/list/parts = list()
+	if(counted_clients)
+		for(var/stage = CLIENT_RESOURCE_STAGE_CONNECTED to CLIENT_RESOURCE_STAGE_UI_READY)
+			var/list/samples = samples_by_stage["[stage]"]
+			if(!length(samples))
+				continue
+			sortTim(samples, GLOBAL_PROC_REF(cmp_numeric_asc))
+			var/median = samples[CEILING(length(samples) / 2, 1)]
+			var/percentile95 = samples[CEILING(length(samples) * 0.95, 1)]
+			if(!median && !percentile95)
+				continue //опорный этап: от него и считаем, у всех ноль
+			//REALTIMEOFDAY в децисекундах, а сводку читают люди
+			parts += "[client_resource_stage_name(stage)] медиана [round(median / 10, 0.1)]с, p95 [round(percentile95 / 10, 0.1)]с"
+	var/list/stalled_parts = list()
+	for(var/stage = CLIENT_RESOURCE_STAGE_CONNECTED to CLIENT_RESOURCE_STAGE_UI_READY)
+		var/list/stall_record = stalled_by_stage["[stage]"]
+		if(!stall_record)
+			continue
+		stalled_parts += "«[client_resource_stage_name(stage)]»: [stall_record[1]], самый старый [round(stall_record[2] / 10, 0.1)]с"
+	var/list/summary = list()
+	if(length(parts))
+		summary += "тайминги по [counted_clients] живым клиентам: [parts.Join("; ")]"
+	if(length(stalled_parts))
+		summary += "ещё не прошли дальше [stalled_parts.Join("; ")]"
+	if(!length(summary))
+		return null
+	return summary.Join("; ")
 
 #undef CHURN_REPORT_THRESHOLD
 #undef CHURN_ALERT_DISTINCT_CKEYS
@@ -130,6 +308,7 @@ GLOBAL_VAR_INIT(last_churn_alert, 0)
 		return
 	var/href_preview = length(href) > 200 ? "[copytext(href, 1, 201)]..." : href
 	SStick_spikes.record_slow_work("Topic ([context])", "[ckey]: [href_preview]", cost_ms)
+	record_topic_latency(context, href_preview, cost_ms)
 
 /client/Topic(href, href_list, hsrc)
 	// BYOND 516 can invoke browser/topic callbacks with a null usr.
@@ -144,9 +323,12 @@ GLOBAL_VAR_INIT(last_churn_alert, 0)
 	// asset_cache
 	var/asset_cache_job
 	if(href_list["asset_cache_confirm_arrival"])
+		var/asset_cache_job_id = round(text2num(href_list["asset_cache_confirm_arrival"]))
 		asset_cache_job = asset_cache_confirm_arrival(href_list["asset_cache_confirm_arrival"])
 		if (!asset_cache_job)
 			return
+		if(completed_asset_jobs["[asset_cache_job_id]"])
+			ensure_resource_session().note_asset_cache_ready("asset delivery acknowledged")
 
 	// Tgui Topic middleware — exempt from rate limiting.
 	// tgui messages (ready, ping, UI interactions) must not be dropped
@@ -210,13 +392,19 @@ GLOBAL_VAR_INIT(last_churn_alert, 0)
 	if(href_list["reload_tguipanel"])
 		nuke_chat()
 	if(href_list["reload_statbrowser"])
-		statbrowser_ready = FALSE
+		ensure_resource_session().invalidate_statbrowser("manual statbrowser reload")
 		statpanel_protocol_acked = FALSE
 		statpanel_last_sent.Cut()
 		statpanel_last_mc_iter = -1
 		reset_listed_turf_icon_cache()
-		src << browse(file('html/statbrowser.html'), "window=statbrowser")
-		addtimer(CALLBACK(src, PROC_REF(check_panel_loaded)), 30 SECONDS)
+		// Игрок нажал ссылку второй раз - первый путь уже не сработал, повторять его
+		// незачем. Ведём на локальную выдачу: она не зависит от внешней раздачи.
+		if(statbrowser_local_fallback || statbrowser_reload_attempts)
+			load_local_statbrowser()
+		else
+			load_bluemoon_statbrowser()
+		statbrowser_reload_attempts++
+		addtimer(CALLBACK(src, PROC_REF(check_panel_loaded)), STATBROWSER_LOAD_TIMEOUT)
 	// Log all hrefs
 	log_href("[src] (usr:[usr]\[[COORD(usr)]\]) : [hsrc ? "[hsrc] " : ""][href]")
 
@@ -503,10 +691,21 @@ GLOBAL_VAR_INIT(last_churn_alert, 0)
 /// ответа клиента, и на плохом канале это секунды - результат нужен только ради текста
 /// предупреждения, так что на пути входа в игру ему делать нечего.
 #define ASSET_CACHE_BROWSER_CHECK_DELAY (10 SECONDS)
+/// How often to retry the cosmetic custom-skin check while the client is still busy.
+#define ASSET_CACHE_BROWSER_CHECK_RETRY_DELAY (5 SECONDS)
+/// Do not retain a disconnected or permanently unresponsive client forever.
+#define ASSET_CACHE_BROWSER_CHECK_RETRIES 6
 /// Через сколько после логина подгонять вьюпорт. fit_viewport - это winget на размеры
 /// плюс до трёх round-trip'ов коррекции подряд; путь change_view откладывает его ровно
 /// по той же причине.
 #define LOGIN_FIT_VIEWPORT_DELAY (1 SECONDS)
+/// DPI is cosmetic and must not be the first native round-trip of a connecting
+/// DreamSeeker. Probe only after an ordinary ping proves that the skin queue drained.
+#define LOGIN_DPI_CHECK_DELAY (1 SECONDS)
+#define LOGIN_DPI_CHECK_RETRIES 20
+/// Give the already-started tgui-panel telemetry a chance to provide devicePixelRatio
+/// before issuing the native fallback query.
+#define LOGIN_DPI_TELEMETRY_GRACE_RETRIES 5
 
 /client/New(TopicData)
 	last_activity = world.time
@@ -519,6 +718,7 @@ GLOBAL_VAR_INIT(last_churn_alert, 0)
 
 	GLOB.clients += src
 	GLOB.directory[ckey] = src
+	resource_session = new(src)
 
 	// Окна tgui прошлого подключения живут в скине и переживают реконнект, а реестр
 	// tgui_windows лежит на /client и у нас пустой. Пока их не погасить, каждое такое
@@ -655,12 +855,12 @@ GLOBAL_VAR_INIT(last_churn_alert, 0)
 				return
 
 	// Initialize tgui panel
-	statbrowser_ready = FALSE
+	resource_session.invalidate_statbrowser("initial statbrowser load")
 	reset_listed_turf_icon_cache()
-	src << browse(file('html/statbrowser.html'), "window=statbrowser")
-	addtimer(CALLBACK(src, PROC_REF(check_panel_loaded)), 30 SECONDS)
+	load_bluemoon_statbrowser()
+	addtimer(CALLBACK(src, PROC_REF(check_panel_loaded)), STATBROWSER_LOAD_TIMEOUT)
 	tgui_panel.initialize()
-	acquire_dpi()
+	addtimer(CALLBACK(src, PROC_REF(acquire_dpi_when_ready), LOGIN_DPI_CHECK_RETRIES), LOGIN_DPI_CHECK_DELAY)
 
 	if(alert_mob_dupe_login && !holder)
 		var/dupe_login_message = "Your ComputerID has already logged in with another key this round, please log out of this one NOW or risk being banned!"
@@ -792,7 +992,7 @@ GLOBAL_VAR_INIT(last_churn_alert, 0)
 	// Проверка кастомного скина уехала в таймер: winexists усыпляет прок до ответа
 	// клиента, а в прод-раунде один такой вызов стоил 5.5 секунды - и всё остальное
 	// в New() эти секунды ждало.
-	addtimer(CALLBACK(src, PROC_REF(warn_if_no_asset_cache_browser)), ASSET_CACHE_BROWSER_CHECK_DELAY)
+	addtimer(CALLBACK(src, PROC_REF(warn_if_no_asset_cache_browser), ASSET_CACHE_BROWSER_CHECK_RETRIES), ASSET_CACHE_BROWSER_CHECK_DELAY)
 
 	// Тултип больше не заводится на логине: его New() шлёт клиенту jquery (95 КБ),
 	// и это единственный ассет, который межсессионный кэш пропустить не может -
@@ -828,20 +1028,56 @@ GLOBAL_VAR_INIT(last_churn_alert, 0)
 	view_size.setZoomMode()
 	normalize_ui_layout()
 	// Подгонка вьюпорта - самая тяжёлая пачка round-trip'ов на логине: winget на размеры
-	// плюс цикл коррекции. Откладываем, как это уже делает change_view.
-	addtimer(CALLBACK(src, VERB_REF(fit_viewport)), LOGIN_FIT_VIEWPORT_DELAY)
+	// плюс цикл коррекции. Откладываем, как это уже делает change_view, и вдобавок ждём,
+	// пока клиент начнёт отвечать: на логине он занят подкачкой ресурсов.
+	addtimer(CALLBACK(src, PROC_REF(fit_viewport_when_ready)), LOGIN_FIT_VIEWPORT_DELAY)
 	Master.UpdateTickRate()
 
 /// Отсутствие окна кэша ассетов означает кастомный скин - предупреждаем и только.
 /// Зовётся таймером после логина: winexists ждёт ответа скина, и на входе в игру
 /// такое ожидание не нужно никому.
-/client/proc/warn_if_no_asset_cache_browser()
+/client/proc/warn_if_no_asset_cache_browser(retries_left = 0)
+	// This check only decides whether to show a custom-skin warning. Do not start a
+	// potentially multi-second winexists round-trip while DreamSeeker is still
+	// downloading resources; retry after its ordinary ping channel has recovered.
+	if(!client_skin_responsive(src))
+		if(retries_left > 0)
+			addtimer(CALLBACK(src, PROC_REF(warn_if_no_asset_cache_browser), retries_left - 1), ASSET_CACHE_BROWSER_CHECK_RETRY_DELAY, TIMER_UNIQUE | TIMER_OVERRIDE)
+		return
 	if(tracked_winexists(src, "asset_cache_browser"))
+		ensure_resource_session().note_asset_cache_ready("asset cache browser responded")
 		return
 	to_chat(src, "<span class='warning'>Unable to access asset cache browser, if you are using a custom skin file, please allow DS to download the updated version, if you are not, then make a bug report. This is not a critical issue but can cause issues with resource downloading, as it is impossible to know when extra resources arrived to you.</span>")
 
+/// Login-only DPI acquisition. Unlike acquire_dpi(), this never enters winget while
+/// the client has no recent cheap native round-trip. The manual UI repair verbs keep
+/// calling acquire_dpi() directly because their caller explicitly chose to wait.
+/client/proc/acquire_dpi_when_ready(retries_left = 0, telemetry_grace_left = LOGIN_DPI_TELEMETRY_GRACE_RETRIES)
+	if(QDELETED(src))
+		return FALSE
+	if(dpi_telemetry_received)
+		return TRUE
+	// tgui-panel is initialized before this timer starts and normally answers without
+	// any native IPC. Allow it a short bounded window before considering winget.
+	if(telemetry_grace_left > 0)
+		addtimer(CALLBACK(src, PROC_REF(acquire_dpi_when_ready), retries_left - 1, telemetry_grace_left - 1), LOGIN_DPI_CHECK_DELAY, TIMER_UNIQUE | TIMER_OVERRIDE)
+		return FALSE
+	// The gate protects startup, not correctness forever. A genuinely distant
+	// client may never fall below the cheap-RTT threshold, so after the bounded
+	// grace period perform the one required DPI read in this detached timer proc.
+	if(client_skin_responsive(src) || retries_left <= 0)
+		return acquire_dpi()
+	SStick_spikes?.record_skipped_blocking_call("winget")
+	addtimer(CALLBACK(src, PROC_REF(acquire_dpi_when_ready), retries_left - 1, 0), LOGIN_DPI_CHECK_DELAY, TIMER_UNIQUE | TIMER_OVERRIDE)
+	return FALSE
+
 #undef ASSET_CACHE_BROWSER_CHECK_DELAY
+#undef ASSET_CACHE_BROWSER_CHECK_RETRY_DELAY
+#undef ASSET_CACHE_BROWSER_CHECK_RETRIES
 #undef LOGIN_FIT_VIEWPORT_DELAY
+#undef LOGIN_DPI_CHECK_DELAY
+#undef LOGIN_DPI_CHECK_RETRIES
+#undef LOGIN_DPI_TELEMETRY_GRACE_RETRIES
 
 //////////////
 //DISCONNECT//
@@ -1089,6 +1325,7 @@ GLOBAL_VAR_INIT(last_churn_alert, 0)
 	if(isnum(new_scaling) && new_scaling > 0)
 		window_scaling = new_scaling
 		window_scaling_retry_count = 0
+		ensure_resource_session().set_capability(CLIENT_CAPABILITY_SKIN, CLIENT_CAPABILITY_READY, "native dpi winget")
 		return TRUE
 
 	window_scaling = 1
@@ -1147,6 +1384,18 @@ GLOBAL_VAR_INIT(last_churn_alert, 0)
 		churn_record[3] = min(churn_record[3], lifetime_seconds)
 	else
 		GLOB.round_connection_lifetimes[ckey] = list(1, lifetime_seconds, lifetime_seconds)
+	// Ключ текстовый: числовой ключ в ассоциативном списке BYOND читает как индекс.
+	var/stage_key = "[resource_stage]"
+	var/stage_deaths = GLOB.round_connection_stage_deaths[stage_key]
+	GLOB.round_connection_stage_deaths[stage_key] = (isnull(stage_deaths) ? 0 : stage_deaths) + 1
+	var/rsc_source_key = rsc_source_url || CLIENT_RSC_SOURCE_LOCAL
+	var/list/rsc_source_record = GLOB.round_connection_deaths_by_rsc_source[rsc_source_key]
+	if(!rsc_source_record)
+		rsc_source_record = list(0, 0)
+		GLOB.round_connection_deaths_by_rsc_source[rsc_source_key] = rsc_source_record
+	rsc_source_record[1] += 1
+	if(resource_stage < CLIENT_RESOURCE_STAGE_SURVIVED)
+		rsc_source_record[2] += 1
 	// Tear down listed-turf signals and any queued icon work so we don't leak refs through the signal subsystem.
 	if(listed_turf_watched || mob?.listed_turf)
 		clear_listed_turf(send_output = FALSE)
@@ -1241,6 +1490,7 @@ GLOBAL_VAR_INIT(last_churn_alert, 0)
 	QDEL_NULL(void)
 	QDEL_NULL(void_right)
 	QDEL_NULL(void_bottom)
+	QDEL_NULL(resource_session)
 	screen.Cut()
 	images.Cut()
 
@@ -1278,6 +1528,14 @@ GLOBAL_VAR_INIT(last_churn_alert, 0)
 		parts += "пинга не было ни разу"
 	parts += "без ввода [round(inactivity / 10, 0.1)]с"
 	parts += "моб [mob ? "[mob.type]" : "нет"]"
+	parts += "выдача ресурсов: [client_resource_stage_name(resource_stage)]"
+	if(resource_session)
+		parts += "сессия ресурсов: [resource_session.summary()]"
+	//Источник .rsc в той же строке: обрывы на конкретном зеркале иначе неотличимы
+	//от обрывов вообще, а зеркало выбирается по кругу и от входа к входу разное.
+	parts += "источник .rsc: [rsc_source_url || CLIENT_RSC_SOURCE_LOCAL]"
+	if(statbrowser_local_fallback)
+		parts += "статбраузер: локальный фолбэк"
 	parts += "инициатор: [disconnect_reason || "клиент/сеть"]"
 	return parts.Join(" | ")
 
@@ -1720,20 +1978,83 @@ GLOBAL_VAR_INIT(last_churn_alert, 0)
 		return inactivity
 	return FALSE
 
+/// Внешние RSC-адреса, которые этот DMB раздаёт клиентам. Пустой список значит,
+/// что архив ресурсов тянут с самого DreamDaemon.
+GLOBAL_LIST_EMPTY(external_rsc_url_list)
+/// TRUE, если адреса выше зашиты в сборку деплоем (DEPLOYMENT_RSC_URLS), FALSE -
+/// если взяты из конфига EXTERNAL_RSC_URLS. Значимо только при непустом списке.
+GLOBAL_VAR_INIT(external_rsc_from_deployment, FALSE)
+/// TRUE после первой записи в лог: источник один на весь раунд, а выбирается он
+/// на каждом подключении.
+GLOBAL_VAR_INIT(external_rsc_source_logged, FALSE)
+/// Выдавать ли клиентам внешние адреса .rsc. Стартовое значение приезжает из
+/// конфига (EXTERNAL_RSC_DELIVERY), дальше его переключает админский верб.
+/// Дефолт совпадает с дефолтом конфиг-энтри: закомментированная строка в конфиге
+/// означает "включено", и OnPostload() в этом случае не вызывается вовсе.
+GLOBAL_VAR_INIT(external_rsc_delivery_enabled, TRUE)
+
+/// Запоминает и один раз за раунд пишет в лог, откуда взялся набор внешних
+/// RSC-адресов. Без этой отметки по логам нельзя отличить сборку с версионным
+/// архивом от сборки, раздающей ресурсы через DreamDaemon.
+/proc/record_external_rsc_source(list/urls, from_deployment)
+	if(GLOB.external_rsc_source_logged)
+		return
+	GLOB.external_rsc_source_logged = TRUE
+	GLOB.external_rsc_url_list = length(urls) ? urls.Copy() : list()
+	GLOB.external_rsc_from_deployment = from_deployment
+	if(!length(urls))
+		log_asset("External RSC: none configured, the game resource archive is served by DreamDaemon")
+		SSblackbox.record_feedback("tally", "resource_delivery", 1, "rsc_dreamdaemon")
+		return
+	var/list/url_names = list()
+	for(var/url in GLOB.external_rsc_url_list)
+		url_names += url
+	// Выключенная выдача не отменяет адресов: они зашиты в DMB и вернутся в строй сразу
+	// после верба. В логе это надо разделять, иначе "адреса есть" читается как "раздаём".
+	var/delivery_note = GLOB.external_rsc_delivery_enabled ? "" : " (delivery is DISABLED, clients are served by DreamDaemon)"
+	log_asset("External RSC: [length(url_names)] url(s) from [from_deployment ? "DEPLOYMENT_RSC_URLS (baked into this DMB)" : "config EXTERNAL_RSC_URLS"]: [url_names.Join(", ")][delivery_note]")
+	SSblackbox.record_feedback("tally", "resource_delivery", 1, from_deployment ? "rsc_deployment" : "rsc_config")
+
 /// Send resources to the client.
 /// Sends both game resources and browser assets.
 /client/proc/send_resources()
 #if (PRELOAD_RSC == 0)
 	var/static/next_external_rsc = 0
-	var/list/external_rsc_urls = CONFIG_GET(keyed_list/external_rsc_urls)
+	var/static/list/deployment_rsc_urls = DEPLOYMENT_RSC_URLS
+	var/list/external_rsc_urls
+	var/rsc_from_deployment = FALSE
+	if(length(deployment_rsc_urls))
+		// These URLs are generated before compilation and published by PostCompile.
+		// The DMB and its immutable resource archive therefore always move together.
+		external_rsc_urls = deployment_rsc_urls
+		rsc_from_deployment = TRUE
+	else
+		external_rsc_urls = CONFIG_GET(keyed_list/external_rsc_urls)
+	// Разово: строка на каждого подключившегося была бы спамом, а набор адресов
+	// от клиента к клиенту не меняется.
+	if(!GLOB.external_rsc_source_logged)
+		record_external_rsc_source(external_rsc_urls, rsc_from_deployment)
+	// Флаг читаем на каждом входе, а не один раз в статик: список адресов зашит в
+	// сборку, и без этой проверки пропавший с раздачи архив лечился бы только
+	// перекомпиляцией. Выключен - клиент молча уходит на раздачу с DreamDaemon,
+	// то есть на тот же путь, что и сборка без внешних адресов вообще.
+	if(!GLOB.external_rsc_delivery_enabled)
+		external_rsc_urls = null
 	if(length(external_rsc_urls))
 		next_external_rsc = WRAP(next_external_rsc+1, 1, external_rsc_urls.len+1)
 		preload_rsc = external_rsc_urls[next_external_rsc]
+		// Зеркало запоминаем на клиенте: строка Logout и сводка раунда иначе не
+		// смогут отличить "рвалось на первом зеркале" от "рвалось везде".
+		rsc_source_url = preload_rsc
 #endif
+	ensure_resource_session().note_rsc_requested(rsc_source_url || CLIENT_RSC_SOURCE_LOCAL)
 
 	spawn (10) //removing this spawn causes all clients to not get verbs.
 
-		//load info on what assets the client has
+		// Cheap even under the webroot transport, which has no per-client asset
+		// cache jobs to acknowledge: it also restores client.sent_assets from
+		// asset_data.json. Skipping it would make every client which connected
+		// before a CDN failure resend its whole asset set on each session.
 		src << browse('code/modules/asset_cache/validate_assets.html', "window=asset_cache_browser")
 
 		// BLUEMOON EDIT: defer the heavyweight preload (asset cache + VOX, multi-MB) until the
@@ -1828,8 +2149,8 @@ GLOBAL_VAR_INIT(last_churn_alert, 0)
 		M.update_damage_hud()
 	if (prefs.auto_fit_viewport)
 		// Отложено, чтобы не дёргать winget во время логина. Задержка обязана стоять
-		// аргументом addtimer: внутри CALLBACK она уходит в сам верб, и таймер срабатывает сразу.
-		addtimer(CALLBACK(src, VERB_REF(fit_viewport)), 1 SECONDS)
+		// аргументом addtimer: внутри CALLBACK она уходит в сам прок, и таймер срабатывает сразу.
+		addtimer(CALLBACK(src, PROC_REF(fit_viewport_when_ready)), 1 SECONDS)
 	SEND_SIGNAL(mob, COMSIG_MOB_CLIENT_CHANGE_VIEW, src, old_view, actualview)
 
 /client/proc/generate_clickcatcher()
@@ -1952,9 +2273,16 @@ GLOBAL_VAR_INIT(last_churn_alert, 0)
 /client/proc/check_panel_loaded()
 	if(statbrowser_ready)
 		return
+	// Окно, выданное адресом наружу, могло не приехать не потому, что молчит мост,
+	// а потому что лежит внешняя раздача. Локальная выдача от неё не зависит -
+	// пробуем её один раз, прежде чем объявлять панель поднявшейся вслепую.
+	if(statbrowser_served_externally && !statbrowser_local_fallback)
+		load_local_statbrowser()
+		addtimer(CALLBACK(src, PROC_REF(check_panel_loaded)), STATBROWSER_LOAD_TIMEOUT)
+		return
 	to_chat(src, span_userdanger("Statpanel failed to load, click <a href='?src=[REF(src)];reload_statbrowser=1'>here</a> to reload the panel "))
 	// Fallback for clients where Panel-Ready bridge callback is delayed/missing.
-	statbrowser_ready = TRUE
+	ensure_resource_session().note_statbrowser_ready(degraded = TRUE, reason = "panel_ready timeout fallback")
 	init_verbs()
 	if(mob?.listed_turf)
 		open_listed_turf(mob.listed_turf)

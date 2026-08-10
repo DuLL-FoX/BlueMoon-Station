@@ -38,6 +38,24 @@
 #endif // 1 to use the default behaviour;
 								// 2 for preloading absolutely everything;
 
+// Keeping this null makes unmanaged builds fall back to EXTERNAL_RSC_URLS from
+// config/entries/resources.txt. A managed TGS PreCompile adds the generated
+// .rsc-deployment.dm include to its disposable DME before DreamMaker runs;
+// defining TGS directly therefore remains a valid unmanaged build.
+#ifndef DEPLOYMENT_RSC_URLS
+#define DEPLOYMENT_RSC_URLS null
+#endif
+
+// Lets the webroot transport publish a per-build inventory. PostCompile uses
+// inventories belonging to deployable DMBs to prune only genuinely stale files.
+#ifndef DEPLOYMENT_ASSET_MANIFEST_NAME
+#define DEPLOYMENT_ASSET_MANIFEST_NAME null
+#endif
+
+#ifndef DEPLOYMENT_RELEASE_ID
+#define DEPLOYMENT_RELEASE_ID null
+#endif
+
 #ifdef LOWMEMORYMODE
 #ifdef ABSOLUTE_MINIMUM_MODE
 #define FORCE_MAP "_maps/runtimestation_minimal.json"
