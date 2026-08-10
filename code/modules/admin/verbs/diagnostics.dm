@@ -214,6 +214,10 @@
 	else
 		lines += "Активная проба: подсистема не запущена"
 
+	// Отдельной строкой от серверной пробы: она отвечает на вопрос «раздача жива?»,
+	// а эта - на вопрос «доезжает ли раздача до игроков», и совпадать они не обязаны.
+	lines += build_client_delivery_probe_report_lines()
+
 	var/stage_summary = build_connection_stage_summary()
 	if (stage_summary)
 		lines += stage_summary

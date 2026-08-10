@@ -108,8 +108,15 @@ location /byond_rsc/browser-assets/ {
 
 Adjust both paths to match `RSC_PUBLIC_BASE_URL` and `RSC_PUBLISH_DIR`. Lobby
 backgrounds and music use normal `<img>` and `<audio>` loading, so their
-`lobby-media/` location does not need CORS for playback. The RSC ZIP itself also
-does not need browser CORS headers.
+`lobby-media/` location does not need CORS for playback. The RSC ZIP itself is
+downloaded by BYOND, not by the browser, so it does not need browser CORS headers
+either.
+
+Adding them to it anyway buys one thing: the client probe asks the browser to
+check the archive address, and without CORS the browser only tells it whether the
+host answered at all. With `Access-Control-Allow-Origin` on that location the same
+probe reports the real HTTP status, so a published archive which is missing or
+returns 403 becomes visible from the client side too, not only from the server's.
 
 With webroot enabled, TGUI bundles, the stat browser, tooltip HTML and their
 static dependencies are loaded from `browser-assets/`. DreamDaemon still sends

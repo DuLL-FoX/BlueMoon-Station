@@ -67,6 +67,105 @@
 	qdel(reconnected_session)
 	qdel(session)
 
+/// Отчёт браузера недоверенный: неизвестное состояние обязано отбрасываться, а не
+/// трактоваться «на всякий случай» как провал - иначе опечатка в JS выключала бы
+/// подтверждение доступности у всех сразу.
+/datum/unit_test/external_delivery_probe_state_mapping/Run()
+	TEST_ASSERT_EQUAL(external_delivery_probe_state(CLIENT_DELIVERY_PROBE_OK), CLIENT_CAPABILITY_READY, "Успешная проба не подтвердила доступность")
+	TEST_ASSERT_EQUAL(external_delivery_probe_state(CLIENT_DELIVERY_PROBE_HTTP_ERROR), CLIENT_CAPABILITY_DEGRADED, "Отказ хоста по файлу приравнен не к деградации")
+	TEST_ASSERT_EQUAL(external_delivery_probe_state(CLIENT_DELIVERY_PROBE_BLOCKED), CLIENT_CAPABILITY_FAILED, "Недоступный адрес не признан провалом")
+	TEST_ASSERT_EQUAL(external_delivery_probe_state(CLIENT_DELIVERY_PROBE_TIMEOUT), CLIENT_CAPABILITY_FAILED, "Таймаут не признан провалом")
+	TEST_ASSERT_NULL(external_delivery_probe_state("whatever"), "Незнакомое состояние отчёта принято")
+	TEST_ASSERT_NULL(external_delivery_probe_state(null), "Пустое состояние отчёта принято")
+	TEST_ASSERT_NULL(external_delivery_probe_state(1), "Числовое состояние отчёта принято")
+
+/// Цели известны заранее, и чужой ключ не должен доехать до capability.
+/datum/unit_test/external_delivery_probe_targets_are_closed_set/Run()
+	TEST_ASSERT(is_external_delivery_probe_target(CLIENT_DELIVERY_PROBE_TARGET_RSC), "Цель .rsc не опознана")
+	TEST_ASSERT(is_external_delivery_probe_target(CLIENT_DELIVERY_PROBE_TARGET_ASSETS), "Цель браузерных ассетов не опознана")
+	TEST_ASSERT(!is_external_delivery_probe_target("lobby"), "Цель, которой клиенту не выдавали, опознана")
+	TEST_ASSERT(!is_external_delivery_probe_target(null), "Пустой ключ цели опознан")
+	TEST_ASSERT_EQUAL(external_delivery_probe_capability(CLIENT_DELIVERY_PROBE_TARGET_RSC), CLIENT_CAPABILITY_RSC, "Цель .rsc привязана не к своей capability")
+	TEST_ASSERT_EQUAL(external_delivery_probe_capability(CLIENT_DELIVERY_PROBE_TARGET_ASSETS), CLIENT_CAPABILITY_ASSET_CACHE, "Цель ассетов привязана не к своей capability")
+	TEST_ASSERT_NULL(external_delivery_probe_capability("lobby"), "Незнакомой цели нашлась capability")
+
+/// Числа приезжают из WebView, то есть настраиваются игроком. Обрезаем их до того,
+/// как они попадут в лог и в отчёт админам.
+/datum/unit_test/external_delivery_probe_numbers_are_bounded/Run()
+	TEST_ASSERT_NULL(external_delivery_probe_duration_ms(null), "Отсутствующая длительность превратилась в число")
+	TEST_ASSERT_NULL(external_delivery_probe_duration_ms("15000"), "Текстовая длительность принята")
+	TEST_ASSERT_NULL(external_delivery_probe_duration_ms(-1), "Отрицательная длительность принята")
+	TEST_ASSERT_EQUAL(external_delivery_probe_duration_ms(0), 0, "Мгновенный ответ отброшен")
+	TEST_ASSERT_EQUAL(external_delivery_probe_duration_ms(42.7), 43, "Длительность не округлена до миллисекунд")
+	TEST_ASSERT_EQUAL(external_delivery_probe_duration_ms(1e9), CLIENT_DELIVERY_PROBE_MAX_REPORTED_MS, "Длительность не обрезана по разумному пределу")
+	TEST_ASSERT_EQUAL(external_delivery_probe_http_status(206), 206, "Обычный HTTP-статус изменён")
+	TEST_ASSERT_EQUAL(external_delivery_probe_http_status(0), 0, "Непрозрачный ответ потерял свой нулевой статус")
+	TEST_ASSERT_EQUAL(external_delivery_probe_http_status(9000), 0, "Несуществующий HTTP-статус принят")
+	TEST_ASSERT_EQUAL(external_delivery_probe_http_status("200"), 0, "Текстовый HTTP-статус принят")
+
+/// Текст ошибки едет из браузера прямо в asset.log и в чат админам.
+/datum/unit_test/external_delivery_probe_detail_is_sanitized/Run()
+	TEST_ASSERT_EQUAL(external_delivery_probe_detail(null), "", "Пустой detail стал не пустой строкой")
+	TEST_ASSERT_EQUAL(external_delivery_probe_detail(200), "", "Числовой detail принят")
+	var/scripted = external_delivery_probe_detail("<script>alert(1)</script>")
+	TEST_ASSERT(!findtext(scripted, "<script"), "Разметка из detail доехала до лога: [scripted]")
+	var/long_detail = external_delivery_probe_detail("a" + "aaaaaaaaaa" + "aaaaaaaaaa" + "aaaaaaaaaa" + "aaaaaaaaaa" + "aaaaaaaaaa" + "aaaaaaaaaa" + "aaaaaaaaaa" + "aaaaaaaaaa" + "aaaaaaaaaa" + "aaaaaaaaaa")
+	TEST_ASSERT(length(long_detail) <= CLIENT_DELIVERY_PROBE_DETAIL_MAX_LENGTH, "Длинный detail не обрезан: [length(long_detail)] символов")
+
+/// Клиент в счётчиках раунда учитывается по САМОЙ ПЛОХОЙ цели: доступный статбраузер
+/// не отменяет неприехавшего архива.
+/datum/unit_test/external_delivery_probe_worst_state_wins/Run()
+	TEST_ASSERT_EQUAL(external_delivery_probe_worst_state(null, CLIENT_CAPABILITY_READY), CLIENT_CAPABILITY_READY, "Первая цель не задала состояние клиента")
+	TEST_ASSERT_EQUAL(external_delivery_probe_worst_state(CLIENT_CAPABILITY_READY, CLIENT_CAPABILITY_DEGRADED), CLIENT_CAPABILITY_DEGRADED, "Успешная цель скрыла деградацию")
+	TEST_ASSERT_EQUAL(external_delivery_probe_worst_state(CLIENT_CAPABILITY_DEGRADED, CLIENT_CAPABILITY_FAILED), CLIENT_CAPABILITY_FAILED, "Деградация скрыла полный провал")
+	TEST_ASSERT_EQUAL(external_delivery_probe_worst_state(CLIENT_CAPABILITY_FAILED, CLIENT_CAPABILITY_READY), CLIENT_CAPABILITY_FAILED, "Успешная цель скрыла полный провал")
+
+/// Причина уезжает в capability_reasons и в лог, поэтому она обязана называть и
+/// диагноз, и цену: «недоступно» без миллисекунд не отличить от «отвечает медленно».
+/datum/unit_test/external_delivery_probe_reason_is_readable/Run()
+	var/ok_reason = external_delivery_probe_reason(CLIENT_DELIVERY_PROBE_OK, 200, 42, "")
+	TEST_ASSERT(findtext(ok_reason, "200"), "Причина успеха не назвала HTTP-статус: [ok_reason]")
+	TEST_ASSERT(findtext(ok_reason, "42мс"), "Причина успеха не назвала длительность: [ok_reason]")
+	var/opaque_reason = external_delivery_probe_reason(CLIENT_DELIVERY_PROBE_OK, 0, 15, "no-cors")
+	TEST_ASSERT(!findtext(opaque_reason, "(0)"), "Непрозрачный ответ показал нулевой статус как настоящий: [opaque_reason]")
+	var/blocked_reason = external_delivery_probe_reason(CLIENT_DELIVERY_PROBE_BLOCKED, 0, 3, "Failed to fetch")
+	TEST_ASSERT(findtext(blocked_reason, "Failed to fetch"), "Причина провала не назвала текст ошибки: [blocked_reason]")
+	var/silent_reason = external_delivery_probe_reason(CLIENT_DELIVERY_PROBE_TIMEOUT, 0, null, "")
+	TEST_ASSERT(findtext(silent_reason, "нет ответа"), "Причина таймаута нечитаема: [silent_reason]")
+	TEST_ASSERT(!findtext(silent_reason, "мс"), "Причина без замера всё равно назвала длительность: [silent_reason]")
+
+/// Отчёт админам обязан называть все четыре числа: без «без ответа» подтвердившие
+/// доступность читаются как «все, кого спросили».
+/datum/unit_test/external_delivery_probe_report_counts_silent_clients/Run()
+	var/saved_requested = GLOB.external_delivery_probes_requested
+	var/saved_ok = GLOB.external_delivery_probes_ok
+	var/saved_degraded = GLOB.external_delivery_probes_degraded
+	var/saved_failed = GLOB.external_delivery_probes_failed
+	var/list/saved_failures = GLOB.external_delivery_probe_failures
+
+	GLOB.external_delivery_probes_requested = 0
+	var/list/idle_lines = build_client_delivery_probe_report_lines()
+
+	GLOB.external_delivery_probes_requested = 10
+	GLOB.external_delivery_probes_ok = 6
+	GLOB.external_delivery_probes_degraded = 1
+	GLOB.external_delivery_probes_failed = 2
+	GLOB.external_delivery_probe_failures = list("тестклиент" = "rsc failed (проба клиента: адрес не открылся)")
+	var/list/lines = build_client_delivery_probe_report_lines()
+
+	GLOB.external_delivery_probes_requested = saved_requested
+	GLOB.external_delivery_probes_ok = saved_ok
+	GLOB.external_delivery_probes_degraded = saved_degraded
+	GLOB.external_delivery_probes_failed = saved_failed
+	GLOB.external_delivery_probe_failures = saved_failures
+
+	TEST_ASSERT_EQUAL(length(idle_lines), 1, "Отчёт без единой пробы построил больше одной строки")
+	var/summary = lines[1]
+	TEST_ASSERT(findtext(summary, "подтвердили доступность 6"), "Отчёт неверно назвал подтвердивших: [summary]")
+	TEST_ASSERT(findtext(summary, "без ответа 1"), "Отчёт неверно посчитал молчунов: [summary]")
+	TEST_ASSERT(length(lines) > 1, "Отчёт с провалами не назвал ни одного клиента поимённо")
+	TEST_ASSERT(findtext(lines[2], "тестклиент"), "Отчёт не назвал провалившегося клиента: [lines[2]]")
+
 /// Сводка обязана считать умершими на выдаче ресурсов ровно те соединения, что не дошли
 /// до статбраузера.
 /datum/unit_test/connection_stage_summary_counts_delivery_deaths/Run()

@@ -135,6 +135,9 @@
 			window.send_message("panel/state", list(
 				"state" = client.prefs.tgui_panel_state,
 			))
+		// Панель поднялась - значит у неё есть сеть, и только теперь есть кому
+		// проверить внешние адреса. Сама проба молчит, если их клиенту не выдавали.
+		client?.request_external_delivery_probe()
 		return TRUE
 	if(type == "panel/state_set")
 		// State JSON is sent as a direct href parameter (not inside payload)
@@ -170,6 +173,10 @@
 				payload["hidden"],
 				payload["focused"],
 			)
+		return TRUE
+	if(type == "resourceProbe")
+		if(islist(payload))
+			client?.record_external_delivery_probe(payload)
 		return TRUE
 	if(type == "audio/setAdminMusicVolume")
 		client.admin_music_volume = payload["volume"]

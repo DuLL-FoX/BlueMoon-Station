@@ -24,6 +24,7 @@ import { gameMiddleware, gameReducer } from './game';
 import { Panel } from './Panel';
 import { setupPanelFocusHacks } from './panelFocus';
 import { pingMiddleware, pingReducer } from './ping';
+import { resourceProbeMiddleware } from './resourceProbe';
 import { settingsMiddleware, settingsReducer } from './settings';
 import { telemetryMiddleware } from './telemetry';
 
@@ -49,6 +50,7 @@ const store = configureStore({
       chatMiddleware,
       pingMiddleware,
       telemetryMiddleware,
+      resourceProbeMiddleware,
       settingsMiddleware,
       audioMiddleware,
       gameMiddleware,

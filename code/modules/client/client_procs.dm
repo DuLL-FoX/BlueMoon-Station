@@ -2048,6 +2048,10 @@ GLOBAL_VAR_INIT(external_rsc_delivery_enabled, TRUE)
 		rsc_source_url = preload_rsc
 #endif
 	ensure_resource_session().note_rsc_requested(rsc_source_url || CLIENT_RSC_SOURCE_LOCAL)
+	// Адрес назначен - можно проверять его глазами самого клиента. Обычно панель к
+	// этому моменту ещё не поднялась и вызов уходит ни с чем; отправит пробу тогда
+	// её собственный handshake. Обратный порядок тоже бывает, см. сам прок.
+	request_external_delivery_probe()
 
 	spawn (10) //removing this spawn causes all clients to not get verbs.
 
