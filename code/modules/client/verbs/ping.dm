@@ -12,11 +12,45 @@
 /proc/ping_wire_num(value)
 	return num2text(value, PING_WIRE_PRECISION)
 
+/**
+ * Gap between two neighbouring 32-bit floats at `value`'s magnitude, in ms.
+ *
+ * REALTIMEOFDAY is stored as a 32-bit float, so its own resolution decays through the day:
+ * the step is 3.125ms from 07:16 GMT and 6.25ms from 14:33 GMT to midnight. A difference of
+ * two such stamps is always a whole multiple of that step, so a genuine 1ms round trip is
+ * reported as one entire step - that is the 6.25 / 12.5 / 18.75 ladder that fills the ping
+ * logs on a loopback connection. world.time carries five binades less: its step is 0.195ms
+ * half an hour into a round and still only 0.78ms three hours in, which makes the tick clock
+ * the finer of the two instruments and the wall clock worth believing only above its step.
+ */
+/proc/ping_realtime_step_ms(value)
+	value = abs(value)
+	if(value < 1)
+		return 0
+	return 100 / (2 ** (23 - round(log(2, value))))
+
 /// Server-side share of a round trip, in ms: the wall clock always covers at least as
 /// much ground as the game clock, and the gap is time the server spent stalled rather
-/// than time the sample spent in transit.
-/proc/ping_server_component(rtt_ms, tick_ms)
-	return max(rtt_ms - tick_ms, 0)
+/// than time the sample spent in transit. `step_ms` is the wall clock's own resolution - a
+/// gap narrower than one step is the rounding described above and not a stall, and booking
+/// it as server time put a phantom 1-5ms into every fourth sample of an idle local round.
+/proc/ping_server_component(rtt_ms, tick_ms, step_ms = 0)
+	return max(rtt_ms - tick_ms - step_ms, 0)
+
+/// The round trip a sample is worth. The tick clock is the base because it resolves three
+/// orders of magnitude finer; the wall clock only adds what it can prove, which is real
+/// time the game clock never booked at all.
+/proc/ping_best_roundtrip(tick_ms, rtt_ms, step_ms = 0)
+	return max(tick_ms, 0) + ping_server_component(rtt_ms, tick_ms, step_ms)
+
+/// Jitter is a distance between two samples, so the first sample of a connection has none.
+/// Seeding it with `abs(ping - 0)` published the whole first round trip as jitter, and on a
+/// connection whose first samples are taken during resource delivery the fast average then
+/// carried a four-digit number for the next half minute.
+/proc/ping_jitter_sample(rtt_ms, previous_rtt_ms, has_previous)
+	if(!has_previous)
+		return 0
+	return abs(rtt_ms - previous_rtt_ms)
 
 /// Player-facing average follows the already filtered rolling median. Raw RTT keeps
 /// its own slow EMA for diagnostics, but must not pin the UI to a login outlier for a
@@ -53,10 +87,17 @@
  * Multiple causes are retained: e.g. a slow Topic during resource delivery is
  * more useful than forcing the event into one guessed bucket.
  */
-/proc/ping_diagnostic_suspects(server_ms, resource_stage, skin_age_ds, topic_age_ds, browser_age_ds, sequence_skip = 0, out_of_order = FALSE)
+/proc/ping_diagnostic_suspects(server_ms, resource_stage, skin_age_ds, topic_age_ds, browser_age_ds, sequence_skip = 0, out_of_order = FALSE, reply_tick_usage = 0)
 	var/list/suspects = list()
 	if(server_ms >= CLIENT_LATENCY_SERVER_STALL_WARN_MS)
 		suspects += "server_stall"
+	// The reply landed on a tick the MC had already spent. DreamDaemon cannot run the verb
+	// while DM is executing, so the sample carried the tail of that tick and nothing else -
+	// a class of delay `server_ms` is structurally blind to, because the tick clock counts
+	// TICK_USAGE_REAL and therefore grows in lockstep with the wall clock during an
+	// over-budget tick. Without this label those spikes fell through to the transport.
+	if(reply_tick_usage >= CLIENT_LATENCY_MC_TAIL_TICK_USAGE)
+		suspects += "mc_tick_tail"
 	if(isnum(topic_age_ds) && topic_age_ds <= CLIENT_LATENCY_CORRELATION_WINDOW)
 		suspects += "slow_client_topic"
 	if(isnum(skin_age_ds) && skin_age_ds <= CLIENT_LATENCY_CORRELATION_WINDOW)
@@ -179,32 +220,38 @@
 	set instant = TRUE
 	set name = ".update_ping"
 
+	// Read before this verb does anything of its own: it is the MC's state at the instant
+	// DreamDaemon got round to the reply, and that instant is what the sample measures.
+	var/reply_tick_usage = TICK_USAGE
+
 	// Helper procs are inlined here: this verb runs roughly once per 2 seconds per client.
 	var/tick_ping = (world.time + world.tick_lag * TICK_USAGE_REAL / 100 - tickstamp) * 100
 	var/reply_realtime = REALTIMEOFDAY
+	var/realtime_step = 0
 	var/rtt_ping_raw
 	if(isnum(sent_realtime))
 		rtt_ping_raw = max((reply_realtime - sent_realtime) * 100, 0)
+		realtime_step = ping_realtime_step_ms(reply_realtime)
 	else
 		// Backward compatibility with one-argument invocations.
 		rtt_ping_raw = tick_ping
 
-	// When rtt_raw is 0 the round-trip completed inside one REALTIMEOFDAY step, meaning
-	// the timer resolution is too coarse to measure it: REALTIMEOFDAY is a 32-bit float
-	// and its own step grows to 6.25ms once it climbs past 14:33 GMT. Fall back to the
-	// tick-based measurement, which sits at a far smaller magnitude and stays finer.
-	var/best_ping = rtt_ping_raw ? rtt_ping_raw : tick_ping
+	// The tick clock leads and the wall clock only tops it up past its own resolution: the
+	// wall clock cannot resolve a local round trip at all, and taking it at face value
+	// snapped every sample up to a whole 6.25ms step.
+	var/server_ping = ping_server_component(rtt_ping_raw, tick_ping, realtime_step)
+	var/best_ping = ping_best_roundtrip(tick_ping, rtt_ping_raw, realtime_step)
 
-	var/previous_rtt = lastping_rtt_raw
+	var/previous_rtt = ping_replies_received ? lastping_rtt_raw : null
 	var/reply_gap_ms = lastping_realtimeofday ? max((reply_realtime - lastping_realtimeofday) * 100, 0) : null
 	var/list/sequence_result = ping_sequence_observe(ping_sequence_received, sequence)
 	if(sequence_result["valid"])
 		ping_sequence_received = sequence_result["next_received"]
 
 	var/rtt_ping = stabilize_rtt_ping(best_ping)
-	var/server_ping = ping_server_component(best_ping, tick_ping)
 
-	var/jitter = abs(best_ping - lastping_rtt_raw)
+	var/jitter = ping_jitter_sample(best_ping, lastping_rtt_raw, ping_replies_received > 0)
+	ping_replies_received++
 	if(isnull(avgping_jitter))
 		avgping_jitter = jitter
 	else
@@ -252,7 +299,7 @@
 		var/skin_age = last_skin_latency_at ? max(world.time - last_skin_latency_at, 0) : null
 		var/topic_age = last_slow_topic_at ? max(world.time - last_slow_topic_at, 0) : null
 		var/browser_age = last_browser_latency_at ? max(world.time - last_browser_latency_at, 0) : null
-		var/list/suspects = ping_diagnostic_suspects(server_ping, resource_stage, skin_age, topic_age, browser_age, sequence_skip, sequence_out_of_order)
+		var/list/suspects = ping_diagnostic_suspects(server_ping, resource_stage, skin_age, topic_age, browser_age, sequence_skip, sequence_out_of_order, reply_tick_usage)
 		log_client_latency("native_ping_spike", src, list(
 			"sequence" = sequence_result["valid"] ? round(sequence) : null,
 			"sequence_sent" = ping_sequence_sent,
@@ -264,6 +311,8 @@
 			"display_average_ms" = avgping_rtt,
 			"tick_clock_ms" = tick_ping,
 			"server_stall_ms" = server_ping,
+			"reply_tick_usage" = reply_tick_usage,
+			"realtime_step_ms" = realtime_step,
 			"nonstall_roundtrip_ms" = max(best_ping - server_ping, 0),
 			"previous_rtt_ms" = previous_rtt,
 			"reply_gap_ms" = reply_gap_ms,
@@ -277,13 +326,13 @@
 	set name = ".display_ping"
 
 	var/tick_ping = pingfromtickstamp(tickstamp)
-	var/rtt_ping_raw
+	var/rtt_ping_raw = tick_ping
+	var/realtime_step = 0
 	if(isnum(sent_realtime))
+		// Backward compatibility with one-argument invocations keeps the tick clock alone.
 		rtt_ping_raw = pingfromrealtime(sent_realtime)
-	else
-		// Backward compatibility with one-argument invocations.
-		rtt_ping_raw = tick_ping
-	var/rtt_ping = lastping_rtt ? lastping_rtt : max(rtt_ping_raw, 0)
+		realtime_step = ping_realtime_step_ms(REALTIMEOFDAY)
+	var/rtt_ping = lastping_rtt ? lastping_rtt : ping_best_roundtrip(tick_ping, rtt_ping_raw, realtime_step)
 	to_chat(src, "<span class='notice'>Round trip ping took [round(rtt_ping, 1)]ms (Stable Avg: [round(avgping, 1)]ms)</span>")
 
 /client/verb/ping()

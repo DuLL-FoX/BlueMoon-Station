@@ -36,6 +36,55 @@
 	// noise from the intra-tick estimate rather than negative server time.
 	TEST_ASSERT_EQUAL(ping_server_component(3, 5), 0, "noise must not produce negative server time")
 
+	// A gap narrower than the wall clock's own step is rounding. This exact shape - a
+	// 1.17ms round trip reported as one whole 6.25ms step - produced a phantom 5ms of
+	// server stall in every fourth sample of an idle local round.
+	TEST_ASSERT_EQUAL(ping_server_component(6.25, 1.171875, 6.25), 0, "one step of wall-clock rounding is not a stall")
+
+	// Past one step the wall clock is measuring something the game clock never booked.
+	TEST_ASSERT_EQUAL(ping_server_component(200, 50, 6.25), 143.75, "a real stall must survive the rounding deadband")
+
+/// The wall clock's own resolution decays through the day and has to be known before its
+/// readings can be compared against anything finer.
+/datum/unit_test/ping_realtime_step_tracks_float_resolution/Run()
+	// REALTIMEOFDAY at 17:59 GMT: 2^19 <= value < 2^20, so the float step is 2^-4 ds.
+	TEST_ASSERT_EQUAL(ping_realtime_step_ms(646798), 6.25, "the evening wall clock resolves no finer than 6.25ms")
+
+	// 11:06 GMT, one binade lower and therefore twice as fine.
+	TEST_ASSERT_EQUAL(ping_realtime_step_ms(400000), 3.125, "the midday wall clock resolves to 3.125ms")
+
+	// world.time half an hour into a round sits five binades lower, and that gap is the
+	// whole reason the tick clock leads the measurement.
+	TEST_ASSERT_EQUAL(ping_realtime_step_ms(19872), 0.1953125, "the game clock must stay the finer instrument")
+
+	// Even three hours in, where world.time has climbed two binades, it still resolves an
+	// order of magnitude better than the wall clock ever does.
+	TEST_ASSERT_EQUAL(ping_realtime_step_ms(108000), 0.78125, "a long round must not cost the tick clock its lead")
+
+	TEST_ASSERT_EQUAL(ping_realtime_step_ms(0), 0, "an absent timestamp has no resolution to report")
+
+/// The reported round trip must not inherit the wall clock's step.
+/datum/unit_test/ping_best_roundtrip_prefers_the_finer_clock/Run()
+	// The measured pair from an idle local round: the tick clock read 1.17ms and the wall
+	// clock snapped the same trip up to a whole step. Taking the wall clock at face value
+	// published 6.25ms and pinned the visible floor five times above the truth.
+	TEST_ASSERT_EQUAL(ping_best_roundtrip(1.171875, 6.25, 6.25), 1.171875, "a sub-step round trip must be read off the tick clock")
+
+	// A round trip the wall clock cannot see at all still has to be reported.
+	TEST_ASSERT_EQUAL(ping_best_roundtrip(2.34375, 0, 6.25), 2.34375, "an unresolvable wall reading must not zero the sample")
+
+	// Real dilation is exactly what the wall clock is kept for.
+	TEST_ASSERT_EQUAL(ping_best_roundtrip(50, 200, 6.25), 193.75, "time the game clock never booked must reach the sample")
+
+	// Intra-tick estimate noise can push the tick clock below zero; the sample cannot go there.
+	TEST_ASSERT_EQUAL(ping_best_roundtrip(-1, 0, 6.25), 0, "estimate noise must not produce a negative round trip")
+
+/// Jitter needs two samples to exist.
+/datum/unit_test/ping_jitter_ignores_the_first_sample/Run()
+	TEST_ASSERT_EQUAL(ping_jitter_sample(943.75, 0, FALSE), 0, "the first sample of a connection has no jitter to report")
+	TEST_ASSERT_EQUAL(ping_jitter_sample(8, 0, TRUE), 8, "a genuine zero-valued predecessor must still produce jitter")
+	TEST_ASSERT_EQUAL(ping_jitter_sample(4, 9, TRUE), 5, "jitter is the distance between two samples in either direction")
+
 /// A resource-loading outlier must not remain in the player-facing average after the
 /// interface and native command channel have both proved ready.
 /datum/unit_test/ping_display_average_drops_login_outlier/Run()
@@ -85,10 +134,33 @@
 	TEST_ASSERT_EQUAL(length(uncorrelated), 1, "an unexplained spike must have one conservative fallback")
 	TEST_ASSERT("client_or_transport_queue" in uncorrelated, "an unexplained spike must not be mislabeled as a server fault")
 
+	// The August logs held 41 spikes of exactly one tick_lag whose reply landed on a tick
+	// the MC had already spent. The clock difference cannot see that class of delay, so
+	// every one of them was blamed on the client's command queue or the transport.
+	var/list/tail = ping_diagnostic_suspects(0, CLIENT_RESOURCE_STAGE_UI_READY, null, null, null, 0, FALSE, 101.2)
+	TEST_ASSERT("mc_tick_tail" in tail, "a reply executed at the end of a spent tick must name the tick tail")
+	TEST_ASSERT(!("client_or_transport_queue" in tail), "an explained spike must not also carry the catch-all fallback")
+
+	var/list/idle_tick = ping_diagnostic_suspects(0, CLIENT_RESOURCE_STAGE_UI_READY, null, null, null, 0, FALSE, 5)
+	TEST_ASSERT(!("mc_tick_tail" in idle_tick), "a reply executed on an idle tick must not accuse the MC")
+
+/// The ping probe only measures the link if nothing in the MC runs after it: the reply verb
+/// cannot execute while DM is busy, so every subsystem queued behind the probe is charged
+/// to the player's ping. This is what pinned local spikes to exactly one tick_lag.
+/datum/unit_test/ping_probe_fires_last_in_the_mc_queue/Run()
+	TEST_ASSERT(SSping.flags & SS_BACKGROUND, "the ping probe must sit in the background section, which the MC runs last")
+
+	for(var/datum/controller/subsystem/queued as anything in Master.subsystems)
+		if(queued == SSping || (queued.flags & SS_NO_FIRE))
+			continue
+		if(!(queued.flags & SS_BACKGROUND))
+			continue
+		TEST_ASSERT(queued.priority > SSping.priority, "[queued.name] is queued behind the ping probe and its work would land inside the measured round trip")
+
 /// Keep every end of the diagnostic round trip connected in source.
 /datum/unit_test/client_latency_diagnostic_wiring/Run()
-	var/server_maint_source = read_source_file("code/controllers/subsystem/server_maint.dm")
-	TEST_ASSERT(findtext(server_maint_source, "+\[C.ping_sequence_sent\]"), "native ping commands must carry a sequence number")
+	var/ping_source = read_source_file("code/controllers/subsystem/ping.dm")
+	TEST_ASSERT(findtext(ping_source, "+\[target.ping_sequence_sent\]"), "native ping commands must carry a sequence number")
 
 	var/statbrowser_source = read_source_file("html/statbrowser/src/latency-diagnostics.js")
 	TEST_ASSERT(findtext(statbrowser_source, ".client-latency-report statbrowser_event_loop"), "statbrowser must report event-loop stalls through the hidden verb")

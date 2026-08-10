@@ -186,6 +186,10 @@
 // Subsystem fire priority, from lowest to highest priority
 // If the subsystem isn't listed here it's either DEFAULT or PROCESS (if it's a processing subsystem child)
 
+// Нативный пинг обязан уходить последним из всей очереди МК. Ответ на winset исполняется
+// не раньше, чем интерпретатор освободится, поэтому всё, что МК успеет сделать после
+// отправки, приезжает игроку внутри его же пинга - на локалке это давало ровно tick_lag.
+#define FIRE_PRIORITY_PING			1
 #define FIRE_PRIORITY_VORE			5
 #define FIRE_PRIORITY_ASSET_LOADING	5
 #define FIRE_PRIORITY_MAIL			7 // BLUEMOON ADD
