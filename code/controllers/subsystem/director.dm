@@ -160,11 +160,11 @@ SUBSYSTEM_DEF(director)
 	eligible_ghosts_cache = null
 	eligible_ghosts_cache_at = -1
 
-/datum/controller/subsystem/director/Initialize(start_timeofday)
+/datum/controller/subsystem/director/Initialize()
 	register_event_actions()
 	last_any_fired_at = now()
 	last_real_fired_at = now()
-	return ..()
+	return SS_INIT_SUCCESS
 
 /// Текущее время бита. Симулятор двигает time_override вперёд без реального ожидания;
 /// в боевом режиме (time_override == 0) ведёт себя как обычный world.time.

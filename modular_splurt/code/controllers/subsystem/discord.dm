@@ -52,7 +52,7 @@ SUBSYSTEM_DEF(discord)
 	/// Is TGS enabled (If not we won't fire because otherwise this is useless)
 	var/enabled = FALSE
 
-/datum/controller/subsystem/discord/Initialize(start_timeofday)
+/datum/controller/subsystem/discord/Initialize()
 	common_words = world.file2list("strings/1000_most_common_en.txt")
 	reverify_cache = list()
 	// Check for if we are using TGS, otherwise return and disables firing
@@ -60,7 +60,7 @@ SUBSYSTEM_DEF(discord)
 		enabled = TRUE // Allows other procs to use this (Account linking, etc)
 	else
 		can_fire = FALSE // We dont want excess firing
-		return ..() // Cancel
+		return SS_INIT_NO_NEED // Cancel
 
 	try
 		people_to_notify = json_decode(file2text(notify_file))
@@ -72,7 +72,7 @@ SUBSYSTEM_DEF(discord)
 		send2chat(trim(notifymsg), CONFIG_GET(string/chat_new_game_notifications)) // Sends the message to the discord, using same config option as the roundstart notification
 	fdel(notify_file) // Deletes the file
 	delete_nulls() // Deletes nulls in the database
-	return ..()
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/discord/fire()
 	if(!enabled)

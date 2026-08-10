@@ -26,7 +26,6 @@ SUBSYSTEM_DEF(hilbertshotel)
 	var/hhMysteryroom_number
 
 /datum/controller/subsystem/hilbertshotel/Initialize()
-	. = ..()
 	if(!CONFIG_GET(flag/hilbertshotel_enabled))
 		return SS_INIT_NO_NEED
 	//RegisterSignal(src, COMSIG_HILBERT_ROOM_UPDATED, PROC_REF(on_room_updated))

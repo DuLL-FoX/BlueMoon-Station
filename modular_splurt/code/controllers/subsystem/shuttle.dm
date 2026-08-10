@@ -1,5 +1,5 @@
-/datum/controller/subsystem/shuttle/Initialize(timeofday)
-	. = ..(timeofday)
+/datum/controller/subsystem/shuttle/Initialize()
+	. = ..()
 	SSticker.OnRoundend(CALLBACK(src, PROC_REF(roundend_callback)))
 
 /datum/controller/subsystem/shuttle/proc/roundend_callback()

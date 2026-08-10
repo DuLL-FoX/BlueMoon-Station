@@ -74,7 +74,7 @@ PROCESSING_SUBSYSTEM_DEF(weather)
 	current_pass_cost_ms += max(0, TICK_DELTA_TO_MS(TICK_USAGE - slice_start_usage))
 	on_pass_finished(length(GLOB.mob_living_list))
 
-/datum/controller/subsystem/processing/weather/Initialize(start_timeofday)
+/datum/controller/subsystem/processing/weather/Initialize()
 	for(var/V in subtypesof(/datum/weather))
 		var/datum/weather/W = V
 		var/probability = initial(W.probability)
@@ -85,7 +85,7 @@ PROCESSING_SUBSYSTEM_DEF(weather)
 			for(var/z in SSmapping.levels_by_trait(target_trait))
 				LAZYINITLIST(eligible_zlevels["[z]"])
 				eligible_zlevels["[z]"][W] = probability
-	return ..()
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/processing/weather/proc/run_weather(datum/weather/weather_datum_type, z_levels)
 	if (istext(weather_datum_type))

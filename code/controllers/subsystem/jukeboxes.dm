@@ -148,7 +148,7 @@ SUBSYSTEM_DEF(jukeboxes)
 	init_channels()
 
 	if(!fexists("config/jukebox_music/sounds/"))
-		return ..()
+		return SS_INIT_SUCCESS
 
 	var/list/tracks = flist("config/jukebox_music/sounds/")
 	//SPLURT EDIT
@@ -167,7 +167,7 @@ SUBSYSTEM_DEF(jukeboxes)
 		song_names += T.song_name
 		songs_by_name[T.song_name] = T
 
-	return ..()
+	return SS_INIT_SUCCESS
 
 /// Creates audio channels for jukeboxes to use, run first to prevent init failing to fill this
 /datum/controller/subsystem/jukeboxes/proc/init_channels()

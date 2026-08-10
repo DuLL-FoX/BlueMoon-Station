@@ -17,10 +17,10 @@ SUBSYSTEM_DEF(server_maint)
 /datum/controller/subsystem/server_maint/PreInit()
 	world.hub_password = "" //quickly! before the hubbies see us.
 
-/datum/controller/subsystem/server_maint/Initialize(timeofday)
+/datum/controller/subsystem/server_maint/Initialize()
 	if (CONFIG_GET(flag/hub))
 		world.update_hub_visibility(TRUE)
-	return ..()
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/server_maint/proc/run_null_cleanup(list/target_list, target_name)
 	var/cleanup_start = TICK_USAGE_REAL

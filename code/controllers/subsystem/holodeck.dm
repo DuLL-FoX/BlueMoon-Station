@@ -9,7 +9,6 @@ SUBSYSTEM_DEF(holodeck)
 	var/list/rejected_areas = list()
 
 /datum/controller/subsystem/holodeck/Initialize()
-	. = ..()
 	//generates the list of available holodeck programs.
 	for(var/path in subtypesof(/datum/holodeck_cache))
 		new path
@@ -22,6 +21,7 @@ SUBSYSTEM_DEF(holodeck)
  /*
   * The sole scope of this datum is to generate lists of holodeck programs caches per holodeck computer type.
   */
+	return SS_INIT_SUCCESS
 
 /datum/holodeck_cache
 	var/area/holodeck/master_type //the /area/holodeck typepath we'll be using for typesof loop.

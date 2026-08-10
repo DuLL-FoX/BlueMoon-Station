@@ -6,10 +6,9 @@ SUBSYSTEM_DEF(minimaps)
 
 /datum/controller/subsystem/minimaps/Initialize()
 	if(!CONFIG_GET(flag/minimaps_enabled))
-		to_chat(world, "<span class='boldwarning'>Minimaps disabled! Skipping init.</span>")
-		return ..()
+		return SS_INIT_NO_NEED
 	build_minimaps()
-	return ..()
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/minimaps/proc/build_minimaps()
 	for(var/z in SSmapping.levels_by_trait(ZTRAIT_STATION))

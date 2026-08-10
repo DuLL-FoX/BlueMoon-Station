@@ -69,7 +69,7 @@ SUBSYSTEM_DEF(title)
 		splash_turf.icon = icon
 		splash_turf.handle_generic_titlescreen_sizes()
 
-	return ..()
+	return SS_INIT_SUCCESS
 
 /// Убирает из выборки экраны, которые дороже, чем стоит вход в игру. Возвращает
 /// отфильтрованный список; если пригодных не осталось, вызывающий откатится на

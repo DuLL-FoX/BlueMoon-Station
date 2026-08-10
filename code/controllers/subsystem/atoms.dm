@@ -27,7 +27,7 @@ SUBSYSTEM_DEF(atoms)
 	var/type_times = list()
 	#endif								// --- END ATOM STATISTICS LOGGING ---
 
-/datum/controller/subsystem/atoms/Initialize(timeofday)
+/datum/controller/subsystem/atoms/Initialize()
 	GLOB.fire_overlay.appearance_flags = RESET_COLOR
 	setupGenetics() //to set the mutations' sequence
 
@@ -39,7 +39,7 @@ SUBSYSTEM_DEF(atoms)
 	Savelog()
 	#endif								// --- END ATOM STATISTICS LOGGING ---
 
-	return ..()
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/atoms/proc/InitializeAtoms(list/atoms)
 	if(initialized == INITIALIZATION_INSSATOMS)

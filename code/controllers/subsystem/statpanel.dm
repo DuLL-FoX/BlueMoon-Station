@@ -69,9 +69,9 @@ SUBSYSTEM_DEF(statpanels)
 	var/list/ping_run = list()
 	var/list/icon_run = list()
 
-/datum/controller/subsystem/statpanels/Initialize(start_timeofday)
+/datum/controller/subsystem/statpanels/Initialize()
 	build_global_slow_payload()
-	..()
+	return SS_INIT_SUCCESS
 
 /// Builds the slow-changing server section once. Used for eager init so the first ~27 seconds of a round
 /// don't ship an empty server section to every Status-tab client.

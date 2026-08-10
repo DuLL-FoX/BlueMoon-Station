@@ -21,7 +21,7 @@ SUBSYSTEM_DEF(machines)
 /datum/controller/subsystem/machines/Initialize()
 	makepowernets()
 	fire()
-	return ..()
+	return SS_INIT_SUCCESS
 
 //BLUEMOON ADD счётчик бс майнеров на z уровне
 /datum/controller/subsystem/machines/proc/MaxZChanged()

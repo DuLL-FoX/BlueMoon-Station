@@ -64,8 +64,7 @@ SUBSYSTEM_DEF(mail)
 	/// Assoc list: pattern_name = pattern_object with all patterns, used in admin panel. Initialized in SSmail init.
 	var/static/list/all_patterns = list()
 
-/datum/controller/subsystem/mail/Initialize(start_timeofday)
-	. = ..()
+/datum/controller/subsystem/mail/Initialize()
 	for(var/category in mail_categories_with_weights)
 		all_patterns_by_category[category] = list()
 		var/list/types_of_category = typesof(text2path("/datum/mail_pattern/[category]"))
@@ -79,6 +78,7 @@ SUBSYSTEM_DEF(mail)
 			all_patterns_by_category[category] += new_pattern
 			all_patterns_info[new_pattern.name] = get_pattern_info(new_pattern)
 	create_main_storage()
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/mail/Recover()
 	sealed_mails |= SSmail.sealed_mails

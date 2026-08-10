@@ -25,7 +25,6 @@ SUBSYSTEM_DEF(decay)
 	var/static/list/activation_chances = list(10, 32, 53, 75, 50)
 
 /datum/controller/subsystem/decay/Initialize()
-	. = ..()
 	if(CONFIG_GET(flag/ssdecay_disabled))
 		message_admins("SSDecay was disabled in config.")
 		log_world("SSDecay was disabled in config.")

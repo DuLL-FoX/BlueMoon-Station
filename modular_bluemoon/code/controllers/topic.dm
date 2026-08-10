@@ -21,7 +21,7 @@ SUBSYSTEM_DEF(topic)
 	/// Requests which are currently sleeping inside a handler (usually on a DB query).
 	var/list/inflight_requests = list()
 
-/datum/controller/subsystem/topic/Initialize(timeofday)
+/datum/controller/subsystem/topic/Initialize()
 	GLOB.topic_commands = list()
 	GLOB.topic_tokens = list()
 	replay_responses = list()
@@ -84,7 +84,7 @@ SUBSYSTEM_DEF(topic)
 		else
 			GLOB.topic_tokens[comms_key] = comms_functions
 
-	return ..()
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/topic/proc/replay_key(auth, req_id)
 	return md5("[auth]\n[req_id]")

@@ -16,7 +16,7 @@ SUBSYSTEM_DEF(job)
 
 	var/list/level_order = list(JP_HIGH,JP_MEDIUM,JP_LOW)
 
-/datum/controller/subsystem/job/Initialize(timeofday)
+/datum/controller/subsystem/job/Initialize()
 	SSmapping.HACK_LoadMapConfig()
 	if(!occupations.len)
 		SetupOccupations()
@@ -24,7 +24,7 @@ SUBSYSTEM_DEF(job)
 		LoadJobs()
 	generate_selectable_species()
 	set_overflow_role(CONFIG_GET(string/overflow_job))
-	return ..()
+	return SS_INIT_SUCCESS
 
 /// Returns a list of jobs that we are allowed to fuck with during random events
 /datum/controller/subsystem/job/proc/get_valid_overflow_jobs()

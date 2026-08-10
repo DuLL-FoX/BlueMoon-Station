@@ -81,7 +81,7 @@ SUBSYSTEM_DEF(assets)
 		return
 	log_asset("Asset transport: [transport.name] (config: [configured]), browser assets are served by DreamDaemon")
 
-/datum/controller/subsystem/assets/Initialize(timeofday)
+/datum/controller/subsystem/assets/Initialize()
 	// Construct explicitly early assets first. get_asset_datum() is the
 	// synchronous contract; load_asset_datum() below only registers lazy work.
 	for(var/type in typesof(/datum/asset))
@@ -104,4 +104,4 @@ SUBSYSTEM_DEF(assets)
 	log_active_transport()
 	SSblackbox.record_feedback("tally", "resource_delivery", 1, istype(transport, /datum/asset_transport/webroot) ? "assets_webroot" : "assets_dreamdaemon")
 
-	..()
+	return SS_INIT_SUCCESS

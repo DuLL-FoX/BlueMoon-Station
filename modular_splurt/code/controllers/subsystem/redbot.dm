@@ -2,7 +2,7 @@ SUBSYSTEM_DEF(redbot)
 	name = "RedBot Comms"
 	flags = SS_NO_FIRE
 
-/datum/controller/subsystem/redbot/Initialize(start_timeofday) //Changed from the default of timeofday.
+/datum/controller/subsystem/redbot/Initialize()
 	var/comms_key = CONFIG_GET(string/comms_key)
 	var/bot_ip = CONFIG_GET(string/bot_ip)
 	var/round_id = GLOB.round_id
@@ -11,7 +11,7 @@ SUBSYSTEM_DEF(redbot)
 		// would otherwise have to poll and consume later.
 		var/query = "http://[bot_ip]/?serverStart=1&roundID=[round_id]&key=[comms_key]"
 		world_safe_http_get_async(query)
-	return ..()
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/redbot/proc/send_discord_message(var/channel, var/message, var/priority_type)
 	var/bot_ip = CONFIG_GET(string/bot_ip)

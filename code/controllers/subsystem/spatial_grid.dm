@@ -91,12 +91,12 @@ SUBSYSTEM_DEF(spatial_grid)
 	///размер пула ушей; в норме никогда не растёт после инита
 	var/number_of_oranges_ears = NUMBER_OF_PREGENERATED_ORANGES_EARS
 
-/datum/controller/subsystem/spatial_grid/Initialize(start_timeofday)
+/datum/controller/subsystem/spatial_grid/Initialize()
 	cells_on_x_axis = SPATIAL_GRID_CELLS_PER_SIDE(world.maxx)
 	cells_on_y_axis = SPATIAL_GRID_CELLS_PER_SIDE(world.maxy)
 
-	// enter_cell/propogate работают только после этого флага; ставим до
-	// раскладки очереди (родительский Initialize выставит его же ещё раз)
+	// enter_cell/propogate работают только после этого флага, а МК выставит его
+	// сам лишь после возврата - поэтому ставим здесь, до раскладки очереди.
 	initialized = TRUE
 
 	for(var/datum/space_level/z_level as anything in SSmapping.z_list)
@@ -115,7 +115,7 @@ SUBSYSTEM_DEF(spatial_grid)
 
 	pregenerate_more_oranges_ears(NUMBER_OF_PREGENERATED_ORANGES_EARS)
 
-	return ..()
+	return SS_INIT_SUCCESS
 
 ///поставить movable в очередь до инициализации грида
 /datum/controller/subsystem/spatial_grid/proc/enter_pre_init_queue(atom/movable/waiting_movable, type)

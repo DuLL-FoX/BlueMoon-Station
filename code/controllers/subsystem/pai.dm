@@ -8,10 +8,9 @@ SUBSYSTEM_DEF(pai)
 	var/list/restricted_areas = list()
 	var/last_device_ref
 
-/datum/controller/subsystem/pai/Initialize(var/time_of_day)
+/datum/controller/subsystem/pai/Initialize()
 	restricted_areas += typesof(/area/command/heads_quarters, /area/ai_monitored) // heads quarters and AI monitored places (like the armory)
-	initialized = TRUE
-	return ..()
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/pai/proc/recruitWindow(mob/M, obj/item/paicard/card)
 	if(isobserver(M))

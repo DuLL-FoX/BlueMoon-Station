@@ -5,7 +5,7 @@ SUBSYSTEM_DEF(air_turfs)
 	init_order = INIT_ORDER_AIR_TURFS
 	priority = FIRE_PRIORITY_AIR_TURFS
 	wait = 2
-	flags = SS_BACKGROUND
+	flags = SS_BACKGROUND | SS_NO_INIT
 	runlevels = RUNLEVEL_GAME | RUNLEVEL_POSTGAME
 	var/list/currentrun = list()
 

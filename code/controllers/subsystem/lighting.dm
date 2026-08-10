@@ -151,7 +151,7 @@ SUBSYSTEM_DEF(lighting)
 		msg += "|BG:[bg_queued_zlevels.len]q"
 	return ..()
 
-/datum/controller/subsystem/lighting/Initialize(timeofday)
+/datum/controller/subsystem/lighting/Initialize()
 	if(!initialized)
 		if (CONFIG_GET(flag/starlight))
 			for(var/I in GLOB.sortedAreas)
@@ -164,7 +164,7 @@ SUBSYSTEM_DEF(lighting)
 		// All queued sources/corners/objects are batch-processed inside create_all_lighting_objects()
 		// No need for fire() here — queues are already drained
 
-	return ..()
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/lighting/fire(resumed, init_tick_checks)
 	// A bulk operation (shuttle docking / transit generation) is deferring lighting work.

@@ -29,13 +29,13 @@ PROCESSING_SUBSYSTEM_DEF(interactions)
 	VAR_PROTECTED/initialized_blacklist
 	var/list/interactions = list()
 
-/datum/controller/subsystem/processing/interactions/Initialize(timeofday)
+/datum/controller/subsystem/processing/interactions/Initialize()
 	prepare_interactions()
 	prepare_blacklisted_mobs()
-	. = ..()
 	var/extra_info = "<font style='transform: translate(0%, -25%);'>↳</font> Loaded [LAZYLEN(interactions)] interactions!"
 	to_chat(world, span_boldannounce(extra_info))
 	log_subsystem(src, extra_info)
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/processing/interactions/stat_entry(msg)
 	msg += "|🖐:[LAZYLEN(interactions)]|"

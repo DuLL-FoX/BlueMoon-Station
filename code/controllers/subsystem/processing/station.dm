@@ -12,7 +12,7 @@ PROCESSING_SUBSYSTEM_DEF(station)
 	///Currently active announcer. Starts as a type but gets initialized after traits are selected
 	var/datum/centcom_announcer/announcer = /datum/centcom_announcer/default
 
-/datum/controller/subsystem/processing/station/Initialize(timeofday)
+/datum/controller/subsystem/processing/station/Initialize()
 
 	//If doing unit tests we don't do none of that trait shit ya know?
 	#ifndef UNIT_TESTS
@@ -21,7 +21,7 @@ PROCESSING_SUBSYSTEM_DEF(station)
 
 	announcer = new announcer() //Initialize the station's announcer datum
 
-	return ..()
+	return SS_INIT_SUCCESS
 
 ///Rolls for the amount of traits and adds them to the traits list
 /datum/controller/subsystem/processing/station/proc/SetupTraits()

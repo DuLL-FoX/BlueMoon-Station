@@ -51,7 +51,7 @@ SUBSYSTEM_DEF(nightshift)
 			last_starlight_power = result[2]
 			GLOB.current_starlight_color = result[1]
 			GLOB.current_starlight_power = result[2]
-	return ..()
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/nightshift/fire(resumed = FALSE)
 	if(world.time - SSticker.round_start_time < nightshift_first_check)

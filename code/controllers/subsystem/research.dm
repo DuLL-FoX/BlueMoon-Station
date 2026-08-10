@@ -340,7 +340,7 @@ SUBSYSTEM_DEF(research)
 		L[TECHWEB_POINT_TYPE_GENERIC] = 50 + initial(S.rarity) * 2 + initial(S.yield) * 2 - initial(S.maturation) - initial(S.production) + initial(S.lifespan) + initial(S.potency)
 		techweb_point_items[S] = L
 
-	return ..()
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/research/fire()
 	var/list/bitcoins = list()

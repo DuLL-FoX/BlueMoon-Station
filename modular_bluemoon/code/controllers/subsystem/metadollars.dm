@@ -24,7 +24,6 @@ SUBSYSTEM_DEF(metadollars)
 	return parts[parts.len - 1]
 
 /datum/controller/subsystem/metadollars/Initialize()
-	. = ..()
 	prep_metadollar_leaderboard()
 	var/recovered = recover_all_legacy_balances()
 	if(recovered)

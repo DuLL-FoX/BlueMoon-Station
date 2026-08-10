@@ -12,6 +12,11 @@ SUBSYSTEM_DEF(chat)
 
 	var/list/payload_by_client = list()
 
+/// Инициализировать нечего, но флаг нужен: to_chat() до него шлёт сообщения запасным
+/// путём, поэтому подсистема обязана явно отметиться живой, а не остаться SS_NO_INIT.
+/datum/controller/subsystem/chat/Initialize()
+	return SS_INIT_SUCCESS
+
 /datum/controller/subsystem/chat/fire()
 	for(var/key in payload_by_client)
 		var/client/client = key

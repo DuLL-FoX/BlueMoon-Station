@@ -18,7 +18,6 @@ SUBSYSTEM_DEF(tetris_weekly_rewards)
 	var/leaderboard_reset_done = FALSE
 
 /datum/controller/subsystem/tetris_weekly_rewards/Initialize()
-	. = ..()
 	load_state()
 	load_progress()
 	if(!next_reset_realtime)
@@ -26,6 +25,7 @@ SUBSYSTEM_DEF(tetris_weekly_rewards)
 		save_state()
 	if(length(current_entries))
 		processing_rewards = TRUE
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/tetris_weekly_rewards/fire(resumed = FALSE)
 	if(processing_rewards)

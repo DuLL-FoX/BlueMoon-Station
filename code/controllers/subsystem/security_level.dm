@@ -1,6 +1,7 @@
 // NOT THE SAME AS TG! THIS IS BAREMETAL JUST TO MAKE COMSIGS WORK!
 SUBSYSTEM_DEF(security_level)
 	name = "Security Level"
+	flags = SS_NO_INIT
 	can_fire = FALSE // We will control when we fire in this subsystem
 	init_order = INIT_ORDER_SECURITY_LEVEL
 	/// Currently set security level

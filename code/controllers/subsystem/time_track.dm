@@ -69,8 +69,7 @@ SUBSYSTEM_DEF(time_track)
 	var/browser_reports_window = 0
 	var/browser_latency_max_window = 0
 
-/datum/controller/subsystem/time_track/Initialize(start_timeofday)
-	. = ..()
+/datum/controller/subsystem/time_track/Initialize()
 	GLOB.perf_log = "[GLOB.log_directory]/perf-[GLOB.round_id ? GLOB.round_id : "NULL"]-[SSmapping.config?.map_name].csv"
 	GLOB.ping_perf_log = "[GLOB.log_directory]/ping-perf-[GLOB.round_id ? GLOB.round_id : "NULL"]-[SSmapping.config?.map_name].csv"
 	// Про колонку num_timers: это НЕ население колеса таймеров, а только те таймеры,
@@ -193,6 +192,7 @@ SUBSYSTEM_DEF(time_track)
 			"browser_latency_max_window",
 		)
 	)
+	return SS_INIT_SUCCESS
 
 /// Сэмпл старше этого считается протухшим и в сводку по миру не идёт.
 #define PING_SAMPLE_STALE_AFTER (90 SECONDS)

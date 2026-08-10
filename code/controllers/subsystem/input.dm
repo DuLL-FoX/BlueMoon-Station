@@ -31,7 +31,7 @@ SUBSYSTEM_DEF(input)
 
 	refresh_client_macro_sets()
 
-	return ..()
+	return SS_INIT_SUCCESS
 
 /// Sets up the key list for classic mode for when badmins screw up vv's.
 /datum/controller/subsystem/input/proc/setup_macrosets()

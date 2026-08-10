@@ -27,7 +27,7 @@ SUBSYSTEM_DEF(parallax)
 
 /datum/controller/subsystem/parallax/Initialize()
 	build_catalog()
-	return ..()
+	return SS_INIT_SUCCESS
 
 /**
  * Собирает каталог профилей по подтипам. Профили - синглтоны: экземпляр на тип,

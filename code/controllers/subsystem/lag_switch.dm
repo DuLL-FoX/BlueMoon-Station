@@ -31,7 +31,7 @@ SUBSYSTEM_DEF(lag_switch)
 		auto_switch = TRUE
 		trigger_pop = auto_switch_pop
 		RegisterSignal(SSdcs, COMSIG_GLOB_CLIENT_CONNECT, PROC_REF(client_connected))
-	return ..()
+	return SS_INIT_SUCCESS
 
 /// Пересоздание МК (NEW_SS_GLOBAL): measures - static и переживает замену
 /// инстанса сам, а админские настройки и взведённое окно вето - нет.

@@ -9,7 +9,7 @@
 
 SUBSYSTEM_DEF(auto_cryo)
 	name = "Automated Cryogenics"
-	flags = SS_BACKGROUND
+	flags = SS_BACKGROUND | SS_NO_INIT
 	wait = 10 SECONDS
 	/// Current batch of SSD mobs being processed
 	var/list/currentrun_cryo = list()

@@ -8,7 +8,7 @@ SUBSYSTEM_DEF(polling)
 
 /datum/controller/subsystem/polling/Initialize()
 	currently_polling = list()
-	return ..()
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/polling/fire()
 	if(!currently_polling)

@@ -4,7 +4,7 @@ SUBSYSTEM_DEF(language)
 	flags = SS_NO_FIRE
 	var/list/languages_by_name = list() //Sandstorm CHANGE - language bullshit
 
-/datum/controller/subsystem/language/Initialize(timeofday)
+/datum/controller/subsystem/language/Initialize()
 	for(var/L in subtypesof(/datum/language))
 		var/datum/language/language = L
 		if(!initial(language.key))
@@ -19,4 +19,4 @@ SUBSYSTEM_DEF(language)
 		languages_by_name[initial(language.name)] = instance
 		//
 
-	return ..()
+	return SS_INIT_SUCCESS

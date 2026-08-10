@@ -269,6 +269,48 @@ GLOBAL_REAL(Master, /datum/controller/master) = new
 		Initialize(20, TRUE)
 
 
+/**
+ * Инициализирует одну подсистему и разбирает её вердикт.
+ *
+ * Возврат Initialize() - это один из SS_INIT_*. Подсистема, сказавшая SS_INIT_FAILURE,
+ * снимается с фаера: тикать с недостроенным состоянием хуже, чем не тикать вовсе.
+ */
+/datum/controller/master/proc/InitializeSubsystem(datum/controller/subsystem/subsystem)
+	if((subsystem.flags & SS_NO_INIT) || subsystem.initialized) //Don't init SSs with the corresponding flag or if they already are initialized
+		return
+
+	var/start_timeofday = REALTIMEOFDAY
+	var/result = subsystem.Initialize()
+	var/time = (REALTIMEOFDAY - start_timeofday) / 10
+	var/seconds = "[time] second[time == 1 ? "" : "s"]"
+
+	var/log_message
+	var/chat_message
+	switch(result)
+		if(SS_INIT_FAILURE)
+			log_message = "Failed to initialize [subsystem.name] subsystem after [seconds]! [subsystem.initialization_failure_message || "No reason given."]"
+			chat_message = span_boldwarning(log_message)
+			subsystem.can_fire = FALSE
+			subsystem.flags |= SS_NO_FIRE
+		if(SS_INIT_NO_NEED)
+			log_message = "Skipped [subsystem.name] subsystem, it reported it was not needed."
+		if(SS_INIT_NO_MESSAGE)
+			log_message = "Initialized [subsystem.name] subsystem within [seconds]!"
+		if(SS_INIT_SUCCESS)
+			log_message = "Initialized [subsystem.name] subsystem within [seconds]!"
+			chat_message = span_boldannounce(log_message)
+		else
+			log_message = "Initialized [subsystem.name] subsystem within [seconds], but it returned [isnull(result) ? "null" : result] instead of an SS_INIT_* define!"
+			chat_message = span_boldwarning(log_message)
+
+	if(result != SS_INIT_FAILURE)
+		subsystem.initialized = TRUE
+		SEND_SIGNAL(subsystem, COMSIG_SUBSYSTEM_POST_INITIALIZE, start_timeofday)
+
+	if(chat_message)
+		to_chat(world, chat_message)
+	log_subsystem(subsystem.name, log_message)
+
 // Please don't stuff random bullshit here,
 // Make a subsystem, give it the SS_NO_FIRE flag, and do your work in it's Initialize()
 /datum/controller/master/Initialize(delay, init_sss, tgs_prime)
@@ -289,9 +331,7 @@ GLOBAL_REAL(Master, /datum/controller/master) = new
 	// Initialize subsystems.
 	current_ticklimit = CONFIG_GET(number/tick_limit_mc_init)
 	for (var/datum/controller/subsystem/SS in subsystems)
-		if (SS.flags & SS_NO_INIT || SS.initialized) //Don't init SSs with the correspondig flag or if they already are initialzized
-			continue
-		SS.Initialize(REALTIMEOFDAY)
+		InitializeSubsystem(SS)
 		CHECK_TICK
 	current_ticklimit = TICK_LIMIT_RUNNING
 	var/time = (REALTIMEOFDAY - start_timeofday) / 10

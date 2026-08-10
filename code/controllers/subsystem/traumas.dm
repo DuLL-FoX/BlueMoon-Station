@@ -203,7 +203,7 @@ SUBSYSTEM_DEF(traumas)
 						  "arachnid" = typecacheof(list(/datum/species/arachnid))
 						 )
 
-	return ..()
+	return SS_INIT_SUCCESS
 
 /// Проверка сохранённого в префах типа фобии. Возвращает выбор как есть, если он валиден,
 /// и null, если такого типа больше нет в пуле.

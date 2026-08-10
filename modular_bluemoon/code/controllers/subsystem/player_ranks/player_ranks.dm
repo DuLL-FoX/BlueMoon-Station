@@ -28,7 +28,7 @@ SUBSYSTEM_DEF(player_ranks)
 
 	load_mentors()
 
-	return ..()
+	return SS_INIT_SUCCESS
 
 
 /datum/controller/subsystem/player_ranks/Destroy()

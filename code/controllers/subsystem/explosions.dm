@@ -1,7 +1,7 @@
 SUBSYSTEM_DEF(explosions)
 	name = "Explosions"
 	wait = 1
-	flags = SS_TICKER
+	flags = SS_TICKER | SS_NO_INIT
 	priority = FIRE_PRIORITY_EXPLOSIONS
 	var/static/list/datum/wave_explosion/wave_explosions = list()
 	var/static/list/datum/wave_explosion/active_wave_explosions = list()

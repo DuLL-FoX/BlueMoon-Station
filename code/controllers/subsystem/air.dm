@@ -389,7 +389,7 @@ SUBSYSTEM_DEF(air)
 	var/last_phase = diagnostic_last_part ? phase_name(diagnostic_last_part) : "none"
 	return "phase [phase_name(currentpart)], remaining [length(currentrun)]; last [last_phase] [round(diagnostic_last_part_cost_ms, 0.1)]ms at wt [diagnostic_last_part_world_time]; active [length(active_turfs)], groups [length(excited_groups)], high-pressure [length(high_pressure_delta)], hotspots [length(hotspots)], pipenets [length(networks)], rebuilds [length(pipenets_needing_rebuilt)]"
 
-/datum/controller/subsystem/air/Initialize(timeofday)
+/datum/controller/subsystem/air/Initialize()
 	map_loading = FALSE
 	setup_allturfs()
 	log_roundstart_active_turfs()
@@ -402,7 +402,7 @@ SUBSYSTEM_DEF(air)
 	sleeping_edges_enabled = CONFIG_GET(flag/atmos_sleeping_edges)
 	set_heat_enabled(CONFIG_GET(flag/atmos_heat_enabled))
 	set_atmos_speed(CONFIG_GET(number/atmos_speed_multiplier))
-	return ..()
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/air/proc/extools_update_ssair()
 

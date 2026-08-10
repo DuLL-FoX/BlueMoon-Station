@@ -2,8 +2,7 @@
 // Add incompatible quirks.
 // Inspired from LeDrascol's code. Thank you.
 /*
-/datum/controller/subsystem/processing/quirks/Initialize(timeofday)
-	. = ..()
+/datum/controller/subsystem/processing/quirks/Initialize()
 
 	// Prevent incompatible quirks.
 	LAZYADD(quirk_blacklist, list(
@@ -36,4 +35,5 @@
 		// Bloodsuckers cannot interact with Hallowed users.
 		list("Sanguine Metabolism","Hallowed")
 		))
+	return SS_INIT_SUCCESS
 */

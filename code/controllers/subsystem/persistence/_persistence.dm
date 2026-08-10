@@ -30,7 +30,7 @@ SUBSYSTEM_DEF(persistence)
 	var/map_persistence_path = get_map_persistence_path()
 	if(map_persistence_path)
 		LoadMapPersistence()
-	return ..()
+	return SS_INIT_SUCCESS
 
 /**
  * Gets the persistence path of the current map.

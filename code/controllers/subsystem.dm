@@ -28,6 +28,10 @@
 	/// This var is set to TRUE after the subsystem has been initialized.
 	var/initialized = FALSE
 
+	/// Причина провала инициализации. Заполняется подсистемой перед возвратом
+	/// [SS_INIT_FAILURE], МК выводит её в лог и в чат - иначе провал остаётся немым.
+	var/initialization_failure_message
+
 	/// Set to 0 to prevent fire() calls, mostly for admin use or subsystems that may be resumed later
 	/// use the [SS_NO_FIRE] flag instead for systems that never fire to keep it from even being added to list that is checked every tick
 	var/can_fire = TRUE
@@ -243,15 +247,16 @@
 /datum/controller/subsystem/proc/subsystem_log(msg)
 	return log_subsystem(name, msg)
 
-//used to initialize the subsystem AFTER the map has loaded
-/datum/controller/subsystem/Initialize(start_timeofday)
-	initialized = TRUE
-	SEND_SIGNAL(src, COMSIG_SUBSYSTEM_POST_INITIALIZE, start_timeofday)
-	var/time = (REALTIMEOFDAY - start_timeofday) / 10
-	var/msg = "Initialized [name] subsystem within [time] second[time == 1 ? "" : "s"]!"
-	to_chat(world, span_boldannounce("[msg]"))
-	log_subsystem(msg)
-	return time
+/**
+ * Инициализация подсистемы. Зовётся после загрузки карты, переопределяется наследниками.
+ *
+ * Возврат обязан быть одним из SS_INIT_*: по нему МК решает, считать ли подсистему
+ * живой, снимать ли ей фаер и что писать в лог и в чат. Вызывать `..()` из
+ * переопределения не нужно - тайминг, лог и COMSIG_SUBSYSTEM_POST_INITIALIZE
+ * делает [/datum/controller/master/proc/InitializeSubsystem].
+ */
+/datum/controller/subsystem/Initialize()
+	return SS_INIT_NONE
 
 /datum/controller/subsystem/stat_entry(msg)
 	if(can_fire && !(SS_NO_FIRE & flags))

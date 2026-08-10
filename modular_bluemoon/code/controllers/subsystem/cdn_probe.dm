@@ -91,9 +91,9 @@ SUBSYSTEM_DEF(cdn_probe)
 	/// Про отказ хоста отвечать на HEAD говорим один раз за раунд.
 	var/head_refusal_logged = FALSE
 
-/datum/controller/subsystem/cdn_probe/Initialize(start_timeofday)
+/datum/controller/subsystem/cdn_probe/Initialize()
 	apply_config()
-	return ..()
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/cdn_probe/OnConfigLoad()
 	apply_config()

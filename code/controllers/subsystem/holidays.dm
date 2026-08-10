@@ -6,9 +6,9 @@ SUBSYSTEM_DEF(holidays)
 	/// Список праздников сегодня или null
 	var/list/holidays
 
-/datum/controller/subsystem/holidays/Initialize(start_timeofday)
+/datum/controller/subsystem/holidays/Initialize()
 	getHoliday()
-	return ..()
+	return SS_INIT_SUCCESS
 
 /*
 //////////////

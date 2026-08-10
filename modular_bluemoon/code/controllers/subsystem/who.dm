@@ -21,7 +21,7 @@ SUBSYSTEM_DEF(who)
 /datum/controller/subsystem/who/Initialize()
 	who.update_data()
 	staff_who.update_data()
-	initialized = TRUE
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/who/fire()
 	if(length(SStgui.get_all_open_uis(who)))

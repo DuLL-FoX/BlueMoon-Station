@@ -1,5 +1,6 @@
 PROCESSING_SUBSYSTEM_DEF(wet_floors)
 	name = "Wet floors"
+	flags = SS_NO_INIT
 	priority = FIRE_PRIORITY_WET_FLOORS
 	wait = 10
 	stat_tag = "WFP" //Used for logging
