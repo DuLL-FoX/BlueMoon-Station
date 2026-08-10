@@ -1,3 +1,9 @@
+/// Титульный экран попадает в dyn.rsc и качается каждым клиентом ещё до того,
+/// как у него появится интерфейс, поэтому его размер платится на каждом входе.
+/// Всё, что тяжелее этого, - почти наверняка неужатая гифка, а не осознанный
+/// выбор: полноэкранный сплэш укладывается в считанные сотни килобайт.
+#define TITLE_SCREEN_SIZE_BUDGET (4 * 1024 * 1024)
+
 SUBSYSTEM_DEF(title)
 	name = "Title Screen"
 	flags = SS_NO_FIRE
@@ -34,6 +40,8 @@ SUBSYSTEM_DEF(title)
 			else if(findtext(L[2], "{") && findtext(L[2], "}"))
 				title_screens += S
 
+	title_screens = discard_oversized_title_screens(title_screens)
+
 	if(length(title_screens))
 		file_path = "[global.config.directory]/title_screens/images/[pick(title_screens)]"
 
@@ -42,6 +50,9 @@ SUBSYSTEM_DEF(title)
 
 	ASSERT(fexists(file_path))
 
+	// Размер печатаем человекочитаемым: интерполяция числа >= 1e6 даёт шесть значащих
+	// цифр, и четырёхмегабайтный экран уезжал в лог как 4.19430e+006.
+	log_world("[name]: [file_path] ([personal_music_box_size_text(length(file(file_path)))]) уходит каждому клиенту через dyn.rsc.")
 	icon = new(fcopy_rsc(file_path))
 
 	// Check for a corresponding sound file
@@ -59,6 +70,27 @@ SUBSYSTEM_DEF(title)
 		splash_turf.handle_generic_titlescreen_sizes()
 
 	return ..()
+
+/// Убирает из выборки экраны, которые дороже, чем стоит вход в игру. Возвращает
+/// отфильтрованный список; если пригодных не осталось, вызывающий откатится на
+/// icons/runtime/default_title.dmi вместо того, чтобы раздать многомегабайтную
+/// картинку всем подключающимся.
+/datum/controller/subsystem/title/proc/discard_oversized_title_screens(list/title_screens)
+	var/list/oversized = list()
+	for(var/screen_name in title_screens)
+		var/screen_path = "[global.config.directory]/title_screens/images/[screen_name]"
+		var/screen_size = length(file(screen_path))
+		if(screen_size > TITLE_SCREEN_SIZE_BUDGET)
+			oversized[screen_name] = screen_size
+	if(!length(oversized))
+		return title_screens
+
+	var/list/allowed = title_screens.Copy()
+	for(var/screen_name in oversized)
+		log_world("[name]: [screen_name] пропущен: [personal_music_box_size_text(oversized[screen_name])] при бюджете [personal_music_box_size_text(TITLE_SCREEN_SIZE_BUDGET)]. \
+			Титульный экран качает каждый клиент - пережмите файл или уберите его из config/title_screens/images/.")
+		allowed -= screen_name
+	return allowed
 
 /datum/controller/subsystem/title/vv_edit_var(var_name, var_value)
 	. = ..()
@@ -93,3 +125,5 @@ SUBSYSTEM_DEF(title)
 	// Recover the sound path
 	if(fexists("data/previous_title_sound.dat"))
 		sound_path = file2text("data/previous_title_sound.dat")
+
+#undef TITLE_SCREEN_SIZE_BUDGET

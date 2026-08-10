@@ -36,3 +36,14 @@
 
 	TEST_ASSERT_EQUAL(length(GLOB.data_core.pending_photo_jobs), 0, "очередь должна опустошаться и при удалённом мобе")
 	TEST_ASSERT_NULL(locked_record.fields["image"], "удалённый моб не должен получать фото задним числом")
+
+/// The production hitch lived inside one getFlatIcon call, so a CHECK_TICK after the
+/// whole photo job is insufficient. Keep both the frame-elision and per-layer yield
+/// wired specifically into manifest capture.
+/datum/unit_test/manifest_photo_flattening_is_sliceable/Run()
+	var/datacore_source = read_source_file("code/datums/datacore.dm")
+	TEST_ASSERT(findtext(datacore_source, "yield_between_layers = TRUE"), "manifest capture must opt into sliceable flattening")
+
+	var/icon_source = read_source_file("code/__HELPERS/icons.dm")
+	TEST_ASSERT(findtext(icon_source, "no_anim ? 1 : null"), "getFlatIcon must discard base animation frames before blending")
+	TEST_ASSERT(findtext(icon_source, "if(yield_between_layers)\n\t\t\t\tCHECK_TICK"), "getFlatIcon must yield inside its layer loop")

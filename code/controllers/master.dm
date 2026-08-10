@@ -328,12 +328,13 @@ GLOBAL_REAL(Master, /datum/controller/master) = new
 	if(tgs_prime)
 		world.TgsInitializationComplete()
 
+	// BYOND 516 does not resume the sleep(1) below while sleep_offline is TRUE
+	// and no client is connected. Apply the configured final state before
+	// yielding, otherwise RESUME_AFTER_INITIALIZATIONS only takes effect when the
+	// first player joins and all deferred startup work lands on their login ticks.
 	if(sleep_offline_after_initializations)
-		world.sleep_offline = TRUE
+		world.sleep_offline = !CONFIG_GET(flag/resume_after_initializations)
 	sleep(1)
-
-	if(sleep_offline_after_initializations && CONFIG_GET(flag/resume_after_initializations))
-		world.sleep_offline = FALSE
 	initializations_finished_with_no_players_logged_in = initialized_tod < REALTIMEOFDAY - 10
 	// Loop.
 	Master.StartProcessing(0)

@@ -1,11 +1,39 @@
 /// Portable music box — Ratwood dmusicbox-style user .ogg playback (sponsor loadout).
 
 #define PERSONAL_MUSIC_BOX_MAX_FILE_SIZE 6485760 // 6 MiB
+/// Потолок на НОВЫЕ байты от одного ckey за раунд. Повторная заливка того же файла сюда
+/// не идёт: она ничего не стоит каналу. Число выбрано так, чтобы не задеть обычную игру -
+/// в раунде 9870 самый активный игрок влил 11.3 МБ - и при этом ограничить бесконечную
+/// закачку одним человеком.
+#define PERSONAL_MUSIC_BOX_ROUND_BUDGET (24 * 1024 * 1024) // 24 MiB
 #define PERSONAL_MUSIC_BOX_UPLOAD_COOLDOWN 30 SECONDS
 #define PERSONAL_MUSIC_BOX_FILE_CHANGE_COOLDOWN 3 MINUTES
 #define PERSONAL_MUSIC_BOX_PLAY_COOLDOWN 10 SECONDS
 #define PERSONAL_MUSIC_BOX_DEFAULT_TRACK_LENGTH 20 MINUTES
 #define PERSONAL_MUSIC_BOX_DEFAULT_VOLUME 100
+
+/**
+ * # Учёт того, что игроки вливают в поток ресурсов
+ *
+ * Загруженный трек едет каждому слушателю по игровому сокету - тому же, по которому
+ * идёт вся игра. В раунде 9870 через шкатулки прошло 19 файлов на 42.7 МБ, то есть
+ * ровно столько, сколько ветка versioned-rsc-deploy отыграла на пережатии всего
+ * каталога VOX (60.2 -> 17.7 МБ). Один из этих файлов был залит дважды, байт в байт:
+ * jukebox_upload_snaipernoob_12869.7.ogg и _26460.7.ogg совпадают целиком, и каждый
+ * слушатель выкачал 3.34 МБ повторно.
+ *
+ * На CDN такой файл не вынести - он появляется в середине раунда, а BYOND умеет играть
+ * звук только из ресурса. Поэтому здесь две меры: не отдавать один и тот же файл дважды
+ * как два разных ресурса, и держать потолок на объём НОВЫХ байт от одного игрока.
+ */
+/// sha256 -> путь к уже лежащему файлу с таким содержимым.
+GLOBAL_LIST_EMPTY(personal_music_box_tracks_by_hash)
+/// ckey -> сколько новых байт он влил в поток ресурсов за раунд.
+GLOBAL_LIST_EMPTY(personal_music_box_bytes_by_ckey)
+/// Суммарно новых байт за раунд.
+GLOBAL_VAR_INIT(personal_music_box_bytes_total, 0)
+/// Суммарно байт, которые не поехали повторно благодаря дедупу.
+GLOBAL_VAR_INIT(personal_music_box_bytes_deduped, 0)
 
 GLOBAL_VAR_INIT(personal_music_boxes_last_upload, 0)
 GLOBAL_VAR_INIT(personal_music_boxes_last_play, 0)
@@ -266,11 +294,38 @@ GLOBAL_VAR_INIT(personal_music_boxes_last_play, 0)
 		to_chat(user, span_warning("Файл не является валидным OGG (ожидался заголовок OggS)."))
 		return
 
+	// Тот же файл, залитый второй раз, обязан остаться тем же ресурсом: под новым именем
+	// BYOND считает его новым и гонит слушателям заново.
+	var/track_hash = personal_music_box_file_hash(logged_filename)
+	var/existing_path = track_hash ? GLOB.personal_music_box_tracks_by_hash[track_hash] : null
+	if(existing_path && existing_path != logged_filename && fexists(existing_path))
+		fdel(logged_filename)
+		logged_filename = existing_path
+		GLOB.personal_music_box_bytes_deduped += file_size
+		user.log_message("uploaded personal music box track (дубль, повторно не раздаётся): [logged_filename]", LOG_GAME)
+	else
+		var/spent = GLOB.personal_music_box_bytes_by_ckey[user.ckey]
+		if(isnull(spent))
+			spent = 0
+		if(spent + file_size > PERSONAL_MUSIC_BOX_ROUND_BUDGET)
+			fdel(logged_filename)
+			to_chat(user, span_warning("За раунд можно загрузить не больше \
+				[personal_music_box_size_text(PERSONAL_MUSIC_BOX_ROUND_BUDGET)] музыки, \
+				и вы уже израсходовали [personal_music_box_size_text(spent)]. \
+				Ранее загруженные треки играть по-прежнему можно."))
+			return
+		GLOB.personal_music_box_bytes_by_ckey[user.ckey] = spent + file_size
+		GLOB.personal_music_box_bytes_total += file_size
+		if(track_hash)
+			GLOB.personal_music_box_tracks_by_hash[track_hash] = logged_filename
+		user.log_message("uploaded personal music box track: [logged_filename] \
+			([personal_music_box_size_text(file_size)], за раунд от него \
+			[personal_music_box_size_text(spent + file_size)])", LOG_GAME)
+
 	curfile_path = logged_filename
 
 	last_file_change = world.time
 	GLOB.personal_music_boxes_last_upload = world.time
-	user.log_message("uploaded personal music box track: [logged_filename]", LOG_GAME)
 
 	song_name = get_personal_music_box_track_name(filename)
 	has_track = TRUE
@@ -314,6 +369,44 @@ GLOBAL_VAR_INIT(personal_music_boxes_last_play, 0)
 	if(user && curfile_path)
 		user.log_message("stopped personal music box track: [curfile_path]", LOG_GAME)
 
+/// sha256 файла. null означает "посчитать не вышло" - тогда дедуп просто не срабатывает
+/// и трек едет как новый ресурс, то есть ровно как до появления этого кода.
+/proc/personal_music_box_file_hash(path)
+	if(!fexists(path))
+		return null
+	var/hash = rustg_hash_file(RUSTG_HASH_SHA256, path)
+	return length(hash) ? hash : null
+
+/// Человекочитаемый размер для чата и логов. Второй аргумент round() обязателен: с одним
+/// он округляет ВНИЗ, и 373.5 КБ превращались бы в 373.
+/proc/personal_music_box_size_text(bytes)
+	if(bytes >= (1024 * 1024))
+		return "[round(bytes / (1024 * 1024), 0.1)] МБ"
+	return "[round(bytes / 1024, 1)] КБ"
+
+/**
+ * Сводка за раунд по музыке, залитой игроками.
+ *
+ * Уезжает в asset.log рядом со строкой про источник .rsc: это ровно такая же выдача
+ * ресурсов, только инициированная игроком, и смотреть на них надо вместе. Без этой
+ * строки объём приходилось считать вручную по именам файлов в каталоге раунда.
+ */
+/proc/log_personal_music_box_summary()
+	var/line = build_personal_music_box_summary()
+	if(line)
+		log_asset(line)
+
+/// Строка сводки отдельно от записи в лог - иначе её нечем проверить в тесте.
+/proc/build_personal_music_box_summary()
+	if(!GLOB.personal_music_box_bytes_total && !GLOB.personal_music_box_bytes_deduped)
+		return null
+	var/list/per_player = list()
+	for(var/player_ckey in GLOB.personal_music_box_bytes_by_ckey)
+		per_player += "[player_ckey] [personal_music_box_size_text(GLOB.personal_music_box_bytes_by_ckey[player_ckey])]"
+	return "Музыка игроков: новых треков [length(GLOB.personal_music_box_tracks_by_hash)] на \
+		[personal_music_box_size_text(GLOB.personal_music_box_bytes_total)], дедуп сэкономил \
+		[personal_music_box_size_text(GLOB.personal_music_box_bytes_deduped)]; по игрокам: [per_player.Join(", ")]"
+
 /proc/get_personal_music_box_track_name(filename)
 	var/track_label = filename
 	var/slash_pos = findlasttext(track_label, "/")
@@ -327,6 +420,7 @@ GLOBAL_VAR_INIT(personal_music_boxes_last_play, 0)
 	return length(track_label) ? track_label : "Custom track"
 
 #undef PERSONAL_MUSIC_BOX_MAX_FILE_SIZE
+#undef PERSONAL_MUSIC_BOX_ROUND_BUDGET
 #undef PERSONAL_MUSIC_BOX_UPLOAD_COOLDOWN
 #undef PERSONAL_MUSIC_BOX_FILE_CHANGE_COOLDOWN
 #undef PERSONAL_MUSIC_BOX_PLAY_COOLDOWN
