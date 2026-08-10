@@ -12,7 +12,7 @@ SUBSYSTEM_DEF(who)
 	name = "Who"
 	flags = SS_BACKGROUND
 	runlevels = RUNLEVELS_DEFAULT|RUNLEVEL_LOBBY
-	init_order = 40
+	init_order = INIT_ORDER_WHO
 	wait = 2 SECONDS
 
 	var/datum/player_list/who = new

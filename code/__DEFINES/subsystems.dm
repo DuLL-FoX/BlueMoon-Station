@@ -121,6 +121,8 @@
 // Subsystem init_order, from highest priority to lowest priority
 // Subsystems shutdown in the reverse of the order they initialize in
 // The numbers just define the ordering, they are meaningless otherwise.
+// Значения обязаны быть уникальными: равный init_order сортировка не разводит,
+// и порядок двух подсистем начинает зависеть от порядка include в .dme.
 
 #define INIT_ORDER_PROFILER			102
 #define INIT_ORDER_FAIL2TOPIC		101
@@ -144,39 +146,33 @@
 #define INIT_ORDER_QUIRKS			60
 #define INIT_ORDER_AI_MOVEMENT 		56 //We need the movement setup
 #define INIT_ORDER_AI_CONTROLLERS 	55 //So the controller can get the ref
-#define INIT_ORDER_TICKER			55
-// #define INIT_ORDER_TCG				55
+#define INIT_ORDER_TICKER			54
 #define INIT_ORDER_MAPPING			50
 #define INIT_ORDER_TIMETRACK		47
 #define INIT_ORDER_SPATIAL_GRID		46 // после маппинга (нужны z-уровни), до инита атомов (они регистрируются в гриде)
 #define INIT_ORDER_NETWORKS			45
 #define INIT_ORDER_ECONOMY			40
+#define INIT_ORDER_WHO				39
 #define INIT_ORDER_HOLODECK			35
-#define INIT_ORDER_RESTAURANT 		34
-// #define INIT_ORDER_OUTPUTS			35
 #define INIT_ORDER_ATOMS			30
 #define INIT_ORDER_LANGUAGE			25
 #define INIT_ORDER_MACHINES			20
 #define INIT_ORDER_CIRCUIT			15
-// #define INIT_ORDER_SKILLS			15
 #define INIT_ORDER_TIMER			1
 #define INIT_ORDER_DEFAULT			0
 #define INIT_ORDER_AIR				-1
 #define INIT_ORDER_AIR_TURFS		-2
-#define INIT_ORDER_PERSISTENCE		-2 //before assets because some assets take data from SSPersistence
-#define INIT_ORDER_MINIMAP			-3
+#define INIT_ORDER_PERSISTENCE		-3 //before assets because some assets take data from SSPersistence
 #define INIT_ORDER_ASSETS			-4
 #define INIT_ORDER_ICON_SMOOTHING	-5
 #define INIT_ORDER_OVERLAY			-6
 #define INIT_ORDER_MAIL				-7 // BLUEMOON ADD - переработка писем
 #define INIT_ORDER_XKEYSCORE		-10
-#define INIT_ORDER_STICKY_BAN		-10
+#define INIT_ORDER_STICKY_BAN		-11
 #define INIT_ORDER_LIGHTING			-20
 #define INIT_ORDER_SHUTTLE			-21
 #define INIT_ORDER_MINOR_MAPPING	-40
 #define INIT_ORDER_PATH				-50
-// #define INIT_ORDER_DISCORD			-60
-// #define INIT_ORDER_EXPLOSIONS		-69
 #define INIT_ORDER_STATPANELS		-98
 #define INIT_ORDER_HILBERTSHOTEL	-99
 #define INIT_ORDER_CHAT				-100 //Should be last to ensure chat remains smooth during init.
@@ -198,44 +194,41 @@
 #define FIRE_PRIORITY_SERVER_MAINT	10
 #define FIRE_PRIORITY_RESEARCH		10
 #define FIRE_PRIORITY_VIS			10
-#define FIRE_PRIORITY_GARBAGE		25
+#define FIRE_PRIORITY_AMBIENCE		10
 #define FIRE_PRIORITY_WET_FLOORS	20
 #define FIRE_PRIORITY_AIR			20
-#define FIRE_PRIORITY_AMBIENCE		10
 #define FIRE_PRIORITY_NPC			20
 #define FIRE_PRIORITY_NPC_MOVEMENT 	21
 #define FIRE_PRIORITY_NPC_ACTIONS 	22
+#define FIRE_PRIORITY_GARBAGE		25
 #define FIRE_PRIORITY_PROCESS		25
 #define FIRE_PRIORITY_THROWING		25
 #define FIRE_PRIORITY_SPACEDRIFT	30
 #define FIRE_PRIORITY_INSTRUMENTS	30
 #define FIRE_PRIORITY_FIELDS		30
-#define FIRE_PRIOTITY_SMOOTHING		35
+#define FIRE_PRIORITY_SMOOTHING		35
 #define FIRE_PRIORITY_HUDS			40
 #define FIRE_PRIORITY_NETWORKS		40
 #define FIRE_PRIORITY_OBJ			40
-#define FIRE_PRIORITY_ACID			40
-#define FIRE_PRIOTITY_BURNING		40
+#define FIRE_PRIORITY_BURNING		40
 #define FIRE_PRIORITY_AIR_TURFS		40
 #define FIRE_PRIORITY_DEFAULT		50
 #define FIRE_PRIORITY_PARALLAX		65
 #define FIRE_PRIORITY_MOBS			100
 #define FIRE_PRIORITY_TGUI			110
-#define FIRE_PRIORITY_PROJECTILES	850 // Real-time combat lane: below diagnostics/input, above Timer backlog.
 #define FIRE_PRIORITY_TICKER		200
 #define FIRE_PRIORITY_ATMOS_ADJACENCY	300
 #define FIRE_PRIORITY_EXPLOSIONS	350
 #define FIRE_PRIORITY_STATPANEL		390
 #define FIRE_PRIORITY_CHAT			400
 #define FIRE_PRIORITY_RUNECHAT		410
-#define FIRE_PRIORITY_OVERLAYS		500
-// #define FIRE_PRIORITY_EXPLOSIONS	666
 #define FIRE_PRIORITY_TIMER			700
-#define FIRE_PRIORITY_SOUND_LOOPS 800
+#define FIRE_PRIORITY_SOUND_LOOPS	800
+#define FIRE_PRIORITY_PROJECTILES	850 // Real-time combat lane: below diagnostics/input, above Timer backlog.
 #define FIRE_PRIORITY_TICK_SPIKES	900 // Замер дрифта тика должен идти до тяжёлых тикеров (таймеры и т.д.), чтобы читать usage до основной работы МК
 #define FIRE_PRIORITY_MOUSE_ENTERED	996 // Схлопнутые ховеры мыши: после отложенных вербов, до остального
-#define FIRE_PRIORITY_SPEECH_CONTROLLER	998 // Отложенная речь исполняется раньше остальных отложенных вербов
 #define FIRE_PRIORITY_DELAYED_VERBS	997 // Очередь SSverb_manager: отложенные при перегрузе тика вербы
+#define FIRE_PRIORITY_SPEECH_CONTROLLER	998 // Отложенная речь исполняется раньше остальных отложенных вербов
 #define FIRE_PRIORITY_INPUT			1000 // This must always always be the max highest priority. Player input must never be lost.
 
 // SS runlevels
@@ -248,22 +241,22 @@
 
 #define RUNLEVELS_DEFAULT (RUNLEVEL_SETUP | RUNLEVEL_GAME | RUNLEVEL_POSTGAME)
 
-// SSair run section
-#define SSAIR_PIPENETS 1
-#define SSAIR_ATMOSMACHINERY 2
-#define SSAIR_EXCITEDGROUPS 3
-#define SSAIR_HIGHPRESSURE 4
-#define SSAIR_HOTSPOTS 5
-#define SSAIR_TURF_CONDUCTION 6
-#define SSAIR_REBUILD_PIPENETS 7
-#define SSAIR_EQUALIZE 8
-#define SSAIR_ACTIVETURFS 9
-#define SSAIR_TURF_POST_PROCESS 10
-#define SSAIR_FINALIZE_TURFS 11
-#define SSAIR_ATMOSMACHINERY_AIR 12
-#define SSAIR_DEFERRED_AIRS 13
-#define SSAIR_DECOMPRESSION 14
-#define SSAIR_ATOMS 15
+// Фазы прохода SSair (var/currentpart), в порядке исполнения внутри fire().
+// Значения - просто метки, но нумерация держится по порядку прохода, чтобы файл
+// читался как расписание цикла. Фаза выравнивания необязательна (конфиг), фаза
+// теплопроводности пропускается при heat_enabled = FALSE.
+#define SSAIR_REBUILD_PIPENETS 1
+#define SSAIR_PIPENETS 2
+#define SSAIR_ATMOSMACHINERY 3
+#define SSAIR_ACTIVETURFS 4
+#define SSAIR_DECOMPRESSION 5
+#define SSAIR_EQUALIZE 6
+#define SSAIR_EXCITEDGROUPS 7
+#define SSAIR_FINALIZE_TURFS 8
+#define SSAIR_ATOMS 9
+#define SSAIR_HIGHPRESSURE 10
+#define SSAIR_HOTSPOTS 11
+#define SSAIR_TURF_CONDUCTION 12
 
 // Слоты пакета очереди расширения пайпнетов (SSair.expansion_queue): сеть,
 // граница BFS и посещённые трубы. Состояние живёт в пакете, чтобы обход
