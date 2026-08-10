@@ -84,10 +84,20 @@ If you are hosting a testing server on windows you can use a standalone version 
 
 Web delivery of game resources makes it quicker for players to join and reduces some of the stress on the game server.
 
-1. Edit compile_options.dm to set the `PRELOAD_RSC` define to `0`
-1. Add a url to config/external_rsc_urls pointing to a .zip file containing the .rsc.
-    * If you keep up to date with /tg/ you could reuse /tg/'s rsc cdn at http://tgstation13.download/byond/tgstation.zip. Otherwise you can use cdn services like CDN77 or cloudflare (requires adding a page rule to enable caching of the zip), or roll your own cdn using route 53 and vps providers.
-	* Regardless even offloading the rsc to a website without a CDN will be a massive improvement over the in game system for transferring files.
+Servers deployed through TGS should use the automated pipeline described in
+[tools/rsc_deploy/README.md](../tools/rsc_deploy/README.md). It publishes an immutable, versioned
+archive per deployment, embeds its URL into the DMB being compiled, and additionally moves lobby
+media and browser assets (TGUI bundles, fonts, the stat browser) onto the same HTTP host. Setup is
+one config file: copy `config/rsc_deploy.env.example` into the instance's persistent
+`Configuration/GameStaticFiles/config/` and point `RSC_PUBLISH_DIR` at the directory the web server
+serves.
+
+For a manually hosted server without TGS:
+
+1. `PRELOAD_RSC` is already `0` in `code/_compile_options.dm`, which is what makes external delivery possible.
+1. Set `EXTERNAL_RSC_URLS` in `config/entries/resources.txt` to a `.zip` containing `tgstation.rsc`. Repeating the entry rotates clients across several URLs.
+    * Any static web host works; a CDN in front of it is better but not required. Either is a large improvement over transferring resources through the game server.
+    * Do not point at another codebase's archive: the `.rsc` has to be the one produced by this exact build.
 
 ## IRC BOT SETUP
 

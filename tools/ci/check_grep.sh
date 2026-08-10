@@ -137,6 +137,17 @@ if grep -P 'areastring = "\/[^area]' _maps/**/*.dmm; then
     st=1
 fi;
 
+# These are written into a TGS deployment copy between PreCompile and PostCompile
+# and are per-host. A committed one overrides the generated defines of every
+# later deployment with a stale archive URL.
+for artifact in .rsc-deployment.dm .rsc-deploy.json config/rsc_deploy.env config/lobby_media.json; do
+    if git ls-files --error-unmatch "$artifact" > /dev/null 2>&1; then
+        echo
+        echo -e "${RED}ERROR: $artifact is a generated per-host deployment artifact and must not be committed.${NC}"
+        st=1
+    fi
+done
+
 if [ $st = 0 ]; then
     echo
     echo -e "${GREEN}No errors found using grep!${NC}"

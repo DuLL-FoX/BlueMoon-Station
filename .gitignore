@@ -7,6 +7,14 @@
 #Ignore byond config folder.
 /cfg/**/*
 
+# Per-host external RSC publishing settings.
+/config/rsc_deploy.env
+/config/lobby_media.json
+
+# Generated in a TGS deployment copy between PreCompile and PostCompile.
+/.rsc-deploy.json
+/.rsc-deployment.dm
+
 # Ignore compiled linux libs in the root folder, e.g. librust_g.so
 /*.so
 
@@ -189,6 +197,7 @@ Temporary Items
 !/config/title_music/sounds/exclude
 /config/title_screens/images/*
 !/config/title_screens/images/exclude
+/config/.rsc-input-cache.json
 
 #Linux docker
 /tools/LinuxOneShot/SetupProgram/obj/*

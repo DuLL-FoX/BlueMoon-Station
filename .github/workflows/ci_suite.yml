@@ -44,6 +44,7 @@ jobs:
           tools/build/build --ci lint
           tools/bootstrap/python -m dmi.test
           tools/bootstrap/python -m mapmerge2.dmm_test
+          python3 tools/rsc_deploy/test_rsc_deploy.py
           ~/dreamchecker > ${GITHUB_WORKSPACE}/output-annotations.txt 2>&1
       - name: Annotate Lints
         uses: yogstation13/DreamAnnotate@v2

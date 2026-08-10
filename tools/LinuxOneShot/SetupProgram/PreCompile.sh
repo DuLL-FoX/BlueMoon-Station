@@ -91,3 +91,16 @@ cd "$1"
 chmod +x tools/bootstrap/node  # Workaround for https://github.com/tgstation/tgstation-server/issues/1167
 chmod +x tgui/bin/tgui
 env TG_BOOTSTRAP_CACHE="$original_dir" TG_BOOTSTRAP_NODE_LINUX=1 TG_BUILD_TGS_MODE=1 tools/bootstrap/node tools/build/build.js
+
+# code/_compile_options.dm includes .rsc-deployment.dm for every TGS build, so
+# this file has to exist before DreamMaker runs even when this container never
+# publishes an external archive. rsc_deploy prepare owns its contents and writes
+# a disabled stub itself when no rsc_deploy.env is present in the static config.
+# The echo below is the last resort for an image without python3: the TGS hooks
+# in tools/tgs4_scripts get the same guarantee from tools/build/build.js, which
+# this script does not run in TGS mode.
+if command -v python3 > /dev/null 2>&1; then
+	python3 tools/rsc_deploy/rsc_deploy.py prepare --game-dir "$1" --revision "${2:-}"
+else
+	echo "// External RSC publishing is disabled: python3 is unavailable." > "$1/.rsc-deployment.dm"
+fi

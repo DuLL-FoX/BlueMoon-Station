@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "simple": {
+    "irv": {
+      "jquery-ui.custom-core-widgit-mouse-sortable-min.js": "html/jquery/jquery-ui.custom-core-widgit-mouse-sortable.min.js"
+    },
+    "jquery": {
+      "jquery.min.js": "html/jquery/jquery.min.js"
+    },
+    "tgui": {
+      "tgui.bundle.css": "tgui/public/tgui.bundle.css",
+      "tgui.bundle.js": "tgui/public/tgui.bundle.js"
+    },
+    "tgui_panel": {
+      "tgui-panel.bundle.css": "tgui/public/tgui-panel.bundle.css",
+      "tgui-panel.bundle.js": "tgui/public/tgui-panel.bundle.js"
+    }
+  },
+  "namespaced": {
+    "common": {
+      "assets": {
+        "padlock.png": "html/padlock.png"
+      },
+      "parents": {
+        "common.css": "html/browser/common.css"
+      }
+    },
+    "fontawesome": {
+      "assets": {
+        "fa-regular-400.ttf": "html/font-awesome/webfonts/fa-regular-400.ttf",
+        "fa-solid-900.ttf": "html/font-awesome/webfonts/fa-solid-900.ttf",
+        "fa-v4compatibility.ttf": "html/font-awesome/webfonts/fa-v4compatibility.ttf",
+        "v4shim.css": "html/font-awesome/css/v4-shims.min.css"
+      },
+      "parents": {
+        "font-awesome.css": "html/font-awesome/css/all.min.css"
+      }
+    },
+    "statbrowser": {
+      "assets": {},
+      "parents": {
+        "statbrowser.html": "html/statbrowser.html"
+      }
+    },
+    "tgfont": {
+      "assets": {
+        "tgfont.eot": "tgui/packages/tgfont/dist/tgfont.eot",
+        "tgfont.woff2": "tgui/packages/tgfont/dist/tgfont.woff2"
+      },
+      "parents": {
+        "tgfont.css": "tgui/packages/tgfont/dist/tgfont.css"
+      }
+    },
+    "tooltip": {
+      "assets": {
+        "tooltip-SpaceMono.ttf": "interface/fonts/SpaceMono.ttf",
+        "tooltip-jquery.min.js": "html/jquery/jquery.min.js"
+      },
+      "parents": {
+        "tooltip.html": "code/modules/tooltip/tooltip.html"
+      }
+    }
+  }
+}

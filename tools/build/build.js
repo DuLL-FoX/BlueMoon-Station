@@ -22,6 +22,10 @@ Juke.setup({ file: import.meta.url }).then((code) => process.exit(code));
 
 const DME_NAME = 'tgstation';
 
+// Declared before the DM targets so their dependency callbacks can require the
+// browser bundles. The target itself is assigned after YarnTarget is defined.
+export let TguiTarget;
+
 export const DefineParameter = new Juke.Parameter({
   type: 'string[]',
   alias: 'D',
@@ -73,6 +77,7 @@ export const StatbrowserTarget = new Juke.Target({
 
 export const DmTarget = new Juke.Target({
   dependsOn: ({ get }) => [
+    TguiTarget,
     StatbrowserTarget,
     get(DefineParameter).includes('ALL_MAPS') && DmMapsIncludeTarget,
   ],
@@ -84,6 +89,8 @@ export const DmTarget = new Juke.Target({
     'icons/**',
     'interface/**',
     'tgui/public/tgui.html',
+    'tgui/public/tgui-setup.bundle.js',
+    'tgui/packages/tgui-setup/**/*.js',
     "modular_*/**", // BLUEMOON ADD
     `${DME_NAME}.dme`,
     'modular_citadel/**',
@@ -155,6 +162,8 @@ const dmTestInputs = [
   'icons/**',
   'interface/**',
   'tgui/public/tgui.html',
+  'tgui/public/tgui-setup.bundle.js',
+  'tgui/packages/tgui-setup/**/*.js',
   'modular_*/**',
   `${DME_NAME}.dme`,
   'modular_citadel/**',
@@ -169,6 +178,7 @@ const dmTestInputs = [
 export const DmTestBuildTarget = new Juke.Target({
   parameters: [DefineParameter, UnitTestProfileParameter],
   dependsOn: ({ get }) => [
+    TguiTarget,
     get(DefineParameter).includes('ALL_MAPS') && DmMapsIncludeTarget,
   ],
   inputs: async () => [
@@ -256,11 +266,12 @@ export const TgFontTarget = new Juke.Target({
   },
 });
 
-export const TguiTarget = new Juke.Target({
+TguiTarget = new Juke.Target({
   dependsOn: [YarnTarget],
   inputs: [
     'tgui/.yarn/install-target',
     'tgui/vite.base.config.cjs',
+    'tgui/vite.tgui-setup.config.cjs',
     'tgui/vite.tgui.config.cjs',
     'tgui/vite.tgui-panel.config.cjs',
     'tgui/**/package.json',
@@ -269,10 +280,12 @@ export const TguiTarget = new Juke.Target({
   outputs: [
     'tgui/public/tgui.bundle.css',
     'tgui/public/tgui.bundle.js',
+    'tgui/public/tgui-setup.bundle.js',
     'tgui/public/tgui-panel.bundle.css',
     'tgui/public/tgui-panel.bundle.js',
   ],
   executes: async () => {
+    await yarn('vite', 'build', '--mode=production', '--config', 'vite.tgui-setup.config.cjs');
     await yarn('vite', 'build', '--mode=production', '--config', 'vite.tgui.config.cjs');
     await yarn('vite', 'build', '--mode=production', '--config', 'vite.tgui-panel.config.cjs');
   },
