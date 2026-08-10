@@ -1,22 +1,27 @@
 // Representative icons for each research design
-/datum/asset/spritesheet/research_designs
+/datum/asset/spritesheet_batched/research_designs
 	name = "design"
 
-/datum/asset/spritesheet/research_designs/register()
+/datum/asset/spritesheet_batched/research_designs/create_spritesheets()
+	var/list/icon_states_cache = list()
 	for (var/path in subtypesof(/datum/design))
 		var/datum/design/D = path
 
 		var/icon_file
 		var/icon_state
-		var/icon/I
+		var/datum/universal_icon/icon_entry
 
 		if(initial(D.research_icon) && initial(D.research_icon_state)) //If the design has an icon replacement skip the rest
 			icon_file = initial(D.research_icon)
 			icon_state = initial(D.research_icon_state)
-			if(!(icon_state in icon_states(icon_file)))
+			var/list/available_states = icon_states_cache[icon_file]
+			if(isnull(available_states))
+				available_states = icon_states(icon_file) || list()
+				icon_states_cache[icon_file] = available_states
+			if(!(icon_state in available_states))
 				warning("design [D] with icon '[icon_file]' missing state '[icon_state]'")
 				continue
-			I = icon(icon_file, icon_state, SOUTH)
+			icon_entry = uni_icon(icon_file, icon_state, SOUTH)
 
 		else
 			// construct the icon and slap it into the resource cache
@@ -44,21 +49,23 @@
 			icon_file = initial(item.icon)
 
 			icon_state = initial(item.icon_state)
-			if(!(icon_state in icon_states(icon_file)))
+			var/list/available_states = icon_states_cache[icon_file]
+			if(isnull(available_states))
+				available_states = icon_states(icon_file) || list()
+				icon_states_cache[icon_file] = available_states
+			if(!(icon_state in available_states))
 				warning("design [D] with icon '[icon_file]' missing state '[icon_state]'")
 				continue
-			I = icon(icon_file, icon_state, SOUTH)
+			icon_entry = uni_icon(icon_file, icon_state, SOUTH)
 
 			// computers (and snowflakes) get their screen and keyboard sprites
 			if (ispath(item, /obj/machinery/computer) || ispath(item, /obj/machinery/power/solar_control))
 				var/obj/machinery/computer/C = item
 				var/screen = initial(C.icon_screen)
 				var/keyboard = initial(C.icon_keyboard)
-				var/all_states = icon_states(icon_file)
-				if (screen && (screen in all_states))
-					I.Blend(icon(icon_file, screen, SOUTH), ICON_OVERLAY)
-				if (keyboard && (keyboard in all_states))
-					I.Blend(icon(icon_file, keyboard, SOUTH), ICON_OVERLAY)
+				if (screen && (screen in available_states))
+					icon_entry.blend_icon(uni_icon(icon_file, screen, SOUTH), ICON_OVERLAY)
+				if (keyboard && (keyboard in available_states))
+					icon_entry.blend_icon(uni_icon(icon_file, keyboard, SOUTH), ICON_OVERLAY)
 
-		Insert(initial(D.id), I)
-	return ..()
+		insert_icon(initial(D.id), icon_entry)

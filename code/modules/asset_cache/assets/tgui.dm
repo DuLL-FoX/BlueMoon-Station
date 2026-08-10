@@ -1,4 +1,5 @@
 /datum/asset/simple/tgui
+	early = TRUE
 	keep_local_name = TRUE
 	assets = list(
 		"tgui.bundle.js" = file("tgui/public/tgui.bundle.js"),
@@ -6,6 +7,7 @@
 	)
 
 /datum/asset/simple/tgui_panel
+	early = TRUE
 	keep_local_name = TRUE
 	assets = list(
 		"tgui-panel.bundle.js" = file("tgui/public/tgui-panel.bundle.js"),

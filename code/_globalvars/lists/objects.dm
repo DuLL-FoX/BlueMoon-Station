@@ -56,8 +56,14 @@ GLOBAL_LIST_EMPTY_TYPED(pda_messengers_by_name, /datum/computer_file/program/mes
 
 /// Cached global list of all emoji icon state names
 GLOBAL_LIST_EMPTY(cached_emoji_list)
-/// Cached global dict of emoji name -> base64 PNG data
-GLOBAL_LIST_EMPTY(cached_emoji_base64)
+/// Cached global dict of emoji name -> asset url
+GLOBAL_LIST_EMPTY(cached_emoji_urls)
+/// Cached flat list of emoji asset names, so a client can be served all of them in one send
+GLOBAL_LIST_EMPTY(cached_emoji_asset_names)
+/// Cached dict of emoji name -> asset name, so a single emoji can be served without the whole set
+GLOBAL_LIST_EMPTY(cached_emoji_asset_by_name)
+/// Value of GLOB.asset_url_generation the cached emoji urls were built for
+GLOBAL_VAR_INIT(cached_emoji_url_generation, -1)
 
 GLOBAL_LIST_EMPTY(mechas_list)				        //list of all mechs. Used by hostile mobs target tracking.
 GLOBAL_LIST_EMPTY(shuttle_caller_list)  		    //list of all communication consoles and AIs, for automatic shuttle calls when there are none.

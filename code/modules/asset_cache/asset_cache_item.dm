@@ -24,6 +24,9 @@
 	var/namespace_parent = FALSE
 	/// TRUE for keeping local asset names when browse_rsc backend is used
 	var/keep_local_name = FALSE
+	/// TRUE when the active composite transport found this exact immutable file
+	/// in its build-owned public store. Missing/generated files stay local.
+	var/external_available = FALSE
 
 /// Pass in a valid file_hash if you have one to skip rehashing the file.
 /// Pass in a valid dmi file path string e.g. "icons/path/to/dmi_file.dmi" to use the

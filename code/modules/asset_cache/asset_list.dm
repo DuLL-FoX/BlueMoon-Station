@@ -1,29 +1,66 @@
 GLOBAL_LIST_EMPTY(asset_datums)
 
-/proc/get_asset_datum(type)
+/// Returns a registered asset datum without forcing deferred generation.
+/proc/load_asset_datum(type)
 	return GLOB.asset_datums[type] || new type()
+
+/// Returns a registered asset datum and guarantees that its files are ready.
+/proc/get_asset_datum(type)
+	var/datum/asset/loaded_asset = load_asset_datum(type)
+	return loaded_asset.ensure_ready()
 
 /datum/asset
 	var/_abstract = /datum/asset
 	var/cached_url_mappings
+	var/cached_url_mappings_generation = -1
+	/// Assets required before ordinary lazy generation may set this to TRUE.
+	var/early = FALSE
+	/// Internal SSasset_loading membership guard.
+	var/generation_queued = FALSE
 
 /datum/asset/New()
 	GLOB.asset_datums[type] = src
 	register()
 
+/datum/asset/proc/ensure_ready()
+	return src
+
+/datum/asset/proc/queued_generation()
+	CRASH("[type] was queued for asset generation without queued_generation()")
+
 /datum/asset/proc/get_url_mappings()
 	return list()
 
 /datum/asset/proc/get_serialized_url_mappings()
-	if (isnull(cached_url_mappings))
+	ensure_ready()
+	if (isnull(cached_url_mappings) || cached_url_mappings_generation != GLOB.asset_url_generation)
 		cached_url_mappings = TGUI_CREATE_MESSAGE("asset/mappings", get_url_mappings())
+		cached_url_mappings_generation = GLOB.asset_url_generation
 
 	return cached_url_mappings
+
+/// Пересобирает транспорт-зависимые артефакты ассета под новый активный
+/// транспорт (см. SSassets.invalidate_asset_urls). База - no-op: обычные ассеты
+/// готовых URL внутри себя не держат, их адреса пересчитаются через
+/// get_asset_url() после сброса cached_url_mappings.
+/datum/asset/proc/refresh_css_for_transport(datum/asset_transport/new_transport)
+	return
 
 /datum/asset/proc/register()
 	return
 
 /datum/asset/proc/send(client)
+	return
+
+/// Immediately replaces this datum's registered files.
+/datum/asset/proc/regenerate()
+	unregister()
+	cached_url_mappings = null
+	cached_url_mappings_generation = -1
+	register()
+	return ensure_ready()
+
+/datum/asset/proc/unregister()
 	return
 
 /datum/asset/simple
@@ -52,13 +89,17 @@ GLOBAL_LIST_EMPTY(asset_datums)
 	for (var/asset_name in assets)
 		.[asset_name] = SSassets.transport.get_asset_url(asset_name, assets[asset_name])
 
+/datum/asset/simple/unregister()
+	for(var/asset_name in assets)
+		SSassets.transport.unregister_asset(asset_name)
+
 /datum/asset/group
 	_abstract = /datum/asset/group
 	var/list/children
 
 /datum/asset/group/register()
 	for(var/type in children)
-		get_asset_datum(type)
+		load_asset_datum(type)
 
 /datum/asset/group/send(client/C)
 	for(var/type in children)
@@ -70,6 +111,11 @@ GLOBAL_LIST_EMPTY(asset_datums)
 	for(var/type in children)
 		var/datum/asset/A = get_asset_datum(type)
 		. += A.get_url_mappings()
+
+/datum/asset/group/unregister()
+	for(var/type in children)
+		var/datum/asset/child = load_asset_datum(type)
+		child.unregister()
 
 /**
  * Каталог кросс-раундового кэша спрайтшитов.
@@ -97,15 +143,61 @@ GLOBAL_LIST_EMPTY(asset_datums)
 /datum/asset/spritesheet
 	_abstract = /datum/asset/spritesheet
 	var/name
+	/// Insert() arguments waiting to be realized into BYOND /icon objects.
+	var/list/to_generate = list()
+	/// Next queued Insert() to realize. An index keeps FIFO order without Cut(1, 2).
+	var/generation_index = 1
+	/// Preserves the old immediate duplicate-name failure while Insert() is deferred.
+	var/list/queued_sprite_names = list()
 	var/list/sizes = list()    // "32x32" -> list(10, icon/normal, icon/stripped)
 	var/list/sprites = list()  // "foo_bar" -> list("32x32", 5)
+	var/fully_generated = FALSE
+	var/load_immediately = FALSE
 
 /// Bump when generate_css output format, ensure_stripped pipeline, or sprites dict layout
 /// changes in a way that makes the previous round's cache files invalid. This makes rounds
 /// after the bump regenerate even if input_signature happens to match.
-#define SPRITESHEET_CACHE_VERSION 3
+#define SPRITESHEET_CACHE_VERSION 4
 
 /datum/asset/spritesheet/register()
+	if (!name)
+		CRASH("spritesheet [type] cannot register without a name")
+	create_spritesheets()
+	if (should_load_immediately())
+		realize_spritesheets(yield = FALSE)
+	else
+		SSasset_loading.queue_asset(src)
+
+/datum/asset/spritesheet/proc/should_load_immediately()
+#ifdef DO_NOT_DEFER_ASSETS
+	return TRUE
+#else
+	return load_immediately || early
+#endif
+
+/// Override to populate this sheet with Insert()/InsertAll().
+/datum/asset/spritesheet/proc/create_spritesheets()
+	CRASH("create_spritesheets() not implemented for [type]")
+
+/datum/asset/spritesheet/proc/realize_spritesheets(yield)
+	if(fully_generated)
+		return
+	// BYOND 516 cannot reliably resume Insert() work against the same mutable
+	// destination /icon after the proc yields: the next insertion fails with
+	// "bad icon operation" and leaves the icon graph unsafe during shutdown.
+	// Budget legacy work at the complete-datum boundary in SSasset_loading.
+	// The genuinely heavy sheets use spritesheet_batched/async IconForge.
+	while(generation_index <= length(to_generate))
+		var/list/stored_args = to_generate[generation_index++]
+		queuedInsert(arglist(stored_args))
+	to_generate = list()
+	generation_index = 1
+	queued_sprite_names = list()
+	register_realized_spritesheet()
+	fully_generated = TRUE
+	SSasset_loading.dequeue_asset(src)
+
+/datum/asset/spritesheet/proc/register_realized_spritesheet()
 	if (!name)
 		CRASH("spritesheet [type] cannot register without a name")
 
@@ -230,9 +322,66 @@ GLOBAL_LIST_EMPTY(asset_datums)
 
 #undef SPRITESHEET_CACHE_VERSION
 
+/// Пересобирает css листа под новый активный транспорт: generate_css() вшивает
+/// get_asset_url() прямо в текст (см. transport-часть подписи кэша выше).
+/// Нереализованный лист не трогаем: он зарегистрирует css уже при новом
+/// транспорте, когда доедет до register_realized_spritesheet().
+/datum/asset/spritesheet/refresh_css_for_transport(datum/asset_transport/new_transport)
+	if (!fully_generated || !name || SSassets.transport != new_transport)
+		return
+	// Лист, пришедший из кросс-раундового кэша, ни разу не проходил ensure_stripped -
+	// generate_css() на нём падал бы на пустом SPRSZ_STRIPPED и обрывал инвалидацию
+	// на середине списка ассетов.
+	ensure_stripped(keep_file = TRUE)
+	var/css_path = "[SPRITESHEET_CACHE_DIR]spritesheet_[name].css"
+	fdel(css_path)
+	text2file(generate_css(), css_path)
+	// Старую запись снимаем сами: register_asset() на то же имя с другим хэшом
+	// считает это ошибкой и пишет stack_trace на каждый лист.
+	new_transport.unregister_asset("spritesheet_[name].css")
+	// fcopy_rsc() снимает неизменяемый слепок. Без него ассет держит ленивую
+	// ссылку на путь: имя фиксируется сейчас, а байты читаются в момент
+	// browse_rsc(), и следующая перезапись каталога (соседний DreamDaemon на том
+	// же деплое, прогон dm-test) разведёт имя и содержимое.
+	new_transport.register_asset("spritesheet_[name].css", fcopy_rsc(file(css_path)))
+
+/datum/asset/spritesheet/queued_generation()
+	realize_spritesheets(yield = TRUE)
+
+/datum/asset/spritesheet/ensure_ready()
+	if(!fully_generated)
+		realize_spritesheets(yield = FALSE)
+	return src
+
+/datum/asset/spritesheet/unregister()
+	SSasset_loading.dequeue_asset(src)
+	SSassets.transport.unregister_asset("spritesheet_[name].css")
+	for(var/size_id in sizes)
+		SSassets.transport.unregister_asset("[name]_[size_id].png")
+
+/datum/asset/spritesheet/regenerate()
+	unregister()
+	var/cache_meta_path = "[SPRITESHEET_CACHE_DIR]cache.[name].json"
+	fdel(cache_meta_path)
+	for(var/size_id in sizes)
+		fdel("[SPRITESHEET_CACHE_DIR][name]_[size_id].png")
+	fdel("[SPRITESHEET_CACHE_DIR]spritesheet_[name].css")
+	to_generate = list()
+	generation_index = 1
+	queued_sprite_names = list()
+	sizes = list()
+	sprites = list()
+	fully_generated = FALSE
+	cached_url_mappings = null
+	cached_url_mappings_generation = -1
+	create_spritesheets()
+	realize_spritesheets(yield = FALSE)
+	return src
+
 /datum/asset/spritesheet/send(client/C)
 	if (!name)
 		return
+	ensure_ready()
 	var/all = list("spritesheet_[name].css")
 	for(var/size_id in sizes)
 		all += "[name]_[size_id].png"
@@ -241,6 +390,7 @@ GLOBAL_LIST_EMPTY(asset_datums)
 /datum/asset/spritesheet/get_url_mappings()
 	if (!name)
 		return
+	ensure_ready()
 	. = list("spritesheet_[name].css" = SSassets.transport.get_asset_url("spritesheet_[name].css"))
 	for(var/size_id in sizes)
 		.["[name]_[size_id].png"] = SSassets.transport.get_asset_url("[name]_[size_id].png")
@@ -249,24 +399,58 @@ GLOBAL_LIST_EMPTY(asset_datums)
 	_abstract = /datum/asset/json
 	/// Filename (without .json extension) used to register and serve the asset
 	var/name
+	var/fully_generated = FALSE
+	var/load_immediately = FALSE
 
 /datum/asset/json/register()
 	if(!name)
 		CRASH("datum/asset/json [type] cannot register without a name")
+	if(load_immediately || early)
+		realize_json()
+	else
+		SSasset_loading.queue_asset(src)
+
+/datum/asset/json/proc/realize_json()
+	if(fully_generated)
+		return
 	var/list/data = generate()
 	var/fname = "data/asset_cache/[name].json"
 	fdel(fname)
 	text2file(json_encode(data), fname)
 	SSassets.transport.register_asset("[name].json", fcopy_rsc(fname))
 	fdel(fname)
+	fully_generated = TRUE
+	SSasset_loading.dequeue_asset(src)
+
+/datum/asset/json/queued_generation()
+	realize_json()
+
+/datum/asset/json/ensure_ready()
+	if(!fully_generated)
+		realize_json()
+	return src
+
+/datum/asset/json/unregister()
+	SSasset_loading.dequeue_asset(src)
+	SSassets.transport.unregister_asset("[name].json")
+
+/datum/asset/json/regenerate()
+	unregister()
+	fully_generated = FALSE
+	cached_url_mappings = null
+	cached_url_mappings_generation = -1
+	realize_json()
+	return src
 
 /datum/asset/json/proc/generate()
 	CRASH("datum/asset/json [type] did not implement generate()")
 
 /datum/asset/json/send(client/C)
+	ensure_ready()
 	return SSassets.transport.send_assets(C, list("[name].json"))
 
 /datum/asset/json/get_url_mappings()
+	ensure_ready()
 	return list("[name].json" = SSassets.transport.get_asset_url("[name].json"))
 
 /// keep_file: if TRUE, the stripped PNG on disk is left in place (used by the smart
@@ -314,11 +498,34 @@ GLOBAL_LIST_EMPTY(asset_datums)
 /// Возвращает TRUE, если спрайт реально попал в шит. Вызывающий может передать
 /// сюда сам файл иконки со стейтом и не резать icon() у себя заранее.
 /datum/asset/spritesheet/proc/Insert(sprite_name, icon/I, icon_state="", dir=SOUTH, frame=1, moving=FALSE)
+	if(should_load_immediately())
+		return queuedInsert(sprite_name, I, icon_state, dir, frame, moving)
+	if(queued_sprite_names[sprite_name] || sprites[sprite_name])
+		CRASH("duplicate sprite \"[sprite_name]\" in sheet [name] ([type])")
+	// Runtime /icon values are mutable datums. Some legacy sheets build them with a
+	// temporary painter and then mutate or release the source before this queue is
+	// realized. Capture the selected frame and sheet-specific modification now,
+	// then retain only BYOND's immutable resource copy across ticks.
+	if(isicon(I) && "[I]" == "/icon")
+		var/icon/snapshot = icon(I, icon_state=icon_state, dir=dir, frame=frame, moving=moving)
+		if(!snapshot || !length(icon_states(snapshot)))
+			return FALSE
+		snapshot = ModifyInserted(snapshot)
+		var/snapshot_resource = fcopy_rsc(snapshot)
+		queued_sprite_names[sprite_name] = TRUE
+		to_generate += list(list(sprite_name, snapshot_resource, "", SOUTH, 1, FALSE, TRUE))
+		return TRUE
+	queued_sprite_names[sprite_name] = TRUE
+	to_generate += list(args.Copy())
+	return TRUE
+
+/datum/asset/spritesheet/proc/queuedInsert(sprite_name, icon/I, icon_state="", dir=SOUTH, frame=1, moving=FALSE, already_modified=FALSE)
 	I = icon(I, icon_state=icon_state, dir=dir, frame=frame, moving=moving)
 	if (!I || !length(icon_states(I)))  // that direction or state doesn't exist
 		return FALSE
 	//any sprite modifications we want to do (aka, coloring a greyscaled asset)
-	I = ModifyInserted(I)
+	if(!already_modified)
+		I = ModifyInserted(I)
 	var/size_id = "[I.Width()]x[I.Height()]"
 	var/size = sizes[size_id]
 
@@ -358,12 +565,15 @@ GLOBAL_LIST_EMPTY(asset_datums)
 			Insert("[prefix][prefix2][icon_state_name]", I, icon_state=icon_state_name, dir=direction)
 
 /datum/asset/spritesheet/proc/css_tag()
+	ensure_ready()
 	return {"<link rel="stylesheet" href="[css_filename()]" />"}
 
 /datum/asset/spritesheet/proc/css_filename()
+	ensure_ready()
 	return SSassets.transport.get_asset_url("spritesheet_[name].css")
 
 /datum/asset/spritesheet/proc/icon_tag(sprite_name)
+	ensure_ready()
 	var/sprite = sprites[sprite_name]
 	if (!sprite)
 		return null
@@ -371,6 +581,7 @@ GLOBAL_LIST_EMPTY(asset_datums)
 	return {"<span class="[name][size_id] [sprite_name]"></span>"}
 
 /datum/asset/spritesheet/proc/icon_class_name(sprite_name)
+	ensure_ready()
 	var/sprite = sprites[sprite_name]
 	if (!sprite)
 		return null
@@ -384,6 +595,7 @@ GLOBAL_LIST_EMPTY(asset_datums)
  * * sprite_name - The sprite to get the size of
  */
 /datum/asset/spritesheet/proc/icon_size_id(sprite_name)
+	ensure_ready()
 	var/sprite = sprites[sprite_name]
 	if (!sprite)
 		return null
@@ -419,10 +631,9 @@ GLOBAL_LIST_EMPTY(asset_datums)
 	_abstract = /datum/asset/spritesheet/simple
 	var/list/assets
 
-/datum/asset/spritesheet/simple/register()
+/datum/asset/spritesheet/simple/create_spritesheets()
 	for (var/key in assets)
 		Insert(key, assets[key])
-	..()
 
 //Generates assets based on iconstates of a single icon
 /datum/asset/simple/icon_states

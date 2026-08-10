@@ -12,10 +12,13 @@
 	// PostSetup is real work and can exceed 30 seconds on a full CI map. This
 	// ceiling still catches the old five-minute unattended vote path.
 	TEST_ASSERT(world.time - SSticker.round_start_time <= 90 SECONDS, "unit tests waited more than 90 seconds after roundstart")
-	// Панель спавна должна быть готова к первому клику админа, а не собираться
-	// на 3-5 секунд прямо в раунде. Ассеты обязаны существовать после SSassets.
-	TEST_ASSERT_NOTNULL(GLOB.asset_datums[/datum/asset/spritesheet/spawnpanel], "Spawn Panel spritesheet was not built during startup")
+	// SSassets должен зарегистрировать ленивые datums, а get_asset_datum() обязан
+	// гарантировать полную готовность независимо от состояния фоновой очереди.
+	TEST_ASSERT_NOTNULL(GLOB.asset_datums[/datum/asset/spritesheet_batched/spawnpanel], "Spawn Panel spritesheet datum was not registered during startup")
 	TEST_ASSERT_NOTNULL(GLOB.asset_datums[/datum/asset/json/spawnpanel], "Spawn Panel JSON was not built during startup")
+	var/datum/asset/spritesheet_batched/spawnpanel/spawn_icons = get_asset_datum(/datum/asset/spritesheet_batched/spawnpanel)
+	TEST_ASSERT(spawn_icons.fully_generated, "Spawn Panel spritesheet was not ready after get_asset_datum()")
+	get_asset_datum(/datum/asset/json/spawnpanel)
 	// А порядок сборки ассетов обязан оставаться таким, чтобы карта иконок была
 	// заполнена до генерации JSON - иначе в панели пропадут все превьюшки.
 	TEST_ASSERT(length(GLOB.spawnpanel_icon_map) > 0, "Spawn Panel icon map is empty after startup")

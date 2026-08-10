@@ -1,7 +1,6 @@
-/datum/asset/spritesheet/pipes
+/datum/asset/spritesheet_batched/pipes
 	name = "pipes"
 
-/datum/asset/spritesheet/pipes/register()
+/datum/asset/spritesheet_batched/pipes/create_spritesheets()
 	for (var/each in list('icons/obj/atmospherics/pipes/pipe_item.dmi', 'icons/obj/atmospherics/pipes/disposal.dmi', 'icons/obj/atmospherics/pipes/transit_tube.dmi', 'icons/obj/plumbing/fluid_ducts.dmi'))
-		InsertAll("", each, GLOB.alldirs)
-	..()
+		insert_all_icons("", each, GLOB.alldirs)

@@ -1,8 +1,8 @@
 
-/datum/asset/spritesheet/vending
+/datum/asset/spritesheet_batched/vending
 	name = "vending"
 
-/datum/asset/spritesheet/vending/register()
+/datum/asset/spritesheet_batched/vending/create_spritesheets()
 	for (var/k in GLOB.vending_products)
 		var/atom/item = k
 		if (!ispath(item, /atom))
@@ -22,13 +22,6 @@
 			continue
 		#endif
 
-		var/icon/I = icon(icon_file, icon_state, SOUTH)
-		var/c = initial(item.color)
-		if (!isnull(c) && c != "#FFFFFF")
-			I.Blend(c, ICON_MULTIPLY)
-
 		var/imgid = replacetext(replacetext("[item]", "/obj/item/", ""), "/", "-")
-
-		Insert(imgid, I)
-	return ..()
+		insert_icon(imgid, uni_icon(icon_file, icon_state, SOUTH, color = initial(item.color)))
 // BLUEMOON EDIT -  Vending Update: END

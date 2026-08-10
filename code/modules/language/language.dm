@@ -53,8 +53,12 @@
 	return TRUE
 
 /datum/language/proc/get_icon()
-	var/datum/asset/spritesheet/sheet = get_asset_datum(/datum/asset/spritesheet/chat)
-	return sheet.icon_tag("language-[icon_state]")
+	// Без get_asset_datum()/icon_tag(): оба дают ensure_ready(), а тот умеет спать,
+	// дожидаясь чужой генерации листа. Сюда же приходят say() из Initialize() и
+	// обработчиков сигналов - им спать нельзя. Пока лист не собран, сообщение
+	// уходит без иконки языка.
+	var/datum/asset/spritesheet_batched/sheet = load_asset_datum(/datum/asset/spritesheet_batched/chat)
+	return sheet.icon_tag_if_ready("language-[icon_state]")
 
 /datum/language/proc/get_random_name(gender, name_count=2, syllable_count=4, syllable_divisor=2)
 	if(!syllables || !syllables.len)

@@ -771,7 +771,7 @@ GLOBAL_LIST_EMPTY(cached_icon_state_directional)
 		GLOB.cached_icon_state_directional.Cut(1, (ICON_STATE_DIRECTIONAL_CACHE_MAX / 4) + 1) // evict oldest 25%
 
 // Creates a single icon from a given /atom or /image.  Only the first argument is required.
-/proc/getFlatIcon(image/A, defdir, deficon, defstate, defblend, start = TRUE, no_anim = FALSE)
+/proc/getFlatIcon(image/A, defdir, deficon, defstate, defblend, start = TRUE, no_anim = FALSE, yield_between_layers = FALSE)
 	//Define... defines.
 	var/static/icon/flat_template = icon('icons/effects/effects.dmi', "nothing")
 
@@ -898,15 +898,23 @@ GLOBAL_LIST_EMPTY(cached_icon_state_directional)
 		var/list/rc_overlays = null // flat list
 
 		for(var/V in layers)
+			// Manifest photos are background work. A clothed human can have hundreds
+			// of recursively flattened appearances; yielding between them prevents a
+			// single getFlatIcon from consuming the whole server tick.
+			if(yield_between_layers)
+				CHECK_TICK
 			var/image/I = V
 			if(I.alpha == 0)
 				continue
 
 			if(I == copy) // 'I' is an /image based on the object being flattened.
 				curblend = BLEND_OVERLAY
-				add = icon(I.icon, I.icon_state, base_icon_dir)
+				// no_anim used to be ignored on this base-layer branch whenever the
+				// atom had overlays. We then blended every animation frame only to
+				// discard all but frame one at the end.
+				add = icon(I.icon, I.icon_state, base_icon_dir, no_anim ? 1 : null)
 			else // 'I' is an appearance object.
-				add = getFlatIcon(image(I), curdir, curicon, curstate, curblend, FALSE, no_anim)
+				add = getFlatIcon(image(I), curdir, curicon, curstate, curblend, FALSE, no_anim, yield_between_layers)
 			if(!add)
 				continue
 			// Find the new dimensions of the flat icon to fit the added overlay
@@ -950,6 +958,8 @@ GLOBAL_LIST_EMPTY(cached_icon_state_directional)
 		// Применение RESET_COLOR overlays ПОСЛЕ parent color/alpha
 		if(rc_overlays)
 			for(var/rc_i = 1, rc_i <= rc_overlays.len, rc_i += 4)
+				if(yield_between_layers)
+					CHECK_TICK
 				flat.Blend(rc_overlays[rc_i], rc_overlays[rc_i+1], rc_overlays[rc_i+2] + 2 - flatX1, rc_overlays[rc_i+3] + 2 - flatY1)
 
 		if(no_anim)
@@ -1131,7 +1141,7 @@ GLOBAL_LIST_EMPTY(friendly_animal_types)
 /// дирекцией. У живого моба dir произвольный, а getFlatIcon предпочитает
 /// собственную дирекцию цели запрошенной: без копии фас и профиль вышли бы двумя
 /// одинаковыми кадрами. Манекену это не нужно - он всегда смотрит на юг.
-/proc/build_flat_multidir_icon(atom/subject, list/show_dirs = GLOB.cardinals, no_anim = FALSE, force_dir = FALSE)
+/proc/build_flat_multidir_icon(atom/subject, list/show_dirs = GLOB.cardinals, no_anim = FALSE, force_dir = FALSE, yield_between_layers = FALSE)
 	if(QDELETED(subject))
 		return icon('icons/effects/effects.dmi', "nothing")
 
@@ -1154,12 +1164,12 @@ GLOBAL_LIST_EMPTY(friendly_animal_types)
 		CHECK_TICK
 		var/icon/partial
 		if(isnull(frozen_appearance))
-			partial = getFlatIcon(subject, defdir = photo_dir, no_anim = no_anim)
+			partial = getFlatIcon(subject, defdir = photo_dir, no_anim = no_anim, yield_between_layers = yield_between_layers)
 		else
 			var/image/dir_snapshot = new
 			dir_snapshot.appearance = frozen_appearance
 			dir_snapshot.dir = photo_dir
-			partial = getFlatIcon(dir_snapshot, defdir = photo_dir, no_anim = no_anim)
+			partial = getFlatIcon(dir_snapshot, defdir = photo_dir, no_anim = no_anim, yield_between_layers = yield_between_layers)
 		if(!istype(partial, /icon) || !partial.Width() || !partial.Height())
 			continue
 		good_partials += partial
@@ -1197,7 +1207,7 @@ GLOBAL_LIST_EMPTY(humanoid_icon_cache)
 #define HUMANOID_ICON_CACHE_MAX 256
 
 //For creating consistent icons for human looking simple animals
-/proc/get_flat_human_icon(icon_id, datum/job/J, datum/preferences/prefs, dummy_key, showDirs = GLOB.cardinals, outfit_override = null, no_anim = FALSE)
+/proc/get_flat_human_icon(icon_id, datum/job/J, datum/preferences/prefs, dummy_key, showDirs = GLOB.cardinals, outfit_override = null, no_anim = FALSE, yield_between_layers = FALSE)
 	if(!icon_id || !GLOB.humanoid_icon_cache[icon_id])
 		// regenerate = FALSE: манекен всё равно переодевается прямо ниже и трижды
 		// перерисовывается перед getFlatIcon, так что штатный regenerate_icons()
@@ -1229,7 +1239,7 @@ GLOBAL_LIST_EMPTY(humanoid_icon_cache)
 		// Манекен на время съёмки остаётся занятым, но остальные вызывающие и так
 		// ждут его на in_use. Дирекцию не форсируем: манекен всегда смотрит на юг,
 		// и getFlatIcon возьмёт запрошенную.
-		var/icon/out_icon = build_flat_multidir_icon(body, showDirs, no_anim)
+		var/icon/out_icon = build_flat_multidir_icon(body, showDirs, no_anim, yield_between_layers = yield_between_layers)
 
 		// Без ключа кэшировать нечего: запись легла бы под индекс null, куда ни один
 		// lookup не придёт, зато вытесняла бы настоящие записи при переполнении.
@@ -1427,6 +1437,104 @@ GLOBAL_LIST_EMPTY(icon_dmi_path_cache)
 
 	return icon2base64(to_encode)
 
+/// Кеш имён ассетов для icon2asset_url()/icon_state2asset_url(): стабильный ключ картинки -> имя ассета.
+/// Позволяет не гонять fcopy_rsc/md5 на каждый рендер окна.
+GLOBAL_LIST_EMPTY(icon_asset_name_cache)
+/// Мягкий потолок icon_asset_name_cache. Записи - короткие строки, режем 25% самых старых.
+#define ICON_ASSET_NAME_CACHE_MAX 4096
+
+/**
+ * Регистрирует готовую /icon в кеше ассетов и возвращает её имя (ключ SSassets.cache).
+ * Ассет НЕ отправляется клиенту - для этого есть send_icon_asset_url().
+ *
+ * Arguments:
+ * * thing - готовая /icon.
+ * * cache_key - стабильный ключ картинки. Без него ассет пересоздаётся на каждый вызов.
+ * * dmi_file_path - путь к неизменённому .dmi, если картинка нарезана прямо из него;
+ *   включает дешёвый md5(rsc_ref) вместо md5asfile().
+ */
+/proc/register_icon_asset(icon/thing, cache_key, dmi_file_path)
+	if(!isicon(thing))
+		return
+	if(cache_key)
+		var/cached_name = GLOB.icon_asset_name_cache[cache_key]
+		if(cached_name)
+			if(SSassets.cache[cached_name])
+				return cached_name
+			// Ассет вымыло из SSassets - выкидываем протухшую запись и регистрируем заново.
+			GLOB.icon_asset_name_cache -= cache_key
+	var/list/name_and_ref = generate_and_hash_rsc_file(thing, dmi_file_path)
+	var/asset_name = "[name_and_ref[3]].png"
+	if(!SSassets.cache[asset_name])
+		SSassets.transport.register_asset(asset_name, name_and_ref[1], name_and_ref[2], dmi_file_path)
+	if(cache_key)
+		GLOB.icon_asset_name_cache[cache_key] = asset_name
+		if(length(GLOB.icon_asset_name_cache) > ICON_ASSET_NAME_CACHE_MAX)
+			GLOB.icon_asset_name_cache.Cut(1, (ICON_ASSET_NAME_CACHE_MAX / 4) + 1)
+	return asset_name
+
+/**
+ * Отдаёт зарегистрированный ассет клиенту и возвращает URL для <img src>.
+ * Под webroot-транспортом это адрес на CDN, под обычным - имя из browse_rsc.
+ *
+ * Arguments:
+ * * target - /client, моб с клиентом, список таких, или world (все клиенты).
+ * * asset_name - имя ассета из register_icon_asset().
+ */
+/proc/send_icon_asset_url(target, asset_name)
+	if(!asset_name || !SSassets.cache[asset_name])
+		return
+	if(target)
+		if(target == world)
+			target = GLOB.clients
+		var/list/targets = islist(target) ? target : list(target)
+		for(var/asset_target in targets)
+			if(!istype(asset_target, /client) && !ismob(asset_target))
+				continue
+			SSassets.transport.send_assets(asset_target, asset_name)
+	return SSassets.transport.get_asset_url(asset_name)
+
+/**
+ * Замена icon2base64() для картинок, которые уходят клиенту: регистрирует /icon как ассет,
+ * отдаёт его клиенту и возвращает URL. Байты идут транспортом ассетов, а не вложением
+ * в каждый рендер окна.
+ *
+ * Arguments:
+ * * thing - готовая /icon.
+ * * target - /client, моб с клиентом, список таких, или world.
+ * * cache_key - стабильный ключ картинки. Без него ассет пересоздаётся на каждый вызов.
+ * * dmi_file_path - путь к неизменённому .dmi, если картинка нарезана прямо из него.
+ */
+/proc/icon2asset_url(icon/thing, target, cache_key, dmi_file_path)
+	return send_icon_asset_url(target, register_icon_asset(thing, cache_key, dmi_file_path))
+
+/**
+ * То же самое для самого частого случая "иконка из .dmi плюс стейт": ключ собирается сам,
+ * и на попадании в кеш сама /icon даже не создаётся.
+ *
+ * Arguments:
+ * * icon_file - файл иконки ('icons/foo.dmi') или его путь строкой.
+ * * icon_state - нужный стейт.
+ * * target - /client, моб с клиентом, список таких, или world.
+ * * dir, frame, moving - как у icon().
+ */
+/proc/icon_state2asset_url(icon_file, icon_state, target, dir = SOUTH, frame = 1, moving = FALSE)
+	if(!icon_file)
+		return
+	// Рантаймовые /icon стрингуются в "/icon" все до одной, поэтому для них ключ по REF.
+	var/icon_key = (isicon(icon_file) && !isfile(icon_file)) ? REF(icon_file) : "[icon_file]"
+	var/cache_key = "[icon_key]|[icon_state]|[dir]|[frame]|[moving]"
+	var/asset_name = GLOB.icon_asset_name_cache[cache_key]
+	if(asset_name && !SSassets.cache[asset_name])
+		GLOB.icon_asset_name_cache -= cache_key
+		asset_name = null
+	if(!asset_name)
+		var/icon/built = icon(icon_file, icon_state, dir, frame, moving)
+		if(!isicon(built))
+			return
+		asset_name = register_icon_asset(built, cache_key, get_icon_dmi_path(icon_file))
+	return send_icon_asset_url(target, asset_name)
+
 /**
  * Generate an asset for the given icon (or the icon of the given appearance for `thing`)
  * and send it to any clients in `target`.
@@ -1490,7 +1598,9 @@ GLOBAL_LIST_EMPTY(icon2html_result_cache)
 					resolved_state = "[initial(cache_atom.icon_state)]"
 			// ishuman forces dir = SOUTH for rendering, so fold that into the key.
 			var/resolved_dir = ishuman(thing) ? SOUTH : (isnull(dir) ? cache_atom.dir : dir)
-			cache_key = "[atom_icon]|[resolved_state]|[resolved_dir]|[frame]|[moving]"
+			// Поколение адресов входит в ключ: запись содержит готовый URL, а
+			// после срыва транспорта с CDN он указывает на мёртвый хост.
+			cache_key = "[atom_icon]|[resolved_state]|[resolved_dir]|[frame]|[moving]|[GLOB.asset_url_generation]"
 			var/list/cache_hit = GLOB.icon2html_result_cache[cache_key]
 			if (cache_hit)
 				if (SSassets.cache[cache_hit[1]])
@@ -1609,7 +1719,9 @@ GLOBAL_LIST_EMPTY(bicon_cache)
 	return "<img class='icon icon-[A.icon_state]' src='data:image/png;base64,[GLOB.bicon_cache[key]]'>"
 
 //Costlier version of icon2html() that uses getFlatIcon() to account for overlays, underlays, etc. Use with extreme moderation, ESPECIALLY on mobs.
-/proc/costly_icon2html(thing, target, sourceonly = FALSE)
+//defdir/no_anim пробрасываются в getFlatIcon() и входят в ключ кеша - вызывающим,
+//которым нужен строго южный или статичный рендер, не приходится делать флаттен руками.
+/proc/costly_icon2html(thing, target, sourceonly = FALSE, defdir, no_anim = FALSE)
 	if (!thing)
 		return
 
@@ -1620,7 +1732,9 @@ GLOBAL_LIST_EMPTY(bicon_cache)
 		return
 
 	var/atom/A = thing
-	var/appearance_key = "\ref[A.appearance]"
+	// Поколение адресов входит в ключ: кеш хранит готовый URL, а после срыва
+	// транспорта с CDN тот же appearance должен отдавать уже другой адрес.
+	var/appearance_key = "\ref[A.appearance]|[defdir]|[no_anim]|[GLOB.asset_url_generation]"
 
 	// Full result cache: skip getFlatIcon + icon() + md5 pipeline on repeat calls.
 	// Caches list(asset_key, html, url) keyed on appearance ref.
@@ -1628,7 +1742,7 @@ GLOBAL_LIST_EMPTY(bicon_cache)
 	var/list/cached = costly_result_cache[appearance_key]
 
 	if(!cached)
-		var/icon/I = getFlatIcon(thing)
+		var/icon/I = getFlatIcon(thing, defdir = defdir, no_anim = no_anim)
 		I = icon(I, "", SOUTH, 1, FALSE)
 		var/list/name_and_ref = generate_and_hash_rsc_file(I, null)
 		var/rsc_ref = name_and_ref[1]
