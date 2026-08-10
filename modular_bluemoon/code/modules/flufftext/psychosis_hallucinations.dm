@@ -514,7 +514,7 @@ GLOBAL_LIST_INIT(psychosis_scream_lines, list(
 		'sound/voice/deathgasp2.ogg' = 1,
 		'sound/hallucinations/psychosis/scream.ogg' = 1,
 		'sound/hallucinations/psychosis/stinger_cruel.ogg' = 1,
-		'sound/hallucinations/psychosis/stinger_hit.mp3' = 3,
+		'sound/hallucinations/psychosis/stinger_hit.ogg' = 3,
 		)), 45, TRUE)
 	qdel(src)
 
@@ -615,7 +615,7 @@ GLOBAL_LIST_INIT(psychosis_chains_lines, list(
 		'sound/spookoween/chain_rattling.ogg' = 1,
 		'sound/hallucinations/psychosis/creaking_structure.ogg' = 1,
 		'sound/hallucinations/psychosis/swishes.ogg' = 1,
-		'sound/hallucinations/psychosis/swoosh_resonance.mp3' = 3,
+		'sound/hallucinations/psychosis/swoosh_resonance.ogg' = 3,
 		)), 50, TRUE)
 	qdel(src)
 

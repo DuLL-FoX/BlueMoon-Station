@@ -369,7 +369,7 @@ They deal 35 brute (armor is considered).
 /mob/living/simple_animal/hostile/megafauna/gladiator/proc/boneappletea(atom/target)
 	var/obj/item/kitchen/knife/combat/bone/boned = new /obj/item/kitchen/knife/combat/bone(get_turf(src))
 	boned.throwforce = 45
-	playsound(src, 'sound/weapons/fwoosh.wav', 60, 0)
+	playsound(src, 'sound/weapons/fwoosh.ogg', 60, 0)
 	boned.throw_at(target, 7, 3, src)
 	QDEL_IN(boned, 30)
 

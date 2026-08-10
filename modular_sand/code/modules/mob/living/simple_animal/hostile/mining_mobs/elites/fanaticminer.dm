@@ -187,7 +187,7 @@
 	ranged_cooldown = world.time + 20
 	visible_message("<span class='boldwarning'>[src] prepares to throw his axe!</span>")
 	var/turf/targetturf = get_turf(target)
-	playsound(src,'sound/weapons/fwoosh.wav', 200, 1)
+	playsound(src,'sound/weapons/fwoosh.ogg', 200, 1)
 	Shoot(targetturf)
 	new /obj/item/melee/diamondaxe/priest(targetturf)
 

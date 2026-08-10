@@ -732,7 +732,7 @@ BLUEMOON REMOVAL END */
 	if(!fuel_rod)
 		return
 	playsound(src, pick('sound/effects/rbmk/switch.ogg','sound/effects/rbmk/switch2.ogg','sound/effects/rbmk/switch3.ogg'), 100, FALSE)
-	playsound(reactor, 'sound/effects/ship/freespace2/crane_1.wav', 100, FALSE)
+	playsound(reactor, 'sound/effects/ship/freespace2/crane_1.ogg', 100, FALSE)
 	fuel_rod.forceMove(get_turf(reactor))
 	reactor.fuel_rods -= fuel_rod
 
