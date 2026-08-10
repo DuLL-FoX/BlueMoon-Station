@@ -71,6 +71,27 @@ only at runtime, including uncached spritesheets, are routed individually throug
    the repository's pinned portable Python on first use; no system Python in
    `PATH` is required.
 
+## Trying the whole thing locally
+
+None of this runs without an HTTP server in front of the publish directory, so a
+plain checkout exercises the composite transport, the archive URL and both probes
+for the first time in production. `dev_serve.py` is that server:
+
+```sh
+python3 tools/rsc_deploy/dev_serve.py data/rsc_publish
+```
+
+It serves a directory with the CORS headers TGUI needs from another origin and
+answers HEAD, which is what the deployment verification and the CDN probe use. It
+prints the `ASSET_TRANSPORT`, `ASSET_CDN_URL`, `ASSET_CDN_WEBROOT` and
+`EXTERNAL_RSC_URLS` lines for the directory it was given; put them in
+`config/entries/resources.txt` and the local server behaves like the real
+frontend. To fill that directory, point `RSC_PUBLISH_DIR` at it in a local
+`rsc_deploy.env` and run the normal `publish` step.
+
+It is a development tool: single process, no range requests, no access control.
+Do not put it in front of players.
+
 ## CORS for browser assets
 
 The `browser-assets/` files are fetched by TGUI from a different origin. That
