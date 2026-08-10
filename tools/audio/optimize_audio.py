@@ -3,6 +3,7 @@
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,12 @@ AUDIO_EXTENSIONS = (".ogg", ".wav", ".mp3", ".flac", ".m4a", ".wma")
 MIN_TRANSCODE_SIZE = 128 * 1024
 MIN_HIGH_BITRATE_SIZE = 512 * 1024
 HIGH_BITRATE = 160_000
+# Downmixing throws away a whole channel, so it pays off on files the bitrate rule
+# never looks at. The floor only exists to keep thousands of tiny clips out of a
+# run which could not win more than a few kilobytes on them anyway.
+MIN_DOWNMIX_SIZE = 32 * 1024
+LISTED_FILE_LIMIT = 40
+LISTED_DIRECTORY_LIMIT = 25
 # Some content simply does not compress further at the chosen quality. Replacing
 # it anyway spends a lossy generation for nothing and, because the selection
 # thresholds still match it, every later run would degrade it again.
@@ -36,6 +43,32 @@ ENCODE_TIMEOUT_SECONDS = 600
 
 class NotWorthReencoding(Exception):
 	"""The candidate encoded fine but is not enough smaller to be worth replacing."""
+
+
+class Policy:
+	"""What this run is allowed to select and how it is allowed to re-encode.
+
+	Thresholds are arguments rather than constants because one catalogue needs
+	several passes with different rules: speech survives a far lower bitrate than
+	music, and downmixing is only correct for audio which BYOND positions anyway.
+	"""
+
+	def __init__(self, quality, max_sample_rate, min_bitrate, min_bitrate_size, downmix_mono, excludes):
+		self.quality = quality
+		self.max_sample_rate = max_sample_rate
+		self.min_bitrate = min_bitrate
+		self.min_bitrate_size = min_bitrate_size
+		self.downmix_mono = downmix_mono
+		self.excludes = tuple(pattern.lower() for pattern in excludes)
+
+	def is_excluded(self, relative_name):
+		return any(pattern in relative_name.lower() for pattern in self.excludes)
+
+	def wants_downmix(self, metadata):
+		return self.downmix_mono and metadata["channels"] > 1
+
+	def target_channels(self, metadata):
+		return 1 if self.wants_downmix(metadata) else metadata["channels"]
 
 
 def probe(path):
@@ -77,11 +110,49 @@ def probe(path):
 	}
 
 
-def needs_optimization(path, metadata):
+def needs_optimization(path, metadata, policy):
 	size = path.stat().st_size
 	if metadata["codec"] != "vorbis":
 		return size >= MIN_TRANSCODE_SIZE
-	return metadata["bitrate"] >= HIGH_BITRATE and size >= MIN_HIGH_BITRATE_SIZE
+	# A second channel is pure download for sound BYOND positions itself, so a
+	# downmix run does not care how well the file is already encoded.
+	if policy.wants_downmix(metadata) and size >= MIN_DOWNMIX_SIZE:
+		return True
+	return metadata["bitrate"] >= policy.min_bitrate and size >= policy.min_bitrate_size
+
+
+def report_duplicates(paths, repository_root):
+	"""Lists files which are byte-for-byte copies of each other.
+
+	DreamMaker gives every referenced path its own entry in the resource
+	container, so a file copied into a second module is downloaded twice by every
+	client. Removing one is not this script's business — it means rewriting the
+	references and deciding which module owns the file — but nobody can decide
+	that without first seeing the list.
+	"""
+	by_digest = {}
+	for path in paths:
+		try:
+			digest = hashlib.sha256(path.read_bytes()).hexdigest()
+		except OSError:
+			continue
+		by_digest.setdefault(digest, []).append(path)
+	groups = []
+	redundant = 0
+	for duplicates in by_digest.values():
+		if len(duplicates) < 2:
+			continue
+		size = duplicates[0].stat().st_size
+		redundant += size * (len(duplicates) - 1)
+		groups.append((size * (len(duplicates) - 1), sorted(duplicates)))
+	groups.sort(key=lambda group: -group[0])
+	print("{} groups of identical files, {:.1f} MiB of them redundant".format(len(groups), redundant / 1024 / 1024))
+	for waste, duplicates in groups[:LISTED_DIRECTORY_LIMIT]:
+		print("  {:6.2f} MiB wasted:".format(waste / 1024 / 1024))
+		for path in duplicates:
+			print("    {}".format(path.relative_to(repository_root).as_posix()))
+	if len(groups) > LISTED_DIRECTORY_LIMIT:
+		print("  ... and {} smaller groups".format(len(groups) - LISTED_DIRECTORY_LIMIT))
 
 
 def collect_reference_sources(repository_root):
@@ -116,7 +187,7 @@ def rewrite_references(sources, old_relative, new_relative, apply_changes):
 	return touched
 
 
-def encode(source_path, destination_path, metadata, quality, max_sample_rate):
+def encode(source_path, destination_path, metadata, policy):
 	command = [
 		"ffmpeg",
 		"-v",
@@ -130,10 +201,21 @@ def encode(source_path, destination_path, metadata, quality, max_sample_rate):
 		"-c:a",
 		"libvorbis",
 		"-q:a",
-		str(quality),
+		str(policy.quality),
 	]
-	if max_sample_rate and metadata["sample_rate"] > max_sample_rate:
-		command += ["-ar", str(max_sample_rate)]
+	if policy.max_sample_rate and metadata["sample_rate"] > policy.max_sample_rate:
+		command += ["-ar", str(policy.max_sample_rate)]
+	if policy.wants_downmix(metadata):
+		# Not "-ac 1": ffmpeg only renormalizes its downmix matrix for integer output
+		# formats, and libvorbis takes floats, so the automatic path sums the channels
+		# about 3 dB hotter than the usual average. Every downmixed effect would come
+		# out louder than it used to be in game. An explicit average is also exactly
+		# what Audacity's "Mix Stereo Down to Mono" produces, which is what the hand
+		# made mono assets in this catalogue were made with.
+		if metadata["channels"] == 2:
+			command += ["-af", "pan=mono|c0=0.5*c0+0.5*c1"]
+		else:
+			command += ["-ac", "1"]
 	command.append(str(destination_path))
 	try:
 		result = subprocess.run(
@@ -147,7 +229,7 @@ def encode(source_path, destination_path, metadata, quality, max_sample_rate):
 		raise RuntimeError(result.stderr.strip() or "ffmpeg failed")
 
 
-def optimize(path, metadata, quality, max_sample_rate):
+def optimize(path, metadata, policy):
 	"""Re-encode one file. Returns (old_size, new_size, old_path, new_path)."""
 	old_size = path.stat().st_size
 	final_path = path.with_suffix(".ogg")
@@ -155,7 +237,7 @@ def optimize(path, metadata, quality, max_sample_rate):
 	os.close(fd)
 	temporary_path = Path(temporary_name)
 	try:
-		encode(path, temporary_path, metadata, quality, max_sample_rate)
+		encode(path, temporary_path, metadata, policy)
 		new_metadata = probe(temporary_path)
 		if not new_metadata or new_metadata["codec"] != "vorbis":
 			raise RuntimeError("ffmpeg output is not Ogg Vorbis")
@@ -164,9 +246,10 @@ def optimize(path, metadata, quality, max_sample_rate):
 			raise RuntimeError(
 				"duration changed from {:.3f}s to {:.3f}s".format(metadata["duration"], new_metadata["duration"])
 			)
-		if new_metadata["channels"] != metadata["channels"]:
+		expected_channels = policy.target_channels(metadata)
+		if new_metadata["channels"] != expected_channels:
 			raise RuntimeError(
-				"channel count changed from {} to {}".format(metadata["channels"], new_metadata["channels"])
+				"channel count is {} instead of the expected {}".format(new_metadata["channels"], expected_channels)
 			)
 		new_size = temporary_path.stat().st_size
 		if new_size > old_size * (1 - MIN_SAVING_RATIO):
@@ -202,6 +285,37 @@ def main():
 		action="store_true",
 		help="also convert non-.ogg files which no source literal mentions",
 	)
+	parser.add_argument(
+		"--min-bitrate",
+		type=int,
+		default=HIGH_BITRATE,
+		help="select Ogg Vorbis at or above this bitrate (default: {})".format(HIGH_BITRATE),
+	)
+	parser.add_argument(
+		"--min-bitrate-size",
+		type=int,
+		default=MIN_HIGH_BITRATE_SIZE,
+		help="ignore the bitrate rule below this file size (default: {})".format(MIN_HIGH_BITRATE_SIZE),
+	)
+	parser.add_argument(
+		"--downmix-mono",
+		action="store_true",
+		help="also select multi-channel files and downmix them to mono. Correct for audio played "
+		"through playsound() with a position, which BYOND downmixes on the client anyway; wrong "
+		"for ambience and anything played without a source",
+	)
+	parser.add_argument(
+		"--exclude",
+		action="append",
+		default=[],
+		metavar="SUBSTRING",
+		help="skip paths containing this substring, case-insensitive; repeatable",
+	)
+	parser.add_argument(
+		"--report-duplicates",
+		action="store_true",
+		help="list files which are byte-for-byte copies of each other and exit",
+	)
 	parser.add_argument("--workers", type=int, default=min(8, os.cpu_count() or 1))
 	parser.add_argument("roots", nargs="*", default=list(DEFAULT_ROOTS))
 	args = parser.parse_args()
@@ -209,6 +323,15 @@ def main():
 	for tool in ("ffprobe", "ffmpeg"):
 		if shutil.which(tool) is None:
 			parser.error("{} is required".format(tool))
+
+	policy = Policy(
+		quality=args.quality,
+		max_sample_rate=args.max_sample_rate,
+		min_bitrate=args.min_bitrate,
+		min_bitrate_size=args.min_bitrate_size,
+		downmix_mono=args.downmix_mono,
+		excludes=args.exclude,
+	)
 
 	repository_root = Path.cwd().resolve()
 	paths = []
@@ -220,6 +343,11 @@ def main():
 			for extension in AUDIO_EXTENSIONS:
 				paths.extend(root.rglob("*{}".format(extension)))
 	paths = sorted(set(path.resolve() for path in paths))
+	paths = [path for path in paths if not policy.is_excluded(path.relative_to(repository_root).as_posix())]
+
+	if args.report_duplicates:
+		report_duplicates(paths, repository_root)
+		return 0
 
 	selected = []
 	with ThreadPoolExecutor(max_workers=max(1, args.workers)) as executor:
@@ -227,22 +355,36 @@ def main():
 		for future in as_completed(futures):
 			path = futures[future]
 			metadata = future.result()
-			if metadata and needs_optimization(path, metadata):
+			if metadata and needs_optimization(path, metadata, policy):
 				selected.append((path, metadata))
 	selected.sort(key=lambda item: item[0].as_posix().lower())
 
 	old_total = sum(path.stat().st_size for path, _ in selected)
 	print("Selected {} files ({:.1f} MiB)".format(len(selected), old_total / 1024 / 1024))
-	for path, metadata in selected:
+	# A downmix run selects thousands of files at once. Listing every one of them
+	# buries the part an operator actually reads, so only the expensive tail is
+	# named and the rest is summed up by directory.
+	listed = sorted(selected, key=lambda item: -item[0].stat().st_size)[:LISTED_FILE_LIMIT]
+	for path, metadata in sorted(listed, key=lambda item: item[0].as_posix().lower()):
 		print(
-			"{:.2f} MiB {:>9} {:>5} Hz {:>4} kbps {}".format(
+			"{:.2f} MiB {:>9} {:>5} Hz {:>4} kbps {:>2}ch {}".format(
 				path.stat().st_size / 1024 / 1024,
 				metadata["codec"],
 				metadata["sample_rate"],
 				round(metadata["bitrate"] / 1000),
+				metadata["channels"],
 				path.relative_to(repository_root).as_posix(),
 			)
 		)
+	if len(selected) > len(listed):
+		print("... and {} smaller files. Totals by directory:".format(len(selected) - len(listed)))
+		by_directory = {}
+		for path, _ in selected:
+			key = path.relative_to(repository_root).parent.as_posix()
+			count, size = by_directory.get(key, (0, 0))
+			by_directory[key] = (count + 1, size + path.stat().st_size)
+		for key, (count, size) in sorted(by_directory.items(), key=lambda item: -item[1][1])[:LISTED_DIRECTORY_LIMIT]:
+			print("  {:8.2f} MiB {:5} files  {}".format(size / 1024 / 1024, count, key))
 
 	renaming = [(path, metadata) for path, metadata in selected if path.suffix.lower() != ".ogg"]
 	sources = collect_reference_sources(repository_root) if renaming else []
@@ -277,7 +419,7 @@ def main():
 	kept = 0
 	with ThreadPoolExecutor(max_workers=max(1, args.workers)) as executor:
 		futures = {
-			executor.submit(optimize, path, metadata, args.quality, args.max_sample_rate): path
+			executor.submit(optimize, path, metadata, policy): path
 			for path, metadata in work
 		}
 		for future in as_completed(futures):
