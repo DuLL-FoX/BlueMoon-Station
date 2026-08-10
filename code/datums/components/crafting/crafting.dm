@@ -459,12 +459,12 @@
 			crafting_recipes[R.category] = list()
 
 		if(R.subcategory == CAT_NONE)
-			crafting_recipes[R.category] += list(build_recipe_data(R))
+			crafting_recipes[R.category] += list(build_recipe_data(R, user))
 		else
 			if(isnull(crafting_recipes[R.category][R.subcategory]))
 				crafting_recipes[R.category][R.subcategory] = list()
 				crafting_recipes[R.category]["has_subcats"] = TRUE
-			crafting_recipes[R.category][R.subcategory] += list(build_recipe_data(R))
+			crafting_recipes[R.category][R.subcategory] += list(build_recipe_data(R, user))
 
 	data["crafting_recipes"] = crafting_recipes
 	return data
@@ -572,7 +572,7 @@
 		return 1
 	return min(possible_counts)
 
-/datum/component/personal_crafting/proc/build_recipe_data(datum/crafting_recipe/R)
+/datum/component/personal_crafting/proc/build_recipe_data(datum/crafting_recipe/R, target)
 	var/list/data = list()
 	data["name"] = R.name
 	data["desc"] = R.desc
@@ -582,7 +582,7 @@
 	data["complexity"] = R.complexity
 	data["mass_craftable"] = R.mass_craftable
 	if(R.result)
-		data["icon_data"] = get_cached_item_icon(R.result)
+		data["icon_data"] = get_cached_item_icon_url(R.result, target)
 	var/req_text = ""
 	var/tool_text = ""
 	var/list/reqs_detail = list()
@@ -595,7 +595,7 @@
 		var/list/entry = list()
 		entry["name"] = initial(A.name)
 		entry["amount"] = R.reqs[A]
-		entry["icon_data"] = get_cached_item_icon(A)
+		entry["icon_data"] = get_cached_item_icon_url(A, target)
 		reqs_detail += list(entry)
 	req_text = replacetext(req_text,",","",-1)
 	data["req_text"] = req_text
@@ -606,7 +606,7 @@
 		var/list/entry = list()
 		entry["name"] = initial(A.name)
 		entry["amount"] = R.chem_catalysts[A]
-		entry["icon_data"] = get_cached_item_icon(A)
+		entry["icon_data"] = get_cached_item_icon_url(A, target)
 		catalysts_detail += list(entry)
 	data["catalysts_detail"] = catalysts_detail
 
@@ -616,7 +616,7 @@
 			tool_text += " [initial(b.name)],"
 			var/list/entry = list()
 			entry["name"] = initial(b.name)
-			entry["icon_data"] = get_cached_item_icon(b)
+			entry["icon_data"] = get_cached_item_icon_url(b, target)
 			tools_detail += list(entry)
 		else
 			tool_text += " [a],"
@@ -627,19 +627,13 @@
 
 	return data
 
-/proc/get_cached_item_icon(atom/path)
-	var/static/list/icon_cache = list()
-	var/key = "[path]"
-	if(icon_cache[key])
-		return icon_cache[key]
+/// Возвращает URL превью предмета для окна крафта. Картинка живёт в кеше ассетов,
+/// поэтому каталог рецептов уезжает клиенту ссылками, а не пачкой base64.
+/proc/get_cached_item_icon_url(atom/path, target)
 	var/icon_file = initial(path.icon)
 	if(!icon_file)
 		return null
-	var/icon/I = icon(icon_file, initial(path.icon_state), SOUTH, 1)
-	if(!isicon(I))
-		return null
-	. = icon2base64(I)
-	icon_cache[key] = .
+	return icon_state2asset_url(icon_file, initial(path.icon_state), target)
 
 //Mind helpers
 

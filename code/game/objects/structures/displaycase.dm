@@ -404,7 +404,7 @@
 	var/list/data = list()
 	data["owner_name"] = payments_acc ? payments_acc.account_holder : null
 	data["product_name"] = showpiece ? capitalize(format_text(showpiece.name)) : null
-	data["product_icon"] = showpiece ? icon2base64(getFlatIcon(showpiece, no_anim=TRUE)) : null
+	data["product_icon"] = showpiece ? costly_icon2html(showpiece, user, sourceonly = TRUE, no_anim = TRUE) : null
 	data["registered"] = payments_acc ? TRUE : FALSE
 	data["product_cost"] = sale_price
 	data["tray_open"] = open

@@ -293,7 +293,7 @@ const ProductImage = (props) => {
 
   return product.img ? (
     <img
-      src={`data:image/png;base64,${product.img}`}
+      src={product.img}
       style={{
         verticalAlign: 'middle',
         imageRendering: 'pixelated',

@@ -90,13 +90,7 @@
 				data["records"] = records
 				for(var/datum/data/record/G in GLOB.data_core.general)
 					var/datum/data/record/S = sec_records_assoc["[G.fields["name"]]|[G.fields["id"]]"]
-					var/thumb = null
-					if(istype(G.fields["photo_front"], /obj/item/photo))
-						var/obj/item/photo/P = G.fields["photo_front"]
-						if(P.picture?.picture_image)
-							thumb = icon2base64(P.picture.picture_image)
-					else if(isicon(G.fields["photo_front"]))
-						thumb = icon2base64(G.fields["photo_front"])
+					var/thumb = record_photo_asset_url(G.fields["photo_front"], user)
 					var/list/record_line = list(
 						"ref" = "\ref[G]",
 						"id" = G.fields["id"],
@@ -137,18 +131,12 @@
 					general["m_stat"] = active1.fields["m_stat"]
 					var/list/photos = list()
 					general["photos"] = photos
-					if(istype(active1.fields["photo_front"], /obj/item/photo))
-						var/obj/item/photo/P = active1.fields["photo_front"]
-						if(P.picture?.picture_image)
-							photos["front"] = icon2base64(P.picture.picture_image)
-					else if(isicon(active1.fields["photo_front"]))
-						photos["front"] = icon2base64(active1.fields["photo_front"])
-					if(istype(active1.fields["photo_side"], /obj/item/photo))
-						var/obj/item/photo/P = active1.fields["photo_side"]
-						if(P.picture?.picture_image)
-							photos["side"] = icon2base64(P.picture.picture_image)
-					else if(isicon(active1.fields["photo_side"]))
-						photos["side"] = icon2base64(active1.fields["photo_side"])
+					var/photo_front_url = record_photo_asset_url(active1.fields["photo_front"], user)
+					if(photo_front_url)
+						photos["front"] = photo_front_url
+					var/photo_side_url = record_photo_asset_url(active1.fields["photo_side"], user)
+					if(photo_side_url)
+						photos["side"] = photo_side_url
 				else
 					general["empty"] = TRUE
 

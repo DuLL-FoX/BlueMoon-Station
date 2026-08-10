@@ -57,23 +57,10 @@
 /datum/vore_look/ui_state(mob/user)
 	return GLOB.ui_vorepanel_state
 
-/datum/vore_look
-	var/static/list/nom_icons
-
-/datum/vore_look/proc/cached_nom_icon(atom/target)
-	LAZYINITLIST(nom_icons)
-
-	var/key = ""
-	if(isobj(target))
-		key = "[target.type]"
-	else if(ismob(target))
-		var/mob/M = target
-		key = "\ref[target][M.real_name]"
-	if(nom_icons[key])
-		. = nom_icons[key]
-	else
-		. = icon2base64(getFlatIcon(target,defdir=SOUTH,no_anim=TRUE))
-		nom_icons[key] = .
+///Ссылка на ассет с плоской иконкой содержимого. Кеш по внешнему виду живёт
+///внутри costly_icon2html(), поэтому свой список тут больше не нужен.
+/datum/vore_look/proc/cached_nom_icon(atom/target, viewer)
+	return costly_icon2html(target, viewer, sourceonly = TRUE, defdir = SOUTH, no_anim = TRUE)
 
 /datum/vore_look/ui_data(mob/user)
 	var/list/data = list()
@@ -112,7 +99,7 @@
 				"outside" = FALSE,
 			)
 			if(show_pictures)
-				info["icon"] = cached_nom_icon(O)
+				info["icon"] = cached_nom_icon(O, user)
 			if(isliving(O))
 				var/mob/living/M = O
 				info["stat"] = M.stat
@@ -171,7 +158,7 @@
 				"outside" = TRUE,
 			)
 			if(show_pictures)
-				info["icon"] = cached_nom_icon(O)
+				info["icon"] = cached_nom_icon(O, user)
 			if(isliving(O))
 				var/mob/living/M = O
 				info["stat"] = M.stat

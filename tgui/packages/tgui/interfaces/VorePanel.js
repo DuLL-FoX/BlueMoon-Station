@@ -396,7 +396,7 @@ const VoreContentsPanel = (props) => {
                   "belly": belly,
                 })}>
                 <img
-                  src={"data:image/png;base64, " + thing.icon}
+                  src={thing.icon}
                   width="64px"
                   height="64px"
                   style={{

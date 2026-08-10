@@ -179,7 +179,9 @@
 
 	.["item"] = list(
 		"name" = inserted.name,
-		"sprite" = icon2base64(getFlatIcon(inserted, defdir = SOUTH, no_anim = TRUE)),
+		// Исходный спрайт - ссылкой на ассет, живое превью перекраски осознанно
+		// остаётся base64: оно меняется на каждое движение ползунка.
+		"sprite" = costly_icon2html(inserted, user, sourceonly = TRUE, defdir = SOUTH, no_anim = TRUE),
 		"preview" = icon2base64(build_preview()),
 	)
 

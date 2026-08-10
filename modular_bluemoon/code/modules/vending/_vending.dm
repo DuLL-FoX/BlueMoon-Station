@@ -944,7 +944,7 @@ GLOBAL_LIST_EMPTY(vending_products)
 
 /obj/machinery/vending/ui_assets(mob/user)
 	return list(
-		get_asset_datum(/datum/asset/spritesheet/vending),
+		get_asset_datum(/datum/asset/spritesheet_batched/vending),
 	)
 
 /obj/machinery/vending/ui_interact(mob/user, datum/tgui/ui)
@@ -1390,8 +1390,6 @@ GLOBAL_LIST_EMPTY(vending_products)
 	var/datum/bank_account/linked_account
 	/// max number of items that the custom vendor can hold
 	var/max_loaded_items = CUSTOM_VENDOR_MAX_ITEMS
-	/// Base64 cache of custom icons.
-	var/list/base64_cache = list()
 	//panel_type = "panel20"
 
 /obj/machinery/vending/custom/examine(mob/user)
@@ -1433,22 +1431,18 @@ GLOBAL_LIST_EMPTY(vending_products)
 	.["vending_machine_input"] = list()
 	for (var/O in vending_machine_input)
 		if(vending_machine_input[O] > 0)
-			var/base64
+			var/icon_url
 			var/price = 0
 			for(var/obj/T in contents)
 				if(format_text(T.name) == O)
 					price = T.custom_price
-					if(!base64)
-						if(base64_cache[T.type])
-							base64 = base64_cache[T.type]
-						else
-							base64 = icon2base64(getFlatIcon(T, no_anim=TRUE))
-							base64_cache[T.type] = base64
+					// Ссылка на ассет вместо base64: ui_data зовётся каждый тик у каждого зрителя
+					icon_url = costly_icon2html(T, user, sourceonly = TRUE, no_anim = TRUE)
 					break
 			var/list/data = list(
 				name = O,
 				price = price,
-				img = base64,
+				img = icon_url,
 				amount = vending_machine_input[O],
 				colorable = FALSE
 			)

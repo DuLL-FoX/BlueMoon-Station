@@ -137,7 +137,7 @@ const SelfConfig = (props) => {
         {genital.img ? (
           <Stack.Item>
             <PixelArtImage
-              src={`data:image/png;base64,${genital.img}`}
+              src={genital.img}
               maxWidth={220}
             />
           </Stack.Item>

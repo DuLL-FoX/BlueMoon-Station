@@ -516,7 +516,7 @@ function FullRecipe(props) {
           <Stack.Item>
             <Box mr={1}>
               <img
-                src={"data:image/png;base64," + recipe.icon_data}
+                src={recipe.icon_data}
                 style={{
                   width: '32px',
                   height: '32px',
@@ -545,7 +545,7 @@ function FullRecipe(props) {
                       {!!req.icon_data && (
                         <Stack.Item mr={0.5}>
                           <img
-                            src={"data:image/png;base64," + req.icon_data}
+                            src={req.icon_data}
                             loading="lazy"
                             style={{
                               width: '24px',
@@ -574,7 +574,7 @@ function FullRecipe(props) {
                       {!!cat.icon_data && (
                         <Stack.Item mr={0.5}>
                           <img
-                            src={"data:image/png;base64," + cat.icon_data}
+                            src={cat.icon_data}
                             loading="lazy"
                             style={{
                               width: '24px',
@@ -603,7 +603,7 @@ function FullRecipe(props) {
                       {!!tool.icon_data && (
                         <Stack.Item mr={0.5}>
                           <img
-                            src={"data:image/png;base64," + tool.icon_data}
+                            src={tool.icon_data}
                             loading="lazy"
                             style={{
                               width: '24px',
@@ -714,7 +714,7 @@ function CompactRecipe(props) {
           {!!recipe.icon_data && (
             <Stack.Item mr={1}>
               <img
-                src={"data:image/png;base64," + recipe.icon_data}
+                src={recipe.icon_data}
                 style={{
                   width: '32px',
                   height: '32px',

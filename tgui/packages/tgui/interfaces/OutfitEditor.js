@@ -128,7 +128,7 @@ const OutfitSlot = (props) => {
           <>
             <Box
               as="img"
-              src={`data:image/png;base64,${currItem?.sprite}`}
+              src={currItem?.sprite}
               title={currItem?.desc}
               style={{
                 imageRendering: 'pixelated',

@@ -1335,10 +1335,8 @@ GLOBAL_LIST_EMPTY(preferences_datums)
 							ai_core_icon_state = "ai-random"
 						else
 							ai_core_icon_state = resolve_ai_icon(preferred_ai_core_display, TRUE)
-						var/icon/ai_core_preview_icon = icon('icons/mob/ai.dmi', ai_core_icon_state, SOUTH, 1, FALSE)
-						var/ai_core_preview_html = icon2base64html(ai_core_preview_icon)
-						if(!ai_core_preview_html)
-							ai_core_preview_html = ""
+						var/ai_core_preview_url = icon_state2asset_url('icons/mob/ai.dmi', ai_core_icon_state, user.client)
+						var/ai_core_preview_html = ai_core_preview_url ? "<img class='icon icon-[ai_core_icon_state]' src='[ai_core_preview_url]'>" : ""
 						dat += "<div class='csetup-ai-core-preview'>" + ai_core_preview_html + "</div>"
 					dat += "</td>"
 
@@ -2395,9 +2393,9 @@ GLOBAL_LIST_EMPTY(preferences_datums)
 									var/class_link = ""
 									var/list/loadout_item = has_loadout_gear(loadout_slot, "[gear.type]")
 									var/extra_loadout_data = ""
-									var/gear_preview = gear.get_base64icon()
+									var/gear_preview = gear.get_preview_url(user.client)
 									if(gear_preview)
-										extra_loadout_data += "<center><img src='data:image/png;base64,[gear_preview]'></center>"
+										extra_loadout_data += "<center><img src='[gear_preview]'></center>"
 									if(loadout_item)
 										var/loadout_color_display = "#FFFFFF"
 										var/loadout_color_label = "#FFFFFF"

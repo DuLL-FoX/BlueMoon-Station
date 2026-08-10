@@ -393,10 +393,10 @@ const ChatScreen = (props) => {
     blocked,
   } = props;
 
-  const { emoji_list, emoji_base64, has_scanned_photo, selected_photo_path, admin_photo_url, can_set_url_photo } = data;
+  const { emoji_list, emoji_urls, has_scanned_photo, selected_photo_path, admin_photo_url, can_set_url_photo } = data;
   const rawList = Array.isArray(emoji_list) ? emoji_list : Object.values(emoji_list || {});
   const uniqueEmojis = [...new Set(rawList)].slice(0, 100);
-  const base64Map = emoji_base64 || {};
+  const emojiUrlMap = emoji_urls || {};
 
   const [message, setMessage] = useLocalState('chatMessage', '');
   const [canSend, setCanSend] = useState(true);
@@ -669,7 +669,7 @@ const ChatScreen = (props) => {
             {rows.map((row, rowIdx) => (
               <Stack key={rowIdx} mb={0.5}>
                 {row.map((emoji) => {
-                  const b64 = base64Map[emoji];
+                  const emojiUrl = emojiUrlMap[emoji];
                   return (
                     <Stack.Item key={emoji}>
                       <Button
@@ -684,9 +684,9 @@ const ChatScreen = (props) => {
                           textAlign: 'center',
                         }}
                         onClick={() => handleEmojiClick(emoji)}>
-                        {b64 ? (
+                        {emojiUrl ? (
                           <img
-                            src={'data:image/png;base64,' + b64}
+                            src={emojiUrl}
                             alt={':' + emoji + ':'}
                             style={{ width: '16px', height: '16px', verticalAlign: 'middle' }}
                           />

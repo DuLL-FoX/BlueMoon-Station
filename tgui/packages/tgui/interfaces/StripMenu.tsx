@@ -523,7 +523,7 @@ export const StripMenu = (props) => {
                     content = (
                       <Box
                         as="img"
-                        src={`data:image/png;base64,${item.icon}`}
+                        src={item.icon}
                         height="100%"
                         width="100%"
                         style={{

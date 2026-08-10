@@ -206,7 +206,7 @@ const PageRecordList = (_properties) => {
             <Table.Cell collapsing>
               {record.thumb ? (
                 <img
-                  src={'data:image/png;base64,' + record.thumb}
+                  src={record.thumb}
                   className="SecurityRecords__photo"
                   style={{
                     width: '24px',
@@ -504,7 +504,7 @@ const PhotoBox = (properties) => {
     <Box display="inline-block" textAlign="center" mr="0.5rem" mb="0.5rem">
       {photoData ? (
         <img
-          src={'data:image/png;base64,' + photoData}
+          src={photoData}
           className="SecurityRecords__photo"
           style={{
             width: '96px',

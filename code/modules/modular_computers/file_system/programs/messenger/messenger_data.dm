@@ -113,6 +113,18 @@
 	return cached_job
 
 /**
+ * Разворачивает сохранённую ссылку на фото в адрес для <img src>.
+ * Внешние URL и data-URI отдаются как есть, имя ассета отправляется клиенту
+ * и превращается в URL транспорта ассетов.
+ */
+/proc/resolve_pda_photo_url(photo, target)
+	if(!photo)
+		return null
+	if(findtext(photo, "http://", 1) || findtext(photo, "https://", 1) || findtext(photo, "data:", 1))
+		return photo
+	return send_icon_asset_url(target, photo)
+
+/**
  * Chat message data type, stores data about individual messages.
  */
 /datum/pda_message
@@ -139,13 +151,7 @@
 	var/list/data = list()
 	data["message"] = message
 	data["outgoing"] = outgoing
-	if(photo_name)
-		if(findtext(photo_name, "http://", 1) || findtext(photo_name, "https://", 1) || findtext(photo_name, "data:", 1))
-			data["photo_path"] = photo_name
-		else
-			data["photo_path"] = SSassets.transport.get_asset_url(photo_name)
-	else
-		data["photo_path"] = null
+	data["photo_path"] = resolve_pda_photo_url(photo_name, user)
 	data["everyone"] = everyone
 	data["timestamp"] = timestamp
 	return data

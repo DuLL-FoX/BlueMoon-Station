@@ -228,7 +228,7 @@ const CircuitsGrid = (props: { circuits?: CircuitData[], big_desc? : BooleanLike
                           <Stack.Item>
                             {circuit.icon ? (
                               <img
-                                src={`data:image/png;base64, ${circuit.icon}`}
+                                src={circuit.icon}
                                 style={{ width: "32px", height: "32px" }}
                               />
                             ) : (

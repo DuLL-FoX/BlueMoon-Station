@@ -1,7 +1,7 @@
 /datum/spawnpanel
 	var/where_target_type = WHERE_FLOOR_BELOW_MOB
 	var/selected_atom = null
-	var/selected_icon = null // base64 of current atom icon, generated on selection
+	var/selected_icon = null // ссылка на ассет с иконкой выбранного атома, ставится при выборе
 	var/atom_amount = 1
 	var/atom_name = null
 	var/atom_desc = null
@@ -56,7 +56,7 @@
 
 /datum/spawnpanel/ui_assets(mob/user)
 	return list(
-		get_asset_datum(/datum/asset/spritesheet/spawnpanel),
+		get_asset_datum(/datum/asset/spritesheet_batched/spawnpanel),
 		get_asset_datum(/datum/asset/json/spawnpanel),
 	)
 
@@ -98,8 +98,7 @@
 							var/list/states = icon_states(atom_icon)
 							if(!("" in states) && length(states))
 								atom_state = states[1]
-						var/icon/I = icon(atom_icon, atom_state, SOUTH, 1)
-						selected_icon = "data:image/png;base64,[icon2base64(I)]"
+						selected_icon = icon_state2asset_url(atom_icon, atom_state, ui.user)
 			return TRUE
 
 		if("update-settings")

@@ -35,21 +35,23 @@
 		ui = new(target, src, "LoadoutColor", "[gear_name] - [name]")
 		ui.open()
 
+///Живое превью перекраски. Осознанно остаётся base64: картинка меняется на каждое
+///движение ползунка, ассет с таким временем жизни только засорял бы webroot.
 /datum/loadout_color_handler/proc/get_preview_base64()
 	if(!gear?.path)
-		return gear?.get_base64icon()
+		return null
 
 	var/init_icon = gear.item_icon ? gear.item_icon : initial(gear.path.icon)
 	var/init_icon_state = gear.item_icon_state ? gear.item_icon_state : initial(gear.path.icon_state)
 
 	if(!init_icon || !init_icon_state)
-		return gear?.get_base64icon()
+		return null
 
 	var/icon/preview
 	try
 		preview = icon(init_icon, init_icon_state, SOUTH, 1, FALSE)
 	catch
-		return gear?.get_base64icon()
+		return null
 
 	switch(active_mode)
 		if(COLORMATE_TINT)
@@ -74,7 +76,7 @@
 	. = list()
 	.["activemode"] = active_mode
 	.["gear_name"] = gear_name
-	.["sprite"] = gear?.get_base64icon()
+	.["sprite"] = gear?.get_preview_url(target)
 	.["preview"] = get_preview_base64()
 	.["matrixcolors"] = list(
 		"rr" = color_matrix_last[1],

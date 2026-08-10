@@ -1,12 +1,7 @@
 GLOBAL_LIST_EMPTY(spawnpanel_icon_map) // "[typepath]" → spritesheet imgid string
 
-/datum/asset/spritesheet/spawnpanel
+/datum/asset/spritesheet_batched/spawnpanel
 	name = "spawnpanel"
-
-/datum/asset/spritesheet/spawnpanel/ModifyInserted(icon/pre_asset)
-	if(pre_asset.Width() != 32 || pre_asset.Height() != 32)
-		pre_asset.Scale(32, 32)
-	return pre_asset
 
 /**
  * Строит спрайтшит превьюшек для панели спавна: по одному спрайту на уникальную
@@ -17,7 +12,8 @@ GLOBAL_LIST_EMPTY(spawnpanel_icon_map) // "[typepath]" → spritesheet imgid str
  * Оператор `in` по списку это линейный поиск, и на словаре дедупа, который
  * дорастает до ~12000 записей, он один стоил около 5 секунд старта сервера.
  */
-/datum/asset/spritesheet/spawnpanel/register()
+/datum/asset/spritesheet_batched/spawnpanel/create_spritesheets()
+	GLOB.spawnpanel_icon_map = list()
 	var/list/icon_dedup = list() // "файл|стейт" -> id спрайта в шите
 	var/list/states_cache = list() // файл иконки -> icon_states() этого файла
 	var/counter = 0
@@ -45,15 +41,14 @@ GLOBAL_LIST_EMPTY(spawnpanel_icon_map) // "[typepath]" → spritesheet imgid str
 			var/imgid = icon_dedup[cache_key]
 			if(!imgid)
 				imgid = "sp[counter]"
-				// Insert сам вырезает нужный стейт и отсеивает битые иконки,
-				// так что отдельный icon()/icon_states() тут не нужен.
-				if(!Insert(imgid, icon_file, icon_state))
-					continue
+				// Масштаб и компоновка выполняются одним батчем в rust-g, без
+				// десятков тысяч icon()/Insert() на треде DreamDaemon.
+				var/datum/universal_icon/entry = uni_icon(icon_file, icon_state, SOUTH)
+				entry.scale(32, 32)
+				insert_icon(imgid, entry)
 				counter++
 				icon_dedup[cache_key] = imgid
 			GLOB.spawnpanel_icon_map["[atom_type]"] = imgid
-
-	return ..()
 
 /datum/asset/json/spawnpanel
 	name = "spawnpanel_atom_data"
@@ -64,7 +59,7 @@ GLOBAL_LIST_EMPTY(spawnpanel_icon_map) // "[typepath]" → spritesheet imgid str
 	// JSON без него бессмысленен: он читает spawnpanel_icon_map. Держим
 	// зависимость явной, чтобы перестановка объявлений не обнулила превьюшки.
 	// get_asset_datum идемпотентен.
-	get_asset_datum(/datum/asset/spritesheet/spawnpanel)
+	get_asset_datum(/datum/asset/spritesheet_batched/spawnpanel)
 
 	var/list/data = list()
 	var/list/atoms = list()

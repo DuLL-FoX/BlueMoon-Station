@@ -2,45 +2,114 @@
 #define MAX_PDA_MESSAGE_LEN 1024
 /// Format of message timestamps
 #define PDA_MESSAGE_TIMESTAMP_FORMAT "hh:mm"
+/// Префикс, под которым эмодзи лежат в спрайтшите чата
+#define EMOJI_SPRITE_PREFIX "emoji-"
+/// Потолок числа эмодзи в панели: длиннее список уже не выбор, а свалка
+#define EMOJI_LIST_MAX_LENGTH 200
+/// CSS-класс картинки, подставленной вместо ":name:" в текст сообщения
+#define EMOJI_INLINE_CLASS "emoji-inline"
 
 /// Returns cached list of emoji names, initializing on first call
 /proc/get_emoji_list()
+	if(length(GLOB.cached_emoji_list))
+		return GLOB.cached_emoji_list
+
+	GLOB.cached_emoji_list = list()
+	var/datum/asset/spritesheet_batched/sheet = get_asset_datum(/datum/asset/spritesheet_batched/chat)
+	for(var/sprite_name in sheet.sprites)
+		if(findtextEx(sprite_name, EMOJI_SPRITE_PREFIX) != 1)
+			continue
+		var/emoji_name = copytext(sprite_name, length(EMOJI_SPRITE_PREFIX) + 1)
+		if(emoji_name != "")
+			GLOB.cached_emoji_list |= emoji_name
 	if(!length(GLOB.cached_emoji_list))
-		GLOB.cached_emoji_list = list()
-		GLOB.cached_emoji_base64 = list()
-		var/datum/asset/spritesheet/sheet = get_asset_datum(/datum/asset/spritesheet/chat)
-		for(var/sprite_name in sheet.sprites)
-			if(findtextEx(sprite_name, "emoji-") == 1)
-				var/emoji_name = copytext(sprite_name, 7)
-				if(emoji_name != "")
-					GLOB.cached_emoji_list |= emoji_name
-		if(!length(GLOB.cached_emoji_list))
-			GLOB.cached_emoji_list = list("smile", "grin", "laughing", "wink", "frown", "angry", "cry", "heart", "ok", "thumbup")
-		else if(length(GLOB.cached_emoji_list) > 200)
-			GLOB.cached_emoji_list = GLOB.cached_emoji_list.Copy(1, 200)
-		for(var/emoji_name in GLOB.cached_emoji_list)
-			var/icon/emoji_icon = icon('icons/emoji.dmi', emoji_name)
-			if(!length(icon_states(emoji_icon)))
-				emoji_icon = icon('icons/emoji_32.dmi', emoji_name)
-			if(length(icon_states(emoji_icon)))
-				GLOB.cached_emoji_base64[emoji_name] = icon2base64(emoji_icon)
+		GLOB.cached_emoji_list = list("smile", "grin", "laughing", "wink", "frown", "angry", "cry", "heart", "ok", "thumbup")
+	else if(length(GLOB.cached_emoji_list) > EMOJI_LIST_MAX_LENGTH)
+		GLOB.cached_emoji_list = GLOB.cached_emoji_list.Copy(1, EMOJI_LIST_MAX_LENGTH + 1)
+	rebuild_emoji_urls()
 	return GLOB.cached_emoji_list
 
-/// Returns cached base64 dict of emoji icons
-/proc/get_emoji_base64()
-	if(!length(GLOB.cached_emoji_base64))
-		get_emoji_list()
-	return GLOB.cached_emoji_base64
+/// Пересобирает "имя эмодзи -> адрес ассета" и плоский список имён ассетов под
+/// текущий транспорт. Список имён эмодзи строится один раз за раунд, а адреса
+/// живут ровно до следующей смены GLOB.asset_url_generation, поэтому это
+/// отдельный прок, а не кусок get_emoji_list().
+/proc/rebuild_emoji_urls()
+	GLOB.cached_emoji_urls = list()
+	GLOB.cached_emoji_asset_names = list()
+	GLOB.cached_emoji_asset_by_name = list()
+	GLOB.cached_emoji_url_generation = GLOB.asset_url_generation
+	for(var/emoji_name in GLOB.cached_emoji_list)
+		var/emoji_file = 'icons/emoji.dmi'
+		var/icon/emoji_icon = icon(emoji_file, emoji_name)
+		if(!length(icon_states(emoji_icon)))
+			emoji_file = 'icons/emoji_32.dmi'
+			emoji_icon = icon(emoji_file, emoji_name)
+		if(!length(icon_states(emoji_icon)))
+			continue
+		// Ассет уже лежит в SSassets и переживает смену транспорта - повторная
+		// регистрация тут только достаёт его имя из кеша, а новый адрес выдаёт
+		// уже новый транспорт.
+		var/asset_name = register_icon_asset(emoji_icon, "emoji|[emoji_file]|[emoji_name]", get_icon_dmi_path(emoji_file))
+		if(!asset_name)
+			continue
+		GLOB.cached_emoji_asset_names += asset_name
+		GLOB.cached_emoji_asset_by_name[emoji_name] = asset_name
+		GLOB.cached_emoji_urls[emoji_name] = SSassets.transport.get_asset_url(asset_name)
+	return GLOB.cached_emoji_urls
 
+/// Returns the "emoji name -> asset url" dict, making sure target has the assets first.
+/proc/get_emoji_urls(target)
+	get_emoji_list()
+	// Адреса кешируются на весь раунд, поэтому их надо пересобрать, если
+	// транспорт ассетов сорвался с CDN и адреса сменились.
+	if(GLOB.cached_emoji_url_generation != GLOB.asset_url_generation)
+		rebuild_emoji_urls()
+	if(target && length(GLOB.cached_emoji_asset_names))
+		SSassets.transport.send_assets(target, GLOB.cached_emoji_asset_names)
+	return GLOB.cached_emoji_urls
+
+/**
+ * Имена ассетов тех эмодзи, что реально встречаются в готовом тексте сообщения.
+ * Возвращает null, если слать нечего.
+ *
+ * Отправлять зрителю весь набор (около двухсот файлов) нельзя: на простом
+ * транспорте send_assets() - это browse_rsc веером в один тик, да ещё и
+ * "Sending Resources..." в чат от восьми файлов. А это ровно то состояние, ради
+ * которого пересборка адресов и делалась. Имена эмодзи достаём из alt подставленных
+ * картинок: разметку писали мы сами, а всё, что игрок напечатал руками, к этому
+ * моменту уже прошло через sanitize().
+ */
+/proc/get_message_emoji_assets(message)
+	if(!findtext(message, EMOJI_INLINE_CLASS))
+		return null
+	// Заодно сверяем поколение адресов: карта живёт ровно столько же, сколько они.
+	get_emoji_urls()
+	var/list/emoji_assets = GLOB.cached_emoji_asset_by_name
+	if(!length(emoji_assets))
+		return null
+	var/static/regex/emoji_alt_regex = regex(@"alt=':(.+?):'", "g")
+	var/list/needed = list()
+	while(emoji_alt_regex.Find(message))
+		var/asset_name = emoji_assets[emoji_alt_regex.group[1]]
+		if(asset_name)
+			needed |= asset_name
+	return length(needed) ? needed : null
+
+/// Подставляет в текст картинки вместо ":name:". Сами ассеты отсюда никому не
+/// уходят - зрители получают их через get_message_emoji_assets().
 /proc/parse_emoji_message(message)
 	. = message
-	if(!length(GLOB.cached_emoji_list))
-		get_emoji_list()
-	for(var/emoji_name in GLOB.cached_emoji_list)
-		var/base64 = GLOB.cached_emoji_base64[emoji_name]
-		if(base64)
-			. = replacetext(., ":[emoji_name]:", "<img class='emoji-inline' src='data:image/png;base64,[base64]' alt=':[emoji_name]:' />")
-	return .
+	// Ни одного двоеточия - подставлять нечего, и двести replacetext не нужны.
+	if(!findtext(message, ":"))
+		return
+	// Через get_emoji_urls(): чтение кеша напрямую вставляло бы в сообщение
+	// адреса транспорта, с которого мы уже сорвались.
+	var/list/emoji_urls = get_emoji_urls()
+	for(var/emoji_name in emoji_urls)
+		var/emoji_url = emoji_urls[emoji_name]
+		if(!emoji_url)
+			continue
+		. = replacetext(., ":[emoji_name]:", "<img class='[EMOJI_INLINE_CLASS]' src='[emoji_url]' alt=':[emoji_name]:' />")
 
 /datum/computer_file/program/messenger
 	filename = "nt_messenger"
@@ -393,6 +462,12 @@
 	static_data["is_silicon"] = issilicon(user)
 	static_data["remote_silicon"] = FALSE
 	static_data["alert_able"] = alert_able
+	// Набор эмодзи собирается один раз за раунд, а его словарь адресов - около двухсот
+	// пар - уезжал клиенту в КАЖДОМ ui_data(), то есть на каждый тик открытого
+	// мессенджера. Здесь он уходит один раз на открытие; смену транспорта переживает
+	// потому, что полный апдейт после срыва шлёт и статику тоже.
+	static_data["emoji_list"] = get_emoji_list()
+	static_data["emoji_urls"] = get_emoji_urls(user)
 	return static_data
 
 /datum/computer_file/program/messenger/ui_data(mob/user)
@@ -423,20 +498,13 @@
 	data["on_spam_cooldown"] = !can_send_everyone_message()
 	data["ringtone_list"] = GLOB.pda_ringtone_list
 	data["current_ringtone"] = ringtone
-	data["emoji_list"] = get_emoji_list()
-	data["emoji_base64"] = get_emoji_base64()
 
 	var/obj/item/modular_computer/pda/pda_device = computer
 	if(istype(pda_device) && pda_device.picture)
 		data["has_scanned_photo"] = TRUE
 		var/datum/picture/pic = pda_device.picture
 		if(pic && pic.picture_image)
-			var/icon/img = pic.picture_image
-			var/base64 = icon2base64(img)
-			if(base64)
-				data["selected_photo_path"] = "data:image/png;base64,[base64]"
-			else
-				data["selected_photo_path"] = null
+			data["selected_photo_path"] = icon2asset_url(pic.picture_image, user, "pdaphoto|[REF(pic)]")
 		else
 			data["selected_photo_path"] = null
 	else
@@ -540,7 +608,15 @@
 	if(mime_mode)
 		message = emoji_sanitize(message)
 
-	return parse_emoji_message(message)
+	message = parse_emoji_message(message)
+
+	// Отправитель видит свой же текст в чате, а панель эмодзи он мог и не открывать -
+	// например, отвечая по ссылке из чата.
+	var/list/emoji_assets = get_message_emoji_assets(message)
+	if(sender?.client && emoji_assets)
+		SSassets.transport.send_assets(sender.client, emoji_assets)
+
+	return message
 
 /// Sends a message to targets via PDA
 /datum/computer_file/program/messenger/proc/send_message(atom/source, message, list/targets, everyone = FALSE)
@@ -548,26 +624,21 @@
 	if(isliving(source))
 		sender = source
 
-	var/photo_path = null
+	// Либо имя ассета в SSassets, либо внешний URL - разворачивается через resolve_pda_photo_url()
 	var/photo_asset = null
 	var/obj/item/modular_computer/pda/pda_device = computer
 	if(istype(pda_device) && pda_device.picture)
 		var/datum/picture/pic = pda_device.picture
 		if(pic && pic.picture_image)
-			var/icon/img = pic.picture_image
-			var/base64 = icon2base64(img)
-			if(base64)
-				photo_path = "data:image/png;base64,[base64]"
-				photo_asset = photo_path
+			photo_asset = register_icon_asset(pic.picture_image, "pdaphoto|[REF(pic)]")
 			pda_device.picture = null
 
 	if(admin_photo_url)
-		photo_path = admin_photo_url
 		photo_asset = admin_photo_url
 		admin_photo_url = null
 
 	message = sanitize_pda_message(message, sender)
-	if(!message && !photo_path)
+	if(!message && !photo_asset)
 		return FALSE
 
 	// Filter targets
@@ -623,7 +694,7 @@
 		target_chats += target_chat
 		target_messengers += target_messenger
 
-	if(!send_message_signal(source, message, target_messengers, photo_path, everyone))
+	if(!send_message_signal(source, message, target_messengers, photo_asset, everyone))
 		return FALSE
 
 	// Log in our chat
@@ -647,7 +718,7 @@
 		return FALSE
 	return send_message_signal(sender, message, targets, null, FALSE, TRUE, fake_name, fake_job)
 
-/datum/computer_file/program/messenger/proc/send_message_signal(atom/source, message, list/datum/computer_file/program/messenger/targets, photo_path = null, everyone = FALSE, rigged = FALSE, fake_name = null, fake_job = null)
+/datum/computer_file/program/messenger/proc/send_message_signal(atom/source, message, list/datum/computer_file/program/messenger/targets, photo_asset = null, everyone = FALSE, rigged = FALSE, fake_name = null, fake_job = null)
 	var/mob/sender
 	if(ismob(source))
 		sender = source
@@ -679,7 +750,7 @@
 		"targets" = targets,
 		"rigged" = rigged,
 		"everyone" = everyone,
-		"photo" = photo_path,
+		"photo" = photo_asset,
 		"automated" = FALSE,
 	))
 	if(rigged)
@@ -715,11 +786,16 @@
 	// Show to ghosts
 	var/ghost_message = span_notice("[span_name(signal.format_sender())] [rigged ? "(as [span_name(fake_name)]) Rigged " : ""]PDA Message --> [span_name("[everyone ? "Everyone" : signal.format_target()]")]: \"[signal.format_message()]\"")
 	var/list/message_listeners = GLOB.dead_mob_list + GLOB.current_observers_list
+	// В тексте уже стоят готовые адреса картинок эмодзи, а самих ассетов у гостов нет.
+	// Разбираем текст один раз на всех: гостов бывает под полсотни.
+	var/list/emoji_assets = get_message_emoji_assets(ghost_message)
 	for(var/mob/listener as anything in message_listeners)
 		if(!listener.client)
 			continue
 		if(!(get_chat_toggles(listener.client) & CHAT_GHOSTPDA))
 			continue
+		if(emoji_assets)
+			SSassets.transport.send_assets(listener.client, emoji_assets)
 		to_chat(listener, "[FOLLOW_LINK(listener, source)] [ghost_message]")
 
 	if(sender)
@@ -786,6 +862,10 @@
 
 	SEND_SIGNAL(computer, COMSIG_MODULAR_PDA_MESSAGE_RECEIVED, signal, fake_job || sender_messenger?.computer?.saved_job || "Unknown", sender_name)
 
+	// Адреса картинок эмодзи зашиты в текст ещё у отправителя, а самих ассетов у
+	// получателя может не быть: панель эмодзи он мог ни разу не открывать.
+	var/list/emoji_assets = get_message_emoji_assets(signal.format_message())
+
 	for(var/mob/living/messaged_mob as anything in receivers)
 		if(messaged_mob.stat >= UNCONSCIOUS)
 			continue
@@ -802,7 +882,10 @@
 			sender_title = "<a href='byond://?src=[REF(messaged_mob)];track=[html_encode(sender_name)]'>[sender_title]</a>"
 
 		var/inbound_message = "[signal.format_message()]"
-		var/photo = signal.data["photo"]
+		if(messaged_mob.client && emoji_assets)
+			SSassets.transport.send_assets(messaged_mob.client, emoji_assets)
+		// В сигнале лежит имя ассета либо внешний URL - разворачиваем под конкретного зрителя
+		var/photo = resolve_pda_photo_url(signal.data["photo"], messaged_mob)
 		var/photo_html = ""
 		if(photo)
 			var/regex/video_regex = new(@"\.(webm|mp4)(\?.*)?$", "i")
@@ -888,5 +971,8 @@
 /proc/cmp_list_data_name(list/a, list/b)
 	return sorttext(b["name"], a["name"])
 
+#undef EMOJI_INLINE_CLASS
+#undef EMOJI_LIST_MAX_LENGTH
+#undef EMOJI_SPRITE_PREFIX
 #undef PDA_MESSAGE_TIMESTAMP_FORMAT
 #undef MAX_PDA_MESSAGE_LEN

@@ -153,22 +153,43 @@
 		ui.open()
 
 /obj/item/integrated_circuit_printer/var/static/list/cashed_icons = list()
+/// Плоский список имён ассетов превью: весь ui_static_data кешируется в
+/// super_data_cashe, поэтому картинки надо отдавать клиенту отдельно.
+/obj/item/integrated_circuit_printer/var/static/list/cashed_icon_assets = list()
 
 /obj/item/integrated_circuit_printer/proc/cashe_icon(atom/to_cashe)
 	if(!ispath(to_cashe))
 		return ""
 
-	if(cashed_icons?[to_cashe])
-		return cashed_icons[to_cashe]
+	// Кешируется имя ассета, а не адрес: транспорт может сорваться с CDN на
+	// раздачу через сервер посреди раунда, и сохранённый адрес указывал бы на
+	// хост, с которого уже ничего не отдаётся.
+	var/asset_name = cashed_icons?[to_cashe]
+	if(!asset_name)
+		var/icon_file = initial(to_cashe.icon)
+		if(!icon_file)
+			return ""
+		asset_name = register_icon_asset(icon(icon_file, initial(to_cashe.icon_state), SOUTH, 1, FALSE), "circuitprinter|[to_cashe]", get_icon_dmi_path(icon_file))
+		if(!asset_name)
+			return ""
+		cashed_icon_assets |= asset_name
+		cashed_icons[to_cashe] = asset_name
+	return SSassets.transport.get_asset_url(asset_name)
 
-	var/temp = icon2base64(icon(to_cashe:icon, to_cashe:icon_state, moving = FALSE, dir=SOUTH, frame = 1))
-	cashed_icons[to_cashe] = temp
-	return temp
+/// Отдаёт клиенту все превью схем разом.
+/obj/item/integrated_circuit_printer/proc/send_cashed_icon_assets(mob/user)
+	if(!user || !length(cashed_icon_assets))
+		return
+	SSassets.transport.send_assets(user, cashed_icon_assets)
 
 /obj/item/integrated_circuit_printer/var/static/list/super_data_cashe
+/// Поколение адресов ассетов, при котором собран super_data_cashe: в нём лежат
+/// готовые URL превью, и после срыва CDN их надо пересобрать.
+/obj/item/integrated_circuit_printer/var/static/super_data_cashe_generation = -1
 
 /obj/item/integrated_circuit_printer/ui_static_data(mob/user)
-	if(super_data_cashe && (length(super_data_cashe) != 0))
+	if(super_data_cashe && length(super_data_cashe) && super_data_cashe_generation == GLOB.asset_url_generation)
+		send_cashed_icon_assets(user)
 		return super_data_cashe
 
 	var/list/data = list()
@@ -218,6 +239,8 @@
 	data["clone_config_status"] = CONFIG_GET(flag/ic_printing) || debug
 
 	super_data_cashe = data
+	super_data_cashe_generation = GLOB.asset_url_generation
+	send_cashed_icon_assets(user)
 
 	return data
 

@@ -1,5 +1,8 @@
 /// Иконка для TGUI без [/proc/getFlatIcon] — у гениталий бывают глубокие цепочки оверлеев; рекурсия в getFlatIcon даёт переполнение стека в libbyond (краш BYOND 516 на Linux).
-/proc/safe_genital_tgui_icon(obj/item/organ/genital/G)
+/// Возвращает URL превью гениталии в кеше ассетов - картинка уходит клиенту ссылкой,
+/// а не base64 в каждом тике ui_data. Стейт нормализуется: у части органов
+/// icon_state в .dmi отсутствует.
+/proc/safe_genital_tgui_icon_url(obj/item/organ/genital/G, target)
 	if(!istype(G) || !G.icon)
 		return null
 	var/st = G.icon_state
@@ -8,7 +11,7 @@
 		return null
 	if(!(st in states))
 		st = ("" in states) ? "" : states[1]
-	return icon(G.icon, st, SOUTH)
+	return icon_state2asset_url(G.icon, st, target)
 
 /// Attempts to open the tgui menu
 /mob/living/carbon/verb/genital_menu()
@@ -85,8 +88,7 @@
 			continue
 
 		var/list/genital_entry = list()
-		var/icon/preview_icon = safe_genital_tgui_icon(genital)
-		genital_entry["img"] = preview_icon ? icon2base64(preview_icon) : ""
+		genital_entry["img"] = safe_genital_tgui_icon_url(genital, user) || ""
 		genital_entry["name"] = "[capitalize(genital.name)]" //Prevents code from adding a prefix
 		genital_entry["key"] = REF(genital) //The key is the reference to the object
 

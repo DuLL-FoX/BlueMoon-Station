@@ -57,7 +57,7 @@ export const LoadoutColor = (props) => {
               <Table>
                 <Table.Cell>
                   <center>Original:</center>
-                  <PixelArtImage src={"data:image/png;base64, " + sprite} />
+                  <PixelArtImage src={sprite} />
                 </Table.Cell>
                 <Table.Cell>
                   <center>Preview:</center>

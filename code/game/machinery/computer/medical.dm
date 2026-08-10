@@ -122,18 +122,12 @@
 					fields[++fields.len] = FIELD("Псих. статус", active1.fields["m_stat"], "m_stat")
 					var/list/photos = list()
 					general["photos"] = photos
-					if(istype(active1.fields["photo_front"], /obj/item/photo))
-						var/obj/item/photo/P = active1.fields["photo_front"]
-						if(P.picture?.picture_image)
-							photos[++photos.len] = icon2base64(P.picture.picture_image)
-					else if(isicon(active1.fields["photo_front"]))
-						photos[++photos.len] = icon2base64(active1.fields["photo_front"])
-					if(istype(active1.fields["photo_side"], /obj/item/photo))
-						var/obj/item/photo/P = active1.fields["photo_side"]
-						if(P.picture?.picture_image)
-							photos[++photos.len] = icon2base64(P.picture.picture_image)
-					else if(isicon(active1.fields["photo_side"]))
-						photos[++photos.len] = icon2base64(active1.fields["photo_side"])
+					var/photo_front_url = record_photo_asset_url(active1.fields["photo_front"], user)
+					if(photo_front_url)
+						photos[++photos.len] = photo_front_url
+					var/photo_side_url = record_photo_asset_url(active1.fields["photo_side"], user)
+					if(photo_side_url)
+						photos[++photos.len] = photo_side_url
 					general["has_photos"] = length(photos) > 0
 					general["empty"] = 0
 				else

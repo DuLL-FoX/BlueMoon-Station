@@ -47,7 +47,7 @@
 		ui.open()
 		ui.set_autoupdate(FALSE)
 
-/datum/outfit_editor/proc/entry(data)
+/datum/outfit_editor/proc/entry(data, target)
 	if(ispath(data, /obj/item))
 		var/obj/item/item = data
 		return list(
@@ -55,22 +55,22 @@
 			"name" = initial(item.name),
 			"desc" = initial(item.desc),
 			// at this point initializing the item is probably faster tbh
-			"sprite" = icon2base64(icon(initial(item.icon), initial(item.icon_state), SOUTH, 1)),
+			"sprite" = icon_state2asset_url(initial(item.icon), initial(item.icon_state), target),
 		)
 
 	return data
 
-/datum/outfit_editor/proc/serialize_outfit()
+/datum/outfit_editor/proc/serialize_outfit(target)
 	var/list/outfit_slots = drip.get_json_data()
 	. = list()
 	for(var/key in outfit_slots)
 		var/val = outfit_slots[key]
-		. += list("[key]" = entry(val))
+		. += list("[key]" = entry(val, target))
 
 /datum/outfit_editor/ui_data(mob/user)
 	var/list/data = list()
 
-	data["outfit"] = serialize_outfit()
+	data["outfit"] = serialize_outfit(user)
 	data["saveable"] = !GLOB.custom_outfits.Find(drip)
 
 	if(!dummy_key)

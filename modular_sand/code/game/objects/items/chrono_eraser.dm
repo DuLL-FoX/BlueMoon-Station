@@ -186,21 +186,31 @@
 			attached = FALSE
 		target.forceMove(src)
 		captured = target
-		var/icon/mob_snapshot = getFlatIcon(target)
-		var/icon/cached_icon = new()
-
-		for(var/i=1, i<=CHRONO_FRAME_COUNT, i++)
-			var/icon/removing_frame = icon('icons/obj/chronos.dmi', "erasing", SOUTH, i)
-			var/icon/mob_icon = icon(mob_snapshot)
-			mob_icon.Blend(removing_frame, ICON_MULTIPLY)
-			cached_icon.Insert(mob_icon, "frame[i]")
-
-		mob_underlay = mutable_appearance(cached_icon, "frame1")
-		update_icon()
-
+		// getFlatIcon умеет уступать тик между слоями, а Initialize спать нельзя:
+		// снапшот жертвы строим отдельным вызовом. До его готовности поле живёт
+		// без андерлея - update_icon() это переживает.
+		INVOKE_ASYNC(src, PROC_REF(build_mob_underlay), target)
 		desc = initial(desc) + "<br><span class='info'>It appears to contain [target.name].</span>"
 	START_PROCESSING(SSobj, src)
 	return ..()
+
+/// Строит покадровый андерлей стираемого моба вне Initialize: getFlatIcon по
+/// одетому человеку рекурсивно плющит сотни слоёв и имеет право уступать тик.
+/obj/structure/chrono_field/proc/build_mob_underlay(mob/living/target)
+	var/icon/mob_snapshot = getFlatIcon(target)
+	if(QDELETED(src))
+		return
+	var/icon/cached_icon = new()
+	for(var/i=1, i<=CHRONO_FRAME_COUNT, i++)
+		var/icon/removing_frame = icon('icons/obj/chronos.dmi', "erasing", SOUTH, i)
+		var/icon/mob_icon = icon(mob_snapshot)
+		mob_icon.Blend(removing_frame, ICON_MULTIPLY)
+		cached_icon.Insert(mob_icon, "frame[i]")
+	mob_underlay = mutable_appearance(cached_icon, "frame1")
+	// Пока снапшот строился, счётчик мог уйти вперёд - применяем текущий кадр,
+	// а не стартовый.
+	RPpos = null
+	update_icon()
 
 /obj/structure/chrono_field/Destroy()
 	if(gun && gun.field_check(src))
@@ -208,6 +218,8 @@
 	return ..()
 
 /obj/structure/chrono_field/update_icon()
+	if(!mob_underlay)
+		return
 	var/ttk_frame = 1 - (tickstokill / initial(tickstokill))
 	ttk_frame = clamp(CEILING(ttk_frame * CHRONO_FRAME_COUNT, 1), 1, CHRONO_FRAME_COUNT)
 	if(ttk_frame != RPpos)

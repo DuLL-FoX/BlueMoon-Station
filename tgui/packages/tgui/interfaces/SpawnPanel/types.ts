@@ -6,7 +6,7 @@
 
 export type SpawnPanelData = {
   selected_object: string | null;
-  selected_icon: string | null; // base64 PNG of selected atom, generated server-side
+  selected_icon: string | null; // asset url of the selected atom's icon, resolved server-side
   atom_name: string | null;
   atom_desc: string | null;
   atom_amount: number;

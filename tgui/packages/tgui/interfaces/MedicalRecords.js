@@ -274,7 +274,7 @@ const MedicalRecordsViewGeneral = (_properties) => {
               textAlign="center"
               color="label">
               <img
-                src={'data:image/png;base64,' + p}
+                src={p}
                 className="SecurityRecords__photo"
                 style={{
                   width: '96px',

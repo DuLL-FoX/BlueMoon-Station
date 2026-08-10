@@ -61,9 +61,9 @@
 	// no_anim: фотография в записи статична, а без флага getFlatIcon тянет все кадры
 	// анимации каждого оверлея - это самая дорогая часть съёмки.
 	if(!QDELETED(H) && H.body_position == STANDING_UP && H.alpha >= 255)
-		return build_flat_multidir_icon(H, show_directions, no_anim = TRUE, force_dir = TRUE)
+		return build_flat_multidir_icon(H, show_directions, no_anim = TRUE, force_dir = TRUE, yield_between_layers = TRUE)
 	var/datum/job/photo_job = assigned_role ? SSjob.GetJob(assigned_role) : null
-	return get_flat_human_icon(null, photo_job, prefs, DUMMY_HUMAN_SLOT_MANIFEST, show_directions, no_anim = TRUE)
+	return get_flat_human_icon(null, photo_job, prefs, DUMMY_HUMAN_SLOT_MANIFEST, show_directions, no_anim = TRUE, yield_between_layers = TRUE)
 
 /// Собственно генерация фото: съёмка кадра с подменой плейсхолдеров в записях
 /// (general: два /obj/item/photo, locked: сырая иконка).
@@ -223,6 +223,31 @@
 	GLOB.data_core.general -= src
 	GLOB.data_core.locked -= src
 	. = ..()
+
+/**
+ * Возвращает URL фотографии из поля записи для <img src>.
+ * Поле хранит либо /obj/item/photo, либо голую /icon. Картинка регистрируется
+ * ассетом один раз и дальше уходит клиенту ссылкой, а не base64 в каждом ui_data.
+ *
+ * Arguments:
+ * * photo_field - значение fields["photo_front"] / fields["photo_side"].
+ * * target - /client, моб с клиентом или список таких.
+ */
+/proc/record_photo_asset_url(photo_field, target)
+	var/icon/photo_icon
+	var/cache_key
+	if(istype(photo_field, /obj/item/photo))
+		var/obj/item/photo/photo_item = photo_field
+		if(!photo_item.picture?.picture_image)
+			return null
+		photo_icon = photo_item.picture.picture_image
+		cache_key = "recordphoto|[REF(photo_item.picture)]"
+	else if(isicon(photo_field))
+		photo_icon = photo_field
+		cache_key = "recordphoto|[REF(photo_field)]"
+	else
+		return null
+	return icon2asset_url(photo_icon, target, cache_key)
 
 /datum/data/crime
 	name = "crime"

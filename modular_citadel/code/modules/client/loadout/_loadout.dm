@@ -96,8 +96,8 @@ GLOBAL_LIST_EMPTY(loadout_whitelist_ids)
 	var/restricted_desc
 
 	// BLUEMOON EDIT START - превью для вещей в лодауте
-	// Автоматически гененерируемая base64 иконка для превью в лодауте
-	var/base64icon
+	// Имя ассета с превью в SSassets. Пустая строка - превью получить не вышло.
+	var/preview_asset
 	// Возможный оверрайд иконки
 	var/item_icon = null
 	// Возможный оверрайд стейта иконки
@@ -112,31 +112,34 @@ GLOBAL_LIST_EMPTY(loadout_whitelist_ids)
 	if(!description && path)
 		description = initial(path.desc)
 	//превью здесь НЕ генерится: ~1900 gear-датумов на старте сервера жгли
-	//~1.3с CPU на icon2base64 (perf3/perf4: ровно 1559 энкодов на раундстарт);
-	//энкод делается лениво при первом запросе UI через get_base64icon(),
+	//~1.3с CPU на энкод (perf3/perf4: ровно 1559 картинок на раундстарт);
+	//ассет регистрируется лениво при первом запросе UI через get_preview_asset(),
 	//меню лодаута рендерит одну подкатегорию за раз - первый показ дешёвый
 	// BLUEMOON EDIT END
 
-///Ленивая генерация base64-превью с общим кэшем по паре иконка:стейт.
-///Возвращает null, если у предмета нет иконки или энкод упал.
-/datum/gear/proc/get_base64icon()
-	if(base64icon)
-		return base64icon
+///Ленивая регистрация превью в кеше ассетов. Возвращает имя ассета или "" если картинки нет.
+/datum/gear/proc/get_preview_asset()
+	if(!isnull(preview_asset))
+		return preview_asset
+	preview_asset = ""
 	try
 		var/init_icon = item_icon ? item_icon : initial(path.icon)
 		var/init_icon_state = item_icon_state ? item_icon_state : initial(path.icon_state)
 		if(init_icon && init_icon_state)
-			var/static/list/loadout_icon_cache = list()
-			var/cache_key = "[init_icon]:[init_icon_state]"
-			if(cache_key in loadout_icon_cache)
-				base64icon = loadout_icon_cache[cache_key]
+			var/cache_key = "loadout|[init_icon]|[init_icon_state]"
+			var/asset_name = GLOB.icon_asset_name_cache[cache_key]
+			if(asset_name && SSassets.cache[asset_name])
+				preview_asset = asset_name
 			else
-				base64icon = icon2base64(icon(init_icon, init_icon_state, SOUTH, 1, FALSE))
-				loadout_icon_cache[cache_key] = base64icon
+				preview_asset = register_icon_asset(icon(init_icon, init_icon_state, SOUTH, 1, FALSE), cache_key, get_icon_dmi_path(init_icon)) || ""
 	catch(var/exception/e)
 		stack_trace("Loadout icon generation failed for [name] ([type]): [e]")
-		base64icon = null // Item will work without preview icon
-	return base64icon
+		preview_asset = "" // Item will work without preview icon
+	return preview_asset
+
+///Отдаёт клиенту превью и возвращает URL для <img src>. null, если превью нет.
+/datum/gear/proc/get_preview_url(target)
+	return send_icon_asset_url(target, get_preview_asset())
 
 
 //a comprehensive donator check proc is intentionally not implemented due to the fact that we (((might))) have job-whitelists for donator items in the future and I like to stay on the safe side.

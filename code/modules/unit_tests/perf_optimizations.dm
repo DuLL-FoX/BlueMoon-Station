@@ -968,8 +968,8 @@
 // ===== Лодаут: превью генерятся лениво, а не на старте сервера =====
 //
 // perf3/perf4: ровно 1559 icon2base64 (~1.3с CPU) на каждом раундстарте -
-// /datum/gear/New энкодил превью всего каталога. Теперь энкод по первому
-// запросу UI, меню рендерит одну подкатегорию за раз.
+// /datum/gear/New энкодил превью всего каталога. Теперь превью регистрируется
+// ассетом по первому запросу UI, меню рендерит одну подкатегорию за раз.
 
 /datum/unit_test/loadout_preview_lazy/Run()
 	TEST_ASSERT(length(GLOB.loadout_items), "loadout catalog must be populated")
@@ -983,14 +983,14 @@
 				var/datum/gear/gear = items[gear_name]
 				if(!gear)
 					continue
-				if(gear.base64icon)
+				if(!isnull(gear.preview_asset))
 					eager++
 				if(!probe && gear.path)
-					var/preview = gear.get_base64icon()
+					var/preview = gear.get_preview_asset()
 					if(preview)
 						probe = gear
-						TEST_ASSERT_EQUAL(gear.get_base64icon(), preview, "repeated preview requests must return the cached encode")
-	TEST_ASSERT_EQUAL(eager, 0, "no gear preview may be encoded before the first UI request ([eager] already were)")
+						TEST_ASSERT_EQUAL(gear.get_preview_asset(), preview, "repeated preview requests must return the cached asset")
+	TEST_ASSERT_EQUAL(eager, 0, "no gear preview may be registered before the first UI request ([eager] already were)")
 	TEST_ASSERT_NOTNULL(probe, "at least one gear item must produce a preview on demand")
 
 // ===== Air sensor: бродкаст только при изменении показаний или heartbeat =====

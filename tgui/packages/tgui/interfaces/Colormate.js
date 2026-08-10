@@ -68,7 +68,7 @@ export const Colormate = (props) => {
                 <Table.Cell width="50%">
                   <Section>
                     <center>Item:</center>
-                    <PixelArtImage src={"data:image/png;base64, " + item.sprite} />
+                    <PixelArtImage src={item.sprite} />
                   </Section>
                 </Table.Cell>
                 <Table.Cell>
