@@ -18,7 +18,10 @@ function draw_sdql2() {
 
 		if (part[2]) {
 			var a = el("a");
-			a.href = "?src=_statpanel_;statpanel_item_target=" + part[2] + ";statpanel_item_click=left";
+			a.href = "#";
+			a.onclick = (function(h) {
+				return function(e) { e.preventDefault(); byond_topic(h); return false; };
+			})("?src=_statpanel_;statpanel_item_target=" + part[2] + ";statpanel_item_click=left");
 			a.textContent = part[1];
 			card.appendChild(a);
 		} else {

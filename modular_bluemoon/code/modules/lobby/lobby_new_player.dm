@@ -3,8 +3,16 @@
 	var/bm_bg_slot = 0
 	var/bm_assets_sent = FALSE  // asset cache уже отправлен этому клиенту
 	COOLDOWN_DECLARE(bm_ready_cd)
+	// Keep independent limits so simultaneous failures of different HTTP assets
+	// can recover without allowing one large resource to be requested in a loop.
+	COOLDOWN_DECLARE(bm_loading_fallback_cd)
+	COOLDOWN_DECLARE(bm_background_fallback_cd)
+	COOLDOWN_DECLARE(bm_audio_fallback_cd)
+	COOLDOWN_DECLARE(bm_script_fallback_cd)
 	var/bm_lobby_music_path = ""
 	var/bm_lobby_track_name = ""
+	/// Exact image path represented by the last external background URL.
+	var/bm_lobby_background_path = ""
 
 /mob/dead/new_player/Login()
 	. = ..()
@@ -38,24 +46,45 @@
 		lobby_asset.send(src)
 
 	if(!SSticker || SSticker.current_state <= GAME_STATE_STARTUP)
-		var/loading_rsc = SStitle_bm?.loading_image
-		if(loading_rsc)
-			src << browse(loading_rsc, "file=bm_stub_bg.gif;display=0")
-		src << browse(_bm_build_loading_stub(), "window=bm_lobby_browser")
+		var/loading_media = SStitle_bm?.loading_image
+		var/loading_url = SStitle_bm?.get_external_media_url(loading_media)
+		if(loading_url)
+			src << browse(_bm_build_loading_stub(loading_url), "window=bm_lobby_browser")
+		else
+			var/loading_rsc = SStitle_bm?.get_local_media_resource(loading_media)
+			if(loading_rsc)
+				src << browse(loading_rsc, "file=bm_stub_bg.gif;display=0")
+			src << browse(_bm_build_loading_stub(), "window=bm_lobby_browser")
 		winset(client, "bm_lobby_browser", "is-visible=true")
 		return
 
-	var/img_to_send = _bm_get_current_image()
-	if(img_to_send)
-		src << browse(img_to_send, "file=loading_screen.gif;display=0")
-	src << browse(_bm_build_html(), "window=bm_lobby_browser")
+	src << browse(_bm_build_html(_bm_resolve_background_url()), "window=bm_lobby_browser")
 	winset(client, "bm_lobby_browser", "is-visible=true")
+
+/// Выбирает фон и возвращает то, что можно подставить в src атрибут: внешний
+/// HTTP-адрес, если ресурс опубликован, иначе локальное имя, отправленное
+/// клиенту через browse(). Общий для первого показа и для перестроения окна -
+/// иначе перестроение подставит loading_screen.gif, который CDN-клиенту никто
+/// не отправлял.
+/mob/dead/new_player/proc/_bm_resolve_background_url()
+	var/img_to_send = _bm_get_current_image()
+	bm_lobby_background_path = bm_normalize_lobby_media_path(img_to_send) || ""
+	var/external_url = SStitle_bm?.get_external_media_url(img_to_send)
+	if(external_url)
+		return external_url
+	if(!img_to_send)
+		return null
+	var/image_rsc = SStitle_bm?.get_local_media_resource(img_to_send)
+	if(!image_rsc)
+		return null
+	src << browse(image_rsc, "file=loading_screen.gif;display=0")
+	return "loading_screen.gif"
 
 /mob/dead/new_player/proc/bm_update_lobby_html()
 	if(!client)
 		return
 	bm_lobby_ready = FALSE
-	src << browse(_bm_build_html(), "window=bm_lobby_browser")
+	src << browse(_bm_build_html(_bm_resolve_background_url()), "window=bm_lobby_browser")
 
 /mob/dead/new_player/proc/bm_push_menu_update(ingame = FALSE)
 	if(!client || !bm_lobby_ready)
@@ -86,13 +115,36 @@
 	var/img_to_send = SStitle_bm?.get_image_for_player(show_nsfw, show_admin_bg)
 	if(!img_to_send)
 		return
-	bm_bg_slot = bm_bg_slot ? 0 : 1
-	var/filename = "bm_bg_[bm_bg_slot].gif"
-	src << browse(img_to_send, "file=[filename];display=0")
-	client << output(filename, "bm_lobby_browser:bm_set_background")
+	bm_lobby_background_path = bm_normalize_lobby_media_path(img_to_send) || ""
+	var/external_url = SStitle_bm.get_external_media_url(img_to_send)
+	if(external_url)
+		client << output(external_url, "bm_lobby_browser:bm_set_background")
+		return
+	bm_push_local_background(img_to_send)
 
-/mob/dead/new_player/proc/_bm_build_loading_stub()
-	// Фон — bm_stub_bg.gif, отправленный через browse() до этого вызова.
+/// Sends a background through BYOND after the browser reports an HTTP failure.
+/mob/dead/new_player/proc/bm_push_local_background(media = null, loading_stub = FALSE)
+	if(!client)
+		return
+	if(!media)
+		media = loading_stub ? SStitle_bm?.loading_image : bm_lobby_background_path
+	if(!media && !loading_stub)
+		media = _bm_get_current_image()
+	var/image_rsc = SStitle_bm?.get_local_media_resource(media)
+	if(!image_rsc)
+		return
+	var/filename
+	if(loading_stub)
+		filename = "bm_stub_bg.gif"
+	else
+		bm_bg_slot = bm_bg_slot ? 0 : 1
+		filename = "bm_bg_[bm_bg_slot].gif"
+	src << browse(image_rsc, "file=[filename];display=0")
+	client << output(filename, "bm_lobby_browser:__bm_apply_background_fallback")
+
+/mob/dead/new_player/proc/_bm_build_loading_stub(background_url = "bm_stub_bg.gif")
+	var/R = REF(src)
+	background_url = html_encode(background_url || "bm_stub_bg.gif")
 	return {"<!DOCTYPE html><html><head><meta charset='UTF-8'>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -112,7 +164,7 @@ body,html{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Co
 @keyframes bm-ray{from{transform:translateX(-100%)}to{transform:translateX(350%)}}
 </style></head>
 <body>
-<img class='bg' src='bm_stub_bg.gif' alt=''>
+<img id='bm-bg' class='bg' src='[background_url]' alt='' onerror="this.onerror=null;location.href='?src=[R];bm_lobby_action=media_fallback;bm_media_kind=loading'">
 <div class='overlay'></div>
 <div class='wrap'>
   <div class='top'>
@@ -125,21 +177,31 @@ body,html{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Co
   </div>
 </div>
 <script>
+function __bm_apply_background_fallback(url){var bg=document.getElementById('bm-bg');if(bg){bg.onerror=null;bg.src=url;}}
 var _i=0;setInterval(function(){var s=_i%4;document.getElementById('d').textContent=s===1?' .':s===2?'..':s===3?'...':'';_i++;},400);
 </script>
 </body></html>"}
 
-/mob/dead/new_player/proc/_bm_build_html()
+/mob/dead/new_player/proc/_bm_build_html(initial_background_url = "loading_screen.gif")
 	var/R = REF(src)
 	var/list/parts = list()
 
 	parts += SStitle_bm?.lobby_html || BM_DEFAULT_LOBBY_HTML_PREAMBLE
 
+	// Обработчик определяется до <img>, а не только в скрипте в конце документа:
+	// onerror снимает сам себя, и если ответ DM на media_fallback придёт раньше,
+	// чем выполнится тот скрипт, картинка останется битой до перезахода.
+	parts += {"<script>window.__bm_apply_background_fallback=function(url){var bg=document.getElementById('bm-bg');if(bg){bg.onerror=null;bg.src=url;}};</script>"}
+
 	// статические части (bg, overlay, toasts, toggle-btn) из кеша подсистемы
 	if(SStitle_bm?.cached_static_html != "")
-		parts += SStitle_bm.cached_static_html
+		var/static_html = SStitle_bm.cached_static_html
+		if(initial_background_url && initial_background_url != "loading_screen.gif")
+			static_html = replacetext(static_html, "src=\"loading_screen.gif\"", "src=\"[html_encode(initial_background_url)]\"")
+		static_html = replacetext(static_html, "<img id=\"bm-bg\"", "<img id=\"bm-bg\" onerror=\"this.onerror=null;location.href='?src=[R];bm_lobby_action=media_fallback;bm_media_kind=background'\"")
+		parts += static_html
 	else
-		parts += {"<img id="bm-bg" class="bg" src="loading_screen.gif" alt=\"\">"}
+		parts += {"<img id="bm-bg" class="bg" src="loading_screen.gif" alt="" onerror="this.onerror=null;location.href='?src=[R];bm_lobby_action=media_fallback;bm_media_kind=background'">"}
 		parts += {"<div id=\"bm-overlay\"></div>"}
 		parts += {"<div id=\"bm-toasts\"></div>"}
 		parts += {"<div id=\"bm-toggle-btn\" onclick=\"bmToggleSidebar()\" title=\"Свернуть/развернуть меню\">&#9664;</div>"}
@@ -206,13 +268,32 @@ var _i=0;setInterval(function(){var s=_i%4;document.getElementById('d').textCont
 		js_url = lobby_asset.get_url_mappings()["bm_lobby.js"]
 		if(SStitle_bm)
 			SStitle_bm.cached_js_url = js_url // кешируем, чтобы не пересчитывать каждый раз
-	// async — не блокирует парсинг HTML; page_ready отправляется только после загрузки скрипта
-	// при кеш-хите (typeof bm_set_admin==='function') init срабатывает сразу синхронно
-	parts += {"<script src=\"[js_url]\" async id=\"bm-js\"></script>"}
+	// async — не блокирует парсинг HTML; page_ready отправляется только после загрузки скрипта.
+	// Если webroot недоступен, onerror просит у DreamDaemon локальную копию того же JS.
 	parts += {"<script>
 (function(){
   var _src='[R]';
-  function __bm_init(){
+  window._BM_SRC=_src;
+  window.__bm_media_fallback_requested={};
+  window.__bm_request_media_fallback=function(kind){
+    if(kind==='background'){
+      if(window.__bm_media_fallback_requested.background) return;
+      window.__bm_media_fallback_requested.background=true;
+    } else if(kind==='audio'){
+      if(window.__bm_media_fallback_requested.audio) return;
+      window.__bm_media_fallback_requested.audio=true;
+    } else if(kind==='script'){
+      if(window.__bm_media_fallback_requested.script) return;
+      window.__bm_media_fallback_requested.script=true;
+    }
+    location.href='?src='+_src+';bm_lobby_action=media_fallback;bm_media_kind='+kind;
+  };
+  window.__bm_apply_background_fallback=function(url){
+    if(typeof bm_set_background==='function') bm_set_background(url);
+    else {var bg=document.getElementById('bm-bg');if(bg){bg.onerror=null;bg.src=url;}}
+  };
+  window.__bm_init=function(){
+    if(typeof bm_set_admin!=='function') return;
     window._BM_SRC=_src;
     bm_update_nsfw_indicator([show_nsfw ? 1 : 0]);
     bm_update_admin_bg_indicator([show_admin_bg ? 1 : 0]);
@@ -221,11 +302,16 @@ var _i=0;setInterval(function(){var s=_i%4;document.getElementById('d').textCont
     [antag_js]
     [notice_js]
     if(!window.__bm_page_ready_sent){window.__bm_page_ready_sent=true;location.href='?src='+_src+';bm_lobby_action=page_ready';}
-  }
-  if(typeof bm_set_admin==='function'){__bm_init();}
-  else{document.getElementById('bm-js').addEventListener('load',__bm_init);}
+  };
+  window.__bm_load_lobby_script=function(url){
+    if(typeof bm_set_admin==='function'){window.__bm_init();return;}
+    var script=document.createElement('script');
+    script.src=url;script.async=true;script.onload=window.__bm_init;
+    document.head.appendChild(script);
+  };
 })();
-</script>"}
+</script>
+<script src="[js_url]" async id="bm-js" onload="window.__bm_init()" onerror="window.__bm_request_media_fallback('script')"></script>"}
 
 	parts += "</body></html>"
 	return parts.Join("")
@@ -286,14 +372,16 @@ var _i=0;setInterval(function(){var s=_i%4;document.getElementById('d').textCont
 	if(!href_list["bm_lobby_action"])
 		return ..()
 
+	var/action = href_list["bm_lobby_action"]
+
 	// Собственные действия лобби перехватываются до ..(), а возрастной гейт живёт там -
 	// без этого вызова всё меню (вход, наблюдение, магазин, готовность) обходило проверку.
 	// Сейчас AGE_VERIFICATION в конфиге выключен, поэтому дыра латентная, но чинить её надо
-	// здесь, а не когда её включат.
-	if(!age_verify())
+	// здесь, а не когда её включат. Исключение - media_fallback: он лишь досылает
+	// картинку или музыку, которые клиент уже должен видеть, и без него непроверенный
+	// игрок остаётся с битым фоном при недоступном CDN.
+	if(action != "media_fallback" && !age_verify())
 		return FALSE
-
-	var/action = href_list["bm_lobby_action"]
 
 	switch(action)
 		if("show_disclaimer")
@@ -306,6 +394,40 @@ var _i=0;setInterval(function(){var s=_i%4;document.getElementById('d').textCont
 			SStitle_bm?.push_player_count_to(src)
 			if(bm_lobby_music_path != "" || SSticker?.login_music)
 				client.bm_push_lobby_music()
+			return
+
+		if("media_fallback")
+			// Вид медиа приходит от клиента, поэтому счётчик обновляем только
+			// внутри известных веток и уже после кулдауна: иначе спам по href
+			// нарисовал бы массовый отказ раздачи там, где его нет.
+			switch(href_list["bm_media_kind"])
+				if("loading")
+					if(!COOLDOWN_FINISHED(src, bm_loading_fallback_cd))
+						return FALSE
+					COOLDOWN_START(src, bm_loading_fallback_cd, BM_LOBBY_MEDIA_FALLBACK_COOLDOWN)
+					SStitle_bm?.record_media_fallback("loading", src)
+					bm_push_local_background(SStitle_bm?.loading_image, TRUE)
+				if("background")
+					if(!COOLDOWN_FINISHED(src, bm_background_fallback_cd))
+						return FALSE
+					COOLDOWN_START(src, bm_background_fallback_cd, BM_LOBBY_MEDIA_FALLBACK_COOLDOWN)
+					SStitle_bm?.record_media_fallback("background", src)
+					bm_push_local_background(bm_lobby_background_path)
+				if("audio")
+					if(!COOLDOWN_FINISHED(src, bm_audio_fallback_cd))
+						return FALSE
+					COOLDOWN_START(src, bm_audio_fallback_cd, BM_LOBBY_MEDIA_FALLBACK_COOLDOWN)
+					SStitle_bm?.record_media_fallback("audio", src)
+					client.bm_push_local_lobby_music()
+				if("script")
+					if(!COOLDOWN_FINISHED(src, bm_script_fallback_cd))
+						return FALSE
+					COOLDOWN_START(src, bm_script_fallback_cd, BM_LOBBY_MEDIA_FALLBACK_COOLDOWN)
+					SStitle_bm?.record_media_fallback("script", src)
+					var/local_script = fcopy_rsc('modular_bluemoon/assets/js/bm_lobby.js')
+					if(local_script)
+						src << browse(local_script, "file=bm_lobby_fallback.js;display=0")
+						client << output("bm_lobby_fallback.js", "bm_lobby_browser:__bm_load_lobby_script")
 			return
 
 		if("toggle_ready")

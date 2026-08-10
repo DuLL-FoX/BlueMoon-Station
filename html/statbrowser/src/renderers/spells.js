@@ -7,7 +7,13 @@ function draw_spells(cat) {
 		card.appendChild(el("span", "spell-name", part[1]));
 		if (part[3]) {
 			var a = el("a", "spell-status");
-			a.href = "?src=" + part[3] + ";statpanel_item_click=left";
+			// Must go through byond_topic: this document can be served from the
+			// asset CDN, where a relative href navigates the web server instead
+			// of reaching DreamDaemon.
+			a.href = "#";
+			a.onclick = (function(h) {
+				return function(e) { e.preventDefault(); byond_topic(h); return false; };
+			})("?src=" + part[3] + ";statpanel_item_click=left");
 			a.textContent = part[2];
 			var statusLower = ("" + part[2]).toLowerCase();
 			if (statusLower.indexOf("ready") !== -1 || statusLower.indexOf("готов") !== -1) {

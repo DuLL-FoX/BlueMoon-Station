@@ -17,6 +17,7 @@
 	bm_lobby_ready = FALSE
 	bm_lobby_music_path = ""
 	bm_lobby_track_name = ""
+	bm_lobby_background_path = ""
 	SStitle_bm?.update_player_counts_all()
 	return ..()
 
@@ -46,10 +47,41 @@
 		track_name = replacetext(replacetext(track_name, "_", " "), "-", " ")
 		// Сохраняем имя трека для повторных вызовов
 		player.bm_lobby_track_name = track_name
-	src << browse(fcopy_rsc(music_path), "file=bm_lobby_music.ogg;display=0")
-	src << output("bm_lobby_music.ogg", "bm_lobby_browser:bm_load_audio")
+	var/external_url = SStitle_bm?.get_external_media_url(music_path)
+	if(external_url)
+		src << output(external_url, "bm_lobby_browser:bm_load_audio")
+	else
+		bm_push_local_lobby_music()
 	if(track_name)
 		src << output(track_name, "bm_lobby_browser:bm_set_audio_track")
+
+/// Sends the selected lobby track through BYOND after an HTTP media error.
+/client/proc/bm_push_local_lobby_music()
+	var/mob/dead/new_player/player = mob
+	if(!istype(player))
+		return
+	if(!(prefs?.toggles & SOUND_LOBBY))
+		return
+	var/music_path = player.bm_lobby_music_path || SSticker?.login_music
+	if(!music_path || !fexists(music_path))
+		return
+	var/music_rsc = SStitle_bm?.get_local_media_resource(music_path)
+	if(!music_rsc)
+		return
+	var/extension = ".ogg"
+	var/music_path_text = lowertext("[music_path]")
+	for(var/candidate in list(".flac", ".mp3", ".ogg", ".wav"))
+		// Отрицательное смещение отсчитывает хвост от конца строки, поэтому длина
+		// самого пути не нужна. copytext() и length() здесь работают в одних
+		// единицах (байты; посимвольные варианты - copytext_char/length_char), а
+		// расширение целиком ASCII, так что кириллица в имени трека сдвинуть
+		// сравнение не может.
+		if(copytext(music_path_text, -length(candidate)) == candidate)
+			extension = candidate
+			break
+	var/filename = "bm_lobby_music[extension]"
+	src << browse(music_rsc, "file=[filename];display=0")
+	src << output(filename, "bm_lobby_browser:bm_load_audio")
 
 /client/playtitlemusic(vol = 85)
 	if(!istype(mob, /mob/dead/new_player))

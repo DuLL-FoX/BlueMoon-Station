@@ -10,6 +10,7 @@ import './styles/themes/light.scss';
 
 import { perf } from 'common/perf';
 import { combineReducers } from 'common/redux';
+import { BrowserEventDispatcher } from 'tgui/browserEvents';
 import { setupGlobalEvents } from 'tgui/events';
 import { captureExternalLinks } from 'tgui/links';
 import { createRenderer } from 'tgui/renderer';
@@ -79,25 +80,16 @@ const setupApp = () => {
   // Subscribe for Redux state updates
   store.subscribe(renderApp);
 
-  // Subscribe for backend updates
-  const dispatchIncomingMessage = msg => {
-    window.__recordIncomingTguiMessage__?.(msg);
-    store.dispatch(Byond.parseJson(msg));
-  };
-  window.update = dispatchIncomingMessage;
+  // Subscribe for backend updates through the shared typed browser boundary.
+  const browserEvents = new BrowserEventDispatcher(store.dispatch);
+  window.update = browserEvents.dispatchLive;
 
   // Process the early update queue
   window.__pushTguiDebugEvent__?.('appSetupBegin', {
     bundle: 'tgui-panel',
     queuedBeforeDrain: window.__updateQueue__?.length || 0,
   });
-  while (true) {
-    const msg = window.__updateQueue__.shift();
-    if (!msg) {
-      break;
-    }
-    store.dispatch(Byond.parseJson(msg));
-  }
+  browserEvents.drain(window.__updateQueue__);
   window.__tguiAppBooted__ = true;
   window.__pushTguiDebugEvent__?.('appBooted', {
     bundle: 'tgui-panel',

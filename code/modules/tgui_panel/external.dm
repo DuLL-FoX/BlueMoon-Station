@@ -8,6 +8,21 @@
 /// Set when the user explicitly chooses "switch to old ui" via Fix Chat.
 /client/var/use_legacy_chat = FALSE
 
+/// Queue messages for a panel which is loading (including after a visible
+/// timeout fallback), but stop feeding one after a confirmed fatal error.
+/client/proc/should_receive_tgui_chat()
+	return !use_legacy_chat && tgui_panel && !tgui_panel.broken
+
+/// Keep the legacy channel as a startup and failure fallback, but stop sending
+/// every message twice once the fancy panel has completed its handshake.
+/// Gated on the panel's own "ready" message rather than window readiness: the
+/// window flips to ready on the first message tgui.html sends, which happens
+/// before the chat bundle exists.
+/client/proc/should_receive_legacy_chat()
+	if(use_legacy_chat || !tgui_panel)
+		return TRUE
+	return tgui_panel.broken || !tgui_panel.handshake_done
+
 /**
  * tgui panel / chat troubleshooting verb
  */

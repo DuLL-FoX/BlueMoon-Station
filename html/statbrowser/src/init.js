@@ -42,6 +42,7 @@ document.addEventListener("mouseup", restoreFocus);
 document.addEventListener("keyup", restoreFocus);
 
 loadFavorites();
+start_client_latency_watchdog();
 
 if (!State.currentTab) {
 	addPermanentTab("Status");

@@ -6,6 +6,16 @@
 /// Порт локального dev-сервера tgui (см. tgui/scripts/vite-dev.cjs). Должен совпадать с серверным.
 #define TGUI_DEV_SERVER_PORT 3000
 
+/// Replaces only the window-id meta value. The inlined bootstrap also contains
+/// the literal placeholder as a sentinel, and replacing the whole document
+/// would turn that sentinel into the real id and immediately reset it to null.
+/proc/tgui_inject_window_id(html, id)
+	return replacetextEx(
+		html,
+		"content=\"\[tgui:windowId]\"",
+		"content=\"[id]\"",
+	)
+
 /// Тип скин-контрола по id окна: "BROWSER", "WINDOW" и так далее. Задан скин-файлом
 /// и в пределах одного подключения не меняется, а winexists - это round-trip до
 /// клиента на каждое открытие окна tgui. Спрашиваем один раз за сессию.
@@ -72,6 +82,12 @@
 		log_tgui(client, "[id]/initialize ([src])")
 	if(!client)
 		return
+	// Fixed skin controls and pooled windows are seeded by their owners. Resolve
+	// that immutable type before any asset acknowledgement can sleep: the page may
+	// send its ready message while initialize() is suspended in browse_queue_flush().
+	var/win_type = client.tgui_window_control_types[id]
+	if(win_type)
+		is_browser = win_type == "BROWSER"
 	src.initial_fancy = fancy
 	src.initial_assets = assets
 	src.initial_inline_html = inline_html
@@ -92,10 +108,11 @@
 		options += "titlebar=1;can_resize=1;"
 	// Generate page html
 	var/html = SStgui.basehtml
-	html = replacetextEx(html, "\[tgui:windowId]", id)
+	html = tgui_inject_window_id(html, id)
 	// Inject inline assets
 	var/inline_assets_str = ""
 	var/first_js_url = null
+	var/flush_queue = FALSE
 	// dev hot-reload: ip берётся из конфига, иначе из env (его выставляет DEV launch-конфиг VS Code)
 	var/dev_server_ip = CONFIG_GET(string/tgui_dev_server_ip)
 	if(!length(dev_server_ip))
@@ -111,7 +128,7 @@
 				inline_assets_str += "Byond.loadJs('[url]', true);\n"
 				if(isnull(first_js_url))
 					first_js_url = url
-		asset.send(client)
+		flush_queue |= asset.send(client)
 	var/assets_placeholder_before = !!findtext(html, "<!-- tgui:assets -->")
 	var/assets_placeholder_before_lf = !!findtext(html, "<!-- tgui:assets -->\n")
 	var/assets_placeholder_before_crlf = FALSE
@@ -142,16 +159,18 @@
 		inline_css = "<style>\n[inline_css]\n</style>"
 		html = replacetextEx(html, "<!-- tgui:inline-css -->", inline_css)
 		html = replacetextEx(html, "<!-- tgui:css -->", inline_css)
+	// browse_rsc() and browse() share an ordered client queue, but the browser can
+	// request a just-announced relative bundle before that resource is available.
+	// Wait for an acknowledgement only when initialize() actually sent files.
+	if(flush_queue)
+		client.browse_queue_flush()
+		if(!istype(client))
+			return
 	// Open the window
 	client << browse(html, "window=[id];[options]")
-	// BYOND 516 can occasionally present an initial frame despite browse options.
-	// Force pooled windows hidden immediately; frontend will reveal when ready.
-	if(pooled && istype(client))
-		winset(client, id, "is-visible=0")
 	// Detect whether the control is a browser
 	if(!istype(client))
 		return
-	var/win_type = client.tgui_window_control_types[id]
 	if(!win_type)
 		win_type = tracked_winexists(client, id)
 		// winexists усыпил прок до ответа скина - клиент мог за это время отвалиться
@@ -169,10 +188,6 @@
 		log_tgui(client,
 			"[id]/initialize winexists=[win_type], is_browser=[is_browser], primary_target=[primary_target], secondary_target=[secondary_target], mirror_output=[mirror_output]",
 			window = src)
-	// Instruct the client to signal UI when the window is closed.
-	if(!is_browser && istype(client)) // BLUEMOON EDIT - sanity check
-		winset(client, id, "on-close=\"uiclose [id]\"")
-
 /datum/tgui_window/proc/get_primary_output_target()
 	return is_browser ? "[id]:update" : "[id].browser:update"
 
@@ -389,6 +404,11 @@
 		log_tgui(client,
 			"[id]/on_message type=[type], status_before=[status], queue_len=[length(message_queue)]",
 			window = src)
+	// A message proves browse() has created the native control. Configure it here,
+	// rather than immediately after browse(), where BYOND 516 reports the element
+	// as missing for newly-created pooled windows.
+	if(client?.tgui_window_control_types[id] == "WINDOW" && status != TGUI_WINDOW_READY)
+		winset(client, id, "on-close=\"uiclose [id]\"")
 	// Status can be READY if user has refreshed the window.
 	if(type == "ready" && status == TGUI_WINDOW_READY)
 		// Resend the assets

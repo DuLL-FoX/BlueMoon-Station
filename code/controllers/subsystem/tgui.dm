@@ -28,6 +28,11 @@ SUBSYSTEM_DEF(tgui)
 
 /datum/controller/subsystem/tgui/PreInit()
 	basehtml = file2text('tgui/public/tgui.html')
+	// The transport bridge must be available before either local or CDN bundles
+	// run. Keep it as a separately testable source file, then inline it here so
+	// opening a TGUI never depends on another HTTP request succeeding.
+	var/setup_script = file2text('tgui/public/tgui-setup.bundle.js')
+	basehtml = replacetextEx(basehtml, "<!-- tgui:setup -->", setup_script)
 	if(CONFIG_GET(flag/emergency_tgui_logging))
 		var/has_version_marker = findtext(basehtml, "bridge-localhost-fallback-v2") ? "present" : "missing"
 		var/has_host_fallback = findtext(basehtml, "hasKnownBridge || hostLooksLocal") ? "present" : "missing"
@@ -102,6 +107,10 @@ SUBSYSTEM_DEF(tgui)
 		window = windows[window_id]
 		// As we are looping, create missing window datums
 		if(!window)
+			// browse(window=...) creates a WINDOW with a nested browser. This is a
+			// protocol invariant for pooled tgui windows, so do not block the first
+			// open on a redundant winexists round-trip.
+			user.client.tgui_window_control_types[window_id] = "WINDOW"
 			window = new(user.client, window_id, pooled = TRUE)
 		// Skip windows with acquired locks
 		if(window.locked)

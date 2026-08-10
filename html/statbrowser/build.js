@@ -51,6 +51,7 @@ const JS_FILES = [
 	'src/bridge-functions.js',
 	'src/search.js',
 	'src/settings-panel.js',
+	'src/latency-diagnostics.js',
 	'src/init.js',
 ];
 

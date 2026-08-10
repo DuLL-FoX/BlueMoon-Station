@@ -7,8 +7,8 @@
     "packages/*"
   ],
   "scripts": {
-    "tgui:analyze": "vite build --mode production --sourcemap --config vite.tgui.config.cjs && vite build --mode production --sourcemap --config vite.tgui-panel.config.cjs",
-    "tgui:build": "vite build --mode production --config vite.tgui.config.cjs && vite build --mode production --config vite.tgui-panel.config.cjs",
+    "tgui:analyze": "vite build --mode production --sourcemap --config vite.tgui-setup.config.cjs && vite build --mode production --sourcemap --config vite.tgui.config.cjs && vite build --mode production --sourcemap --config vite.tgui-panel.config.cjs",
+    "tgui:build": "vite build --mode production --config vite.tgui-setup.config.cjs && vite build --mode production --config vite.tgui.config.cjs && vite build --mode production --config vite.tgui-panel.config.cjs",
     "tgui:dev": "node scripts/vite-dev.cjs",
     "tgui:lint": "eslint packages --ext .js,.cjs,.ts,.tsx",
     "tgui:prettier": "prettierx --check .",

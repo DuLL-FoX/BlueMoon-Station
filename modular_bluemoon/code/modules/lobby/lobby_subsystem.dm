@@ -1,3 +1,9 @@
+/// Сколько раз за раунд глушение внешних адресов снимается автоматически. Дальше оно
+/// держится до конца раунда: раздача, отваливающаяся снова и снова, - это уже не
+/// разовый сбой, а мигание медиа между HTTP и DreamDaemon с парой сообщений админам
+/// на каждый цикл.
+#define BM_LOBBY_MEDIA_MAX_AUTO_RESTORES 2
+
 SUBSYSTEM_DEF(title_bm)
 	name = "BlueMoon Title Screen"
 	flags = SS_NO_FIRE
@@ -15,6 +21,30 @@ SUBSYSTEM_DEF(title_bm)
 	var/cached_notice_js = ""        // JS-вызов для текущего объявления — кешируется в set_notice
 	var/current_sfw_image
 	var/current_nsfw_image
+	/// Local source path -> content-addressed HTTP URL, generated during deploy.
+	var/list/external_media_urls = list()
+	/// Вид медиа (loading/background/audio/script) -> сколько раз клиенты не смогли
+	/// забрать его по HTTP и попросили раздачу через DreamDaemon.
+	var/list/media_fallback_counts = list()
+	/// Вид медиа -> ckey игроков, у которых это случилось. Массовость меряем по
+	/// игрокам, повторы одного клиента ничего не говорят о внешней раздаче.
+	var/list/media_fallback_players = list()
+	/// Виды, по которым админам уже сказали, что фолбэк массовый.
+	var/list/media_fallback_alerted = list()
+	/// TRUE - внешние адреса медиа временно не выдаются, всё идёт через DreamDaemon.
+	/// Ставится массовым фолбэком по игрокам или вердиктом SScdn_probe, снимается
+	/// успешной пробой. Если проба выключена конфигом, глушение живёт до конца раунда:
+	/// сервер не может сам узнать, что раздача поднялась.
+	var/external_media_suppressed = FALSE
+	/// Из-за чего заглушили - уходит в отчёт о доставке ресурсов.
+	var/external_media_suppress_reason
+	/// Адрес, которым проба обязана доказать, что чинить больше нечего. Живая
+	/// загрузочная картинка ничего не говорит про пропавший с раздачи трек.
+	var/external_media_suppress_probe_url
+	/// Путь медиа, на котором споткнулись последним - из него и берётся адрес пробы.
+	var/last_failed_media_path
+	/// Сколько раз за раунд глушение уже снимали автоматически.
+	var/external_media_auto_restores = 0
 
 /// Перечитывает BM_LOBBY_HTML_FILE с диска и пересылает свежий HTML всем игрокам в лобби.
 /// Возвращает количество обновлённых клиентов.
@@ -48,10 +78,13 @@ SUBSYSTEM_DEF(title_bm)
 		lobby_html = ""
 		log_game("[name]: файл лобби [BM_LOBBY_HTML_FILE] не найден — используется запасная преамбула из кода.")
 
+	_load_external_media_manifest()
 	_load_title_images()
 
 	if(fexists(loading_image))
-		loading_image = fcopy_rsc(loading_image)
+		// Keep the path lazy. HTTP delivery needs the original path as a manifest
+		// key; local fallback calls fcopy_rsc only if a client actually needs it.
+		loading_image = bm_normalize_lobby_media_path(loading_image)
 	else
 		log_game("[name]: Файл загрузочного GIF '[loading_image]' не найден. Фон лобби будет пустым до подбора картинки.")
 		loading_image = null
@@ -74,6 +107,7 @@ SUBSYSTEM_DEF(title_bm)
 	cached_static_html = ""
 	cached_js_url = ""
 	cached_notice_js = ""
+	external_media_urls = null
 	return ..();
 
 /datum/controller/subsystem/title_bm/Recover()
@@ -91,6 +125,200 @@ SUBSYSTEM_DEF(title_bm)
 	cached_notice_js        = SStitle_bm.cached_notice_js
 	current_sfw_image   = SStitle_bm.current_sfw_image
 	current_nsfw_image  = SStitle_bm.current_nsfw_image
+	external_media_urls = SStitle_bm.external_media_urls
+	media_fallback_counts  = SStitle_bm.media_fallback_counts
+	media_fallback_players = SStitle_bm.media_fallback_players
+	media_fallback_alerted = SStitle_bm.media_fallback_alerted
+	external_media_suppressed         = SStitle_bm.external_media_suppressed
+	external_media_suppress_reason    = SStitle_bm.external_media_suppress_reason
+	external_media_suppress_probe_url = SStitle_bm.external_media_suppress_probe_url
+	external_media_auto_restores      = SStitle_bm.external_media_auto_restores
+	last_failed_media_path            = SStitle_bm.last_failed_media_path
+
+/proc/bm_normalize_lobby_media_path(media)
+	if(!istext(media))
+		return null
+	var/path = replacetext(media, "\\", "/")
+	while(copytext(path, 1, 3) == "./")
+		path = copytext(path, 3)
+	return path
+
+/datum/controller/subsystem/title_bm/proc/_load_external_media_manifest()
+	external_media_urls = list()
+	if(!fexists(BM_LOBBY_MEDIA_MANIFEST))
+		return
+	var/list/manifest
+	try
+		manifest = json_decode(file2text(BM_LOBBY_MEDIA_MANIFEST))
+	catch(var/exception/error)
+		log_game("[name]: не удалось прочитать [BM_LOBBY_MEDIA_MANIFEST]: [error]")
+		return
+	var/list/assets = manifest?["assets"]
+	if(!islist(assets))
+		log_game("[name]: [BM_LOBBY_MEDIA_MANIFEST] не содержит список assets.")
+		return
+	for(var/source_path in assets)
+		var/normalized_path = bm_normalize_lobby_media_path(source_path)
+		var/url = assets[source_path]
+		if(!normalized_path || !istext(url))
+			continue
+		if(findtext(url, "http://") != 1 && findtext(url, "https://") != 1)
+			continue
+		external_media_urls[normalized_path] = url
+
+/datum/controller/subsystem/title_bm/proc/get_external_media_url(media)
+	// Заглушено - вызывающие видят "адреса нет" и уходят на локальную раздачу.
+	// Отдавать адрес, про который уже известно, что он не отвечает, значит гонять
+	// каждого игрока через таймаут браузера и обратный href на сервер.
+	if(external_media_suppressed)
+		return null
+	return lookup_external_media_url(media)
+
+/// Адрес медиа по его локальному пути, без оглядки на глушение.
+/datum/controller/subsystem/title_bm/proc/lookup_external_media_url(media)
+	var/path = bm_normalize_lobby_media_path(media)
+	if(!path)
+		return null
+	return external_media_urls?[path]
+
+/**
+ * Адрес для активной пробы: намеренно мимо глушения - иначе снять его было бы нечем.
+ *
+ * Порядок предпочтения не косметика. Проба по произвольному живому адресу снимала бы
+ * глушение, вызванное ОДНИМ пропавшим файлом: раздача поднята, картинка отвечает,
+ * заглушение снято, счётчики обнулены - и следующие пять игроков снова спотыкаются
+ * о тот же битый трек. Медиа мигало бы между HTTP и DreamDaemon каждый интервал пробы,
+ * а админы получали бы по два сообщения за цикл. Поэтому сначала спрашиваем ровно тот
+ * адрес, из-за которого заглушили, потом - последний споткнувшийся, и только если
+ * спотыкаться ещё не о что, берём загрузочную картинку как проверку живости хоста.
+ */
+/datum/controller/subsystem/title_bm/proc/get_media_probe_url()
+	if(!length(external_media_urls))
+		return null
+	if(external_media_suppress_probe_url)
+		return external_media_suppress_probe_url
+	var/failed_url = lookup_external_media_url(last_failed_media_path)
+	if(failed_url)
+		return failed_url
+	var/loading_url = lookup_external_media_url(loading_image)
+	if(loading_url)
+		return loading_url
+	return external_media_urls[external_media_urls[1]]
+
+/// Перестаёт выдавать внешние адреса лобби-медиа. Возвращает TRUE, если состояние
+/// изменилось - вызывающий по этому решает, говорить ли что-то админам сам.
+/// probe_url - адрес, живой ответ которого будет считаться починкой; пустой означает
+/// "возьми тот, на котором споткнулись".
+/datum/controller/subsystem/title_bm/proc/suppress_external_media(reason, announce = TRUE, probe_url)
+	if(external_media_suppressed)
+		return FALSE
+	var/verification_url = probe_url || get_media_probe_url()
+	external_media_suppressed = TRUE
+	external_media_suppress_reason = reason
+	external_media_suppress_probe_url = verification_url
+	log_asset("Lobby media: внешняя раздача заглушена ([reason]), медиа идёт через DreamDaemon; проверять будем [verification_url || "нечем"]")
+	if(announce)
+		message_admins("Лобби: внешние адреса медиа больше не выдаём ([reason]). Картинки и музыка идут через DreamDaemon, пока проба не увидит раздачу живой.")
+	return TRUE
+
+/**
+ * Возвращает выдачу внешних адресов. Зовётся только успешной пробой: без неё сервер
+ * не может отличить поднявшуюся раздачу от лежащей.
+ *
+ * Снятий за раунд не больше BM_LOBBY_MEDIA_MAX_AUTO_RESTORES. Проба ходит по адресу
+ * отказа, так что цикл "снял - снова заглушили" означает не разовый сбой, а раздачу,
+ * которая отвечает через раз; держать медиа на DreamDaemon до конца раунда дешевле,
+ * чем мигать им и сыпать админам по паре сообщений за цикл.
+ */
+/datum/controller/subsystem/title_bm/proc/restore_external_media(reason)
+	if(!external_media_suppressed)
+		return FALSE
+	if(external_media_auto_restores >= BM_LOBBY_MEDIA_MAX_AUTO_RESTORES)
+		return FALSE
+	external_media_auto_restores++
+	external_media_suppressed = FALSE
+	external_media_suppress_reason = null
+	external_media_suppress_probe_url = null
+	// Порог массовости считаем заново: старые отметки относятся к прошлому отказу,
+	// и без сброса второй отказ за раунд прошёл бы молча.
+	media_fallback_alerted.Cut()
+	media_fallback_players.Cut()
+	log_asset("Lobby media: внешняя раздача снова отвечает ([reason]), медиа опять уходит по HTTP (снятие [external_media_auto_restores] из [BM_LOBBY_MEDIA_MAX_AUTO_RESTORES])")
+	var/last_chance = external_media_auto_restores >= BM_LOBBY_MEDIA_MAX_AUTO_RESTORES
+	message_admins("Лобби: внешняя раздача медиа снова отвечает ([reason]). Медиа опять уходит по HTTP.[last_chance ? " Следующий отказ за раунд снимать автоматически уже не будем." : ""]")
+	return TRUE
+
+/// Локальный путь того медиа, о которое споткнулся именно этот игрок. Вид называет
+/// клиент, а путь берём со своей стороны: у каждого вида он свой и лежит либо в
+/// подсистеме, либо на мобе игрока. "script" сюда не входит - он уезжает транспортом
+/// ассетов, а не адресом из манифеста.
+/datum/controller/subsystem/title_bm/proc/resolve_fallback_media_path(kind, mob/dead/new_player/player)
+	switch(kind)
+		if("loading")
+			return loading_image
+		if("background")
+			return player?.bm_lobby_background_path
+		if("audio")
+			return player?.bm_lobby_music_path
+	return null
+
+/datum/controller/subsystem/title_bm/proc/get_local_media_resource(media)
+	if(isnull(media))
+		return null
+	if(istext(media) && !fexists(media))
+		return null
+	return fcopy_rsc(media)
+
+/// Считает срабатывания фолбэка лобби-медиа: браузер не смог забрать ресурс по
+/// HTTP и попросил ту же картинку/музыку/скрипт у DreamDaemon.
+/// В лог идут только первое срабатывание вида и переход через порог массовости -
+/// строка на каждое событие при полном лобби была бы спамом, а вот "фон не
+/// открылся сразу у пятерых" означает, что лежит внешняя раздача, а не сеть
+/// одного игрока.
+/datum/controller/subsystem/title_bm/proc/record_media_fallback(kind, mob/dead/new_player/player)
+	if(!kind)
+		return
+	// Какой именно файл не приехал - иначе проба потом будет спрашивать не то.
+	var/failed_path = resolve_fallback_media_path(kind, player)
+	if(failed_path && lookup_external_media_url(failed_path))
+		last_failed_media_path = failed_path
+	media_fallback_counts[kind] += 1
+	var/list/players_seen = media_fallback_players[kind] || list()
+	var/player_ckey = player?.ckey
+	if(player_ckey && !(player_ckey in players_seen))
+		players_seen += player_ckey
+	media_fallback_players[kind] = players_seen
+	SSblackbox.record_feedback("tally", "resource_delivery_fallback", 1, "lobby_[kind]")
+	if(media_fallback_counts[kind] == 1)
+		log_asset("Lobby media fallback: [kind] is now served by DreamDaemon, a browser failed to fetch it over HTTP")
+	if(media_fallback_alerted[kind])
+		return
+	if(length(players_seen) < BM_LOBBY_MEDIA_FALLBACK_ALERT_PLAYERS)
+		return
+	media_fallback_alerted[kind] = TRUE
+	log_asset("WARNING: Lobby media fallback: [kind] failed over HTTP for [length(players_seen)] players ([media_fallback_counts[kind]] events), external media delivery looks down")
+	// Глушим только по видам, которые действительно раздаются адресами из манифеста.
+	// "script" уезжает транспортом ассетов, и его отказ говорит про CDN ассетов -
+	// у того свой фолбэк, а лобби-медиа тут ни при чём.
+	// Адрес проверки берём у ТОГО вида, который перешёл порог: снимать глушение должен
+	// ответ от него, а не от любой живой картинки.
+	var/static/list/manifest_media_kinds = list("loading", "background", "audio")
+	var/suppressed = (kind in manifest_media_kinds) \
+		&& suppress_external_media("массовый фолбэк [kind]", announce = FALSE, probe_url = lookup_external_media_url(failed_path))
+	message_admins("Лобби: медиа ([kind]) не грузится по HTTP уже у [length(players_seen)] игроков - похоже, лежит внешняя раздача. \
+		Ресурсы идут через DreamDaemon, лобби открывается медленнее.[suppressed ? " Внешние адреса больше не выдаём до успешной пробы." : ""]")
+
+/// Сводка фолбэков лобби-медиа для админского верба.
+/datum/controller/subsystem/title_bm/proc/get_media_fallback_summary()
+	var/list/parts = list()
+	for(var/kind in media_fallback_counts)
+		var/list/players_seen = media_fallback_players[kind]
+		parts += "[kind]: [media_fallback_counts[kind]] (игроков: [length(players_seen)])"
+	if(!length(parts))
+		parts += "срабатываний не было"
+	if(external_media_suppressed)
+		parts += "внешние адреса заглушены ([external_media_suppress_reason || "причина неизвестна"])"
+	return parts.Join(", ")
 
 /datum/controller/subsystem/title_bm/proc/_build_static_html()
 	var/list/parts = list()
@@ -122,7 +350,8 @@ SUBSYSTEM_DEF(title_bm)
 		if(!is_image)
 			continue
 		var/full_path = "[dir_path][filename]"
-		target_list += fcopy_rsc(full_path)
+		// Store paths instead of eagerly copying the entire pool into dyn.rsc.
+		target_list += bm_normalize_lobby_media_path(full_path)
 
 /datum/controller/subsystem/title_bm/proc/_load_title_images()
 	_load_images_from_dir(BM_LOBBY_IMAGES_SFW, sfw_images)
@@ -256,3 +485,5 @@ SUBSYSTEM_DEF(title_bm)
 		else
 			INVOKE_ASYNC(player, TYPE_PROC_REF(/mob/dead/new_player, bm_update_lobby_html))
 	INVOKE_ASYNC(src, PROC_REF(update_player_counts_all))
+
+#undef BM_LOBBY_MEDIA_MAX_AUTO_RESTORES

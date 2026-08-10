@@ -131,6 +131,12 @@ type ByondType = {
  */
 declare const Byond: ByondType;
 
+type TguiSetupEvent = {
+  at: number;
+  kind: string;
+  payload: unknown;
+};
+
 interface Window {
   /**
    * ID of the Byond window this script is running on.
@@ -138,4 +144,11 @@ interface Window {
    */
   __windowId__: string;
   Byond: ByondType;
+  __dispatchTguiSetupEvent__: (kind: string, payload?: unknown) => void;
+  __pushTguiDebugEvent__: (kind: string, payload?: unknown) => void;
+  __recordIncomingTguiMessage__?: (message: string) => void;
+  __subscribeTguiSetupEvent__: (
+    listener: (event: TguiSetupEvent) => void,
+  ) => () => void;
+  __updateQueue__: string[];
 }

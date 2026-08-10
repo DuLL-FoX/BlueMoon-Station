@@ -1,0 +1,963 @@
+// This bootstrap runs before the application bundle and must remain compatible
+// with legacy BYOND browser controls. Modernizing `var`/function syntax here
+// would raise the minimum JavaScript runtime independently of the main bundle.
+/* eslint-disable no-var, prefer-arrow-callback, no-redeclare */
+
+// Read window id into a global
+window.__windowId__ = document
+  .getElementById('tgui:windowId')
+  .getAttribute('content');
+if (window.__windowId__ === '[' + 'tgui:windowId' + ']') {
+  window.__windowId__ = null;
+}
+
+(function () {
+  var TGUI_DEBUG_VERSION = 'bridge-localhost-fallback-v2';
+
+  // Utility functions
+  var hasOwn = Object.prototype.hasOwnProperty;
+  var assign = function (target) {
+    for (var i = 1; i < arguments.length; i++) {
+      var source = arguments[i];
+      for (var key in source) {
+        if (hasOwn.call(source, key)) {
+          target[key] = source[key];
+        }
+      }
+    }
+    return target;
+  };
+
+  var debugNow = function () {
+    return Date.now ? Date.now() : +new Date();
+  };
+
+  var debugState = window.__tguiDebug__ = window.__tguiDebug__ || {
+    startedAt: debugNow(),
+    version: TGUI_DEBUG_VERSION,
+    events: [],
+    transportAttempts: [],
+    hasAnyMessage: false,
+    hasBackendUpdate: false,
+    hasUpdate: false,
+    incomingCount: 0,
+  };
+
+  var setupEventListeners = [];
+  window.__subscribeTguiSetupEvent__ = function (listener) {
+    if (typeof listener !== 'function') {
+      return function () {};
+    }
+    setupEventListeners.push(listener);
+    var subscribed = true;
+    return function () {
+      if (!subscribed) {
+        return;
+      }
+      subscribed = false;
+      for (var i = setupEventListeners.length - 1; i >= 0; i--) {
+        if (setupEventListeners[i] === listener) {
+          setupEventListeners.splice(i, 1);
+        }
+      }
+    };
+  };
+
+  var pushDebugEvent = window.__dispatchTguiSetupEvent__
+    = window.__pushTguiDebugEvent__ = function (kind, payload) {
+    var events = debugState.events;
+    if (!events) {
+      events = debugState.events = [];
+    }
+    var event = {
+      at: debugNow(),
+      kind: kind,
+      payload: payload || null,
+    };
+    events.push(event);
+    if (events.length > 64) {
+      events.shift();
+    }
+    // Diagnostics are observational: a broken consumer must never interrupt
+    // ready delivery, asset retries, or fatal reporting.
+    var listeners = setupEventListeners.slice();
+    for (var i = 0; i < listeners.length; i++) {
+      try {
+        listeners[i](event);
+      }
+      catch (err) {}
+    }
+  };
+
+  var pushTransportAttempt = function (name, ok, detail) {
+    var attempts = debugState.transportAttempts;
+    if (!attempts) {
+      attempts = debugState.transportAttempts = [];
+    }
+    attempts.push({
+      at: debugNow(),
+      name: name,
+      ok: !!ok,
+      detail: detail || '',
+    });
+    if (attempts.length > 64) {
+      attempts.shift();
+    }
+  };
+
+  var objectKeysSafe = function (obj) {
+    var keys = [];
+    if (!obj) {
+      return keys;
+    }
+    try {
+      for (var key in obj) {
+        if (hasOwn.call(obj, key)) {
+          keys.push(key);
+        }
+      }
+    }
+    catch (err) {
+      keys.push('<error: ' + (err && err.message ? err.message : err) + '>');
+    }
+    return keys;
+  };
+
+  // BYOND API object
+  // ------------------------------------------------------
+
+  var Byond = window.Byond = {};
+
+  var byondBridgeKeys = objectKeysSafe(window.BYOND);
+  var hasKnownBridge = !!window.cef_to_byond
+    || !!window.BYOND;
+  var locationHost = location.hostname;
+  var hostLooksLocal = locationHost === '127.0.0.1'
+    || locationHost === 'localhost'
+    || locationHost === '';
+
+  // Basic checks to detect whether this page runs in BYOND
+  // BYOND webclient: cef_to_byond, BYOND 516+: WebView2 (window.BYOND).
+  // Some clients expose no JS bridge object, but still support byond:// transport
+  // from the local DreamSeeker-served page.
+  var isByond = (hasKnownBridge || hostLooksLocal)
+    && location.search !== '?external';
+  // 516 migration: keep WebView2 JS bridge opt-in only for diagnostics.
+  // Default transport is location.href / xhr, which is stable in this fork.
+  var useWebViewBridge = location.search.indexOf('byond_bridge=1') !== -1;
+
+  // Version constants
+  Byond.IS_BYOND = isByond;
+  Byond.BRIDGE_KEYS = byondBridgeKeys;
+
+  pushDebugEvent('env', {
+    version: TGUI_DEBUG_VERSION,
+    host: locationHost,
+    hostLooksLocal: hostLooksLocal,
+    search: location.search,
+    hasCefBridge: !!window.cef_to_byond,
+    hasByondBridge: !!window.BYOND,
+    byondBridgeKeys: byondBridgeKeys,
+    isByond: isByond,
+    useWebViewBridge: useWebViewBridge,
+    userAgent: navigator.userAgent,
+  });
+
+  // Callbacks for asynchronous calls
+  Byond.__callbacks__ = [];
+
+  // Reviver for BYOND JSON
+  // See: https://stackoverflow.com/questions/1288962
+  var byondJsonReviver = function (key, value) {
+    if (typeof value === 'object' && value !== null && value.__number__) {
+      return parseFloat(value.__number__);
+    }
+    return value;
+  };
+
+  // Makes a BYOND call.
+  // See: https://secure.byond.com/docs/ref/skinparams.html
+  var callViaWebViewBridge = function (protocolUrl, rawUrl) {
+    var bridge = window.BYOND;
+    if (!bridge) {
+      return false;
+    }
+
+    var invokeBridge = function (target, methodName, arg) {
+      try {
+        target.call(bridge, arg);
+        pushTransportAttempt('window.BYOND.' + methodName, true, String(arg));
+        return true;
+      }
+      catch (err) {
+        pushTransportAttempt(
+          'window.BYOND.' + methodName,
+          false,
+          err && err.message ? err.message : String(err));
+        return false;
+      }
+    };
+
+    // Some hosts expose BYOND as a direct callable.
+    if (typeof bridge === 'function') {
+      if (invokeBridge(bridge, 'call', rawUrl)) {
+        return true;
+      }
+      if (invokeBridge(bridge, 'call', protocolUrl)) {
+        return true;
+      }
+    }
+
+    var methodNames = [
+      'callByond',
+      'byond',
+      'call',
+      'topic',
+      'sendMessage',
+      'send',
+      'postMessage',
+    ];
+    for (var i = 0; i < methodNames.length; i++) {
+      var methodName = methodNames[i];
+      var method = bridge[methodName];
+      if (typeof method !== 'function') {
+        continue;
+      }
+      if (invokeBridge(method, methodName, rawUrl)) {
+        return true;
+      }
+      if (invokeBridge(method, methodName, protocolUrl)) {
+        return true;
+      }
+    }
+
+    pushTransportAttempt('window.BYOND', false, 'no compatible callable methods');
+    return false;
+  };
+
+  Byond.call = function (path, params) {
+    // Not running in BYOND, abort.
+    if (!isByond) {
+      pushTransportAttempt('skip/notByond', false, locationHost + location.search);
+      return;
+    }
+    // Build the URL
+    var url = (path || '') + '?';
+    var i = 0;
+    if (params) {
+      for (var key in params) {
+        if (hasOwn.call(params, key)) {
+          if (i++ > 0) {
+            url += '&';
+          }
+          var value = params[key];
+          if (value === null || value === undefined) {
+            value = '';
+          }
+          url += encodeURIComponent(key)
+            + '=' + encodeURIComponent(value);
+        }
+      }
+    }
+    var protocolUrl = 'byond://' + url;
+    var callViaHttp = function (requestUrl) {
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', requestUrl);
+        xhr.send();
+        pushTransportAttempt('xmlhttprequest', true, requestUrl);
+        return true;
+      }
+      catch (err) {
+        pushTransportAttempt('xmlhttprequest', false, err && err.message ? err.message : String(err));
+        return false;
+      }
+    };
+
+    // If we're a Chromium client, just use the fancy method
+    if (window.cef_to_byond) {
+      try {
+        cef_to_byond(protocolUrl);
+        pushTransportAttempt('cef_to_byond', true, protocolUrl);
+        return;
+      }
+      catch (err) {
+        pushTransportAttempt('cef_to_byond', false, err && err.message ? err.message : String(err));
+      }
+    }
+
+    // BYOND 516+ WebView2 bridge fallback (opt-in).
+    if (useWebViewBridge) {
+      if (callViaWebViewBridge(protocolUrl, url)) {
+        return;
+      }
+    }
+
+    // Perform a standard call via location.href
+    if (url.length < 2048) {
+      try {
+        location.href = protocolUrl;
+        pushTransportAttempt('location.href', true, protocolUrl);
+        return;
+      }
+      catch (err) {
+        pushTransportAttempt('location.href', false, err && err.message ? err.message : String(err));
+      }
+    }
+    // Send an HTTP request to DreamSeeker's HTTP server.
+    // Allows sending much bigger payloads.
+    if (callViaHttp(url)) {
+      return;
+    }
+  };
+
+  Byond.callAsync = function (path, params) {
+    if (!window.Promise) {
+      throw new Error('Async calls require API level of ES2015 or later.');
+    }
+    var index = Byond.__callbacks__.length;
+    var promise = new window.Promise(function (resolve) {
+      Byond.__callbacks__.push(resolve);
+    });
+    Byond.call(path, assign({}, params, {
+      callback: 'Byond.__callbacks__[' + index + ']',
+    }));
+    return promise;
+  };
+
+  Byond.topic = function (params) {
+    return Byond.call('', params);
+  };
+
+  Byond.command = function (command) {
+    // BYOND 516+ native API — required for WebView2 command execution.
+    // location.href transport does not reliably deliver winset commands
+    // in WebView2, so prefer the native bridge when available.
+    if (window.BYOND && typeof window.BYOND.command === 'function') {
+      try {
+        window.BYOND.command(command);
+        return;
+      }
+      catch (err) {
+        // fall through to legacy transport
+      }
+    }
+    return Byond.call('winset', {
+      command: command,
+    });
+  };
+
+  Byond.winget = function (id, propName) {
+    var isArray = propName instanceof Array;
+    var isSpecific = propName && propName !== '*' && !isArray;
+    var promise = Byond.callAsync('winget', {
+      id: id,
+      property: isArray && propName.join(',') || propName || '*',
+    });
+    if (isSpecific) {
+      promise = promise.then(function (props) {
+        return props[propName];
+      });
+    }
+    return promise;
+  };
+
+  Byond.winset = function (id, propName, propValue) {
+    if (typeof id === 'object' && id !== null) {
+      return Byond.call('winset', id);
+    }
+    var props = {};
+    if (typeof propName === 'string') {
+      props[propName] = propValue;
+    }
+    else {
+      assign(props, propName);
+    }
+    props.id = id;
+    return Byond.call('winset', props);
+  };
+
+  Byond.parseJson = function (json) {
+    try {
+      return JSON.parse(json, byondJsonReviver);
+    }
+    catch (err) {
+      throw new Error('JSON parsing error: ' + (err && err.message));
+    }
+  };
+
+
+  // Asset loaders
+  // ------------------------------------------------------
+
+  var RETRY_ATTEMPTS = 5;
+  var RETRY_WAIT_INITIAL = 500;
+  var RETRY_WAIT_INCREMENT = 500;
+  var JS_LOAD_TIMEOUT = 15000;
+
+  var loadedAssetByUrl = {};
+  var pushAssetEvent = function (kind, payload) {
+    if (window.__pushTguiDebugEvent__) {
+      window.__pushTguiDebugEvent__('asset/' + kind, payload || null);
+    }
+  };
+
+  var isStyleSheetLoaded = function (node, url) {
+    var getRuleCount = function (styleSheet) {
+      try {
+        var rules = styleSheet.cssRules || styleSheet.rules;
+        return rules ? rules.length : 0;
+      }
+      catch (e) {
+        // In some environments, accessing rules/cssRules can throw SecurityError
+        // (e.g. origin restrictions). If the onload fired, treat it as loaded.
+        return -1;
+      }
+    };
+    // Method #1
+    var styleSheet = node.sheet;
+    if (styleSheet) {
+      var count = getRuleCount(styleSheet);
+      return count !== 0;
+    }
+    // Method #2
+    var styleSheets = document.styleSheets;
+    var len = styleSheets.length;
+    for (var i = 0; i < len; i++) {
+      var styleSheet = styleSheets[i];
+      if(styleSheet.href === undefined)
+        { continue; }
+      if (styleSheet.href.indexOf(url) !== -1) {
+        var count = getRuleCount(styleSheet);
+        return count !== 0;
+      }
+    }
+    // All methods failed
+    return false;
+  };
+
+  var injectNode = function (node) {
+    if (!document.body) {
+      var head = document.head || document.getElementsByTagName('head')[0];
+      if (head) {
+        head.appendChild(node);
+        return;
+      }
+      setTimeout(function () {
+        injectNode(node);
+      });
+      return;
+    }
+    var refs = document.body.childNodes;
+    var ref = refs[refs.length - 1];
+    ref.parentNode.insertBefore(node, ref.nextSibling);
+  };
+
+  var loadAsset = function (options) {
+    var url = options.url;
+    var type = options.type;
+    var sync = options.sync;
+    var attempt = options.attempt || 0;
+    pushAssetEvent('loadBegin', {
+      url: url,
+      type: type,
+      sync: !!sync,
+      attempt: attempt,
+      readyState: document.readyState,
+    });
+    if (loadedAssetByUrl[url]) {
+      return;
+    }
+    loadedAssetByUrl[url] = options;
+    // Generic retry function
+    var retry = function () {
+      if (attempt >= RETRY_ATTEMPTS) {
+        var errorMessage = "Error: Failed to load the asset "
+          + "'" + url + "' after several attempts.";
+        pushAssetEvent('retryGiveUp', {
+          url: url,
+          type: type,
+          attempt: attempt,
+        });
+        if (type === 'css') {
+          errorMessage += "\nStylesheet was either not found, "
+            + "or you're trying to load an empty stylesheet "
+            + "that has no CSS rules in it.";
+        }
+        throw new Error(errorMessage);
+      }
+      pushAssetEvent('retryScheduled', {
+        url: url,
+        type: type,
+        nextAttempt: attempt + 1,
+      });
+      setTimeout(function () {
+        loadedAssetByUrl[url] = null;
+        // The initial options object has no attempt field. `undefined += 1`
+        // becomes NaN and `options.attempt || 0` then retries attempt zero
+        // forever, defeating both the backoff and the retry limit.
+        options.attempt = attempt + 1;
+        loadAsset(options);
+      }, RETRY_WAIT_INITIAL + attempt * RETRY_WAIT_INCREMENT);
+    };
+    // JS specific code
+    if (type === 'js') {
+      var node = document.createElement('script');
+      node.type = 'text/javascript';
+      node.crossOrigin = 'anonymous';
+      node.src = url;
+      if (sync) {
+        node.async = false;
+      }
+      else {
+        node.async = true;
+      }
+      var loadTimeout = setTimeout(function () {
+        pushAssetEvent('jsTimeout', {
+          url: url,
+          attempt: attempt,
+          timeoutMs: JS_LOAD_TIMEOUT,
+        });
+        if (node) {
+          node.onload = null;
+          node.onerror = null;
+          if (node.parentNode) {
+            node.parentNode.removeChild(node);
+          }
+          node = null;
+        }
+        retry();
+      }, JS_LOAD_TIMEOUT);
+      node.onload = function () {
+        clearTimeout(loadTimeout);
+        pushAssetEvent('jsOnload', {
+          url: url,
+          attempt: attempt,
+        });
+      };
+      node.onerror = function () {
+        clearTimeout(loadTimeout);
+        pushAssetEvent('jsOnerror', {
+          url: url,
+          attempt: attempt,
+        });
+        node.onerror = null;
+        if (node.parentNode) {
+          node.parentNode.removeChild(node);
+        }
+        node = null;
+        retry();
+      };
+      try {
+        injectNode(node);
+        pushAssetEvent('injected', {
+          url: url,
+          type: type,
+          attempt: attempt,
+        });
+      }
+      catch (err) {
+        clearTimeout(loadTimeout);
+        pushAssetEvent('injectError', {
+          url: url,
+          type: type,
+          attempt: attempt,
+          message: err && err.message ? err.message : String(err),
+        });
+        retry();
+      }
+      return;
+    }
+    // CSS specific code
+    if (type === 'css') {
+      var node = document.createElement('link');
+      node.type = 'text/css';
+      node.rel = 'stylesheet';
+      node.crossOrigin = 'anonymous';
+      node.href = url;
+      // Temporarily set media to something inapplicable
+      // to ensure it'll fetch without blocking render
+      if (!sync) {
+        node.media = 'only x';
+      }
+      node.onload = function () {
+        node.onload = null;
+        if (isStyleSheetLoaded(node, url)) {
+          pushAssetEvent('cssOnload', {
+            url: url,
+            attempt: attempt,
+            loaded: true,
+          });
+          // Render the stylesheet
+          node.media = 'all';
+          return;
+        }
+        pushAssetEvent('cssOnload', {
+          url: url,
+          attempt: attempt,
+          loaded: false,
+        });
+        // Try again
+        if (node.parentNode) {
+          node.parentNode.removeChild(node);
+        }
+        node = null;
+        retry();
+      };
+      node.onerror = function () {
+        pushAssetEvent('cssOnerror', {
+          url: url,
+          attempt: attempt,
+        });
+        node.onerror = null;
+        if (node.parentNode) {
+          node.parentNode.removeChild(node);
+        }
+        node = null;
+        retry();
+      };
+      try {
+        injectNode(node);
+        pushAssetEvent('injected', {
+          url: url,
+          type: type,
+          attempt: attempt,
+        });
+      }
+      catch (err) {
+        pushAssetEvent('injectError', {
+          url: url,
+          type: type,
+          attempt: attempt,
+          message: err && err.message ? err.message : String(err),
+        });
+        retry();
+      }
+      return;
+    }
+  };
+
+  Byond.loadJs = function (url, sync) {
+    loadAsset({ url: url, sync: sync, type: 'js' });
+  };
+
+  Byond.loadCss = function (url, sync) {
+    loadAsset({ url: url, sync: sync, type: 'css' });
+  };
+})();
+
+// Global error handling
+window.onerror = function (msg, url, line, col, error) {
+  // Proper stacktrace
+  var stack = error && error.stack;
+  // Ghetto stacktrace
+  if (!stack) {
+    stack = msg + '\n   at ' + url + ':' + line;
+    if (col) {
+      stack += ':' + col;
+    }
+  }
+  // Augment the stack
+  stack = window.__augmentStack__(stack, error);
+  window.__dispatchTguiSetupEvent__('fatal', {
+    message: msg,
+    url: url,
+    line: line,
+    column: col,
+  });
+  // Print error to the page
+  var errorRoot = document.getElementById('FatalError');
+  var errorStack = document.getElementById('FatalError__stack');
+  if (errorRoot) {
+    errorRoot.className = 'FatalError FatalError--visible';
+    if (window.onerror.__stack__) {
+      window.onerror.__stack__ += '\n\n' + stack;
+    }
+    else {
+      window.onerror.__stack__ = stack;
+    }
+    errorStack.textContent = window.onerror.__stack__;
+  }
+  // Set window geometry
+  var setFatalErrorGeometry = function () {
+    Byond.winset(window.__windowId__, {
+      titlebar: true,
+      size: '600x600',
+      'is-visible': true,
+      'can-resize': true,
+    });
+  };
+  setFatalErrorGeometry();
+  setInterval(setFatalErrorGeometry, 1000);
+  // Send logs to the game server
+  Byond.topic({
+    tgui: 1,
+    window_id: window.__windowId__,
+    type: 'log',
+    fatal: 1,
+    message: stack,
+  });
+  // Short-circuit further updates
+  window.__updateQueue__ = [];
+  window.update = function () {};
+  // Prevent default action
+  return true;
+};
+
+// Catch unhandled promise rejections
+window.onunhandledrejection = function (e) {
+  var msg = 'UnhandledRejection';
+  if (e.reason) {
+    msg += ': ' + (e.reason.message || e.reason.description || e.reason);
+    if (e.reason.stack) {
+      e.reason.stack = 'UnhandledRejection: ' + e.reason.stack;
+    }
+  }
+  window.onerror(msg, null, null, null, e.reason);
+};
+
+// Helper for augmenting stack traces on fatal errors
+window.__stringifyTguiDebug__ = function () {
+  var debug = window.__tguiDebug__ || {};
+  try {
+    return JSON.stringify(debug);
+  }
+  catch (err) {
+    return '[tgui debug stringify error: ' + (err && err.message ? err.message : err) + ']';
+  }
+};
+
+window.__augmentStack__ = function (stack, error) {
+  var debugStr = window.__stringifyTguiDebug__();
+  return stack
+    + '\nUser Agent: ' + navigator.userAgent
+    + '\nTGUI Debug: ' + debugStr;
+};
+
+window.__showTguiDebugOverlay__ = function (reason) {
+  var existing = document.getElementById('TguiDebugOverlay');
+  if (existing) {
+    return;
+  }
+
+  var dismissInterval = null;
+  var dismissOverlay = function () {
+    if (dismissInterval) {
+      clearInterval(dismissInterval);
+      dismissInterval = null;
+    }
+    var overlay = document.getElementById('TguiDebugOverlay');
+    if (overlay && overlay.parentNode) {
+      overlay.parentNode.removeChild(overlay);
+    }
+  };
+
+  var render = function () {
+    if (!document.body) {
+      setTimeout(render, 100);
+      return;
+    }
+    var debug = window.__tguiDebug__ || {};
+    var lines = [];
+    lines.push('TGUI bridge debug overlay');
+    lines.push('Reason: ' + reason);
+    lines.push('Window ID: ' + window.__windowId__);
+    lines.push('Location: ' + location.href);
+    lines.push('Host: ' + location.hostname);
+    lines.push('Search: ' + location.search);
+    lines.push('User Agent: ' + navigator.userAgent);
+    lines.push('');
+    lines.push('Transport attempts:');
+    var attempts = debug.transportAttempts || [];
+    if (!attempts.length) {
+      lines.push('- <none>');
+    }
+    for (var i = 0; i < attempts.length; i++) {
+      var a = attempts[i];
+      lines.push('- ' + a.at + ' | ' + a.name + ' | ok=' + a.ok + ' | ' + a.detail);
+    }
+    lines.push('');
+    lines.push('Events:');
+    var events = debug.events || [];
+    if (!events.length) {
+      lines.push('- <none>');
+    }
+    for (var j = 0; j < events.length; j++) {
+      var e = events[j];
+      var payloadStr = '{}';
+      if (e.payload) {
+        try {
+          payloadStr = JSON.stringify(e.payload);
+        }
+        catch (err) {
+          payloadStr = '[payload stringify error: ' + (err && err.message ? err.message : err) + ']';
+        }
+      }
+      lines.push('- ' + e.at + ' | ' + e.kind + ' | ' + payloadStr);
+    }
+
+    var node = document.createElement('div');
+    node.id = 'TguiDebugOverlay';
+    node.className = 'TguiDebugOverlay';
+    node.textContent = lines.join('\n');
+
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'TguiDebugOverlay__close';
+    closeBtn.textContent = '\u2715 Close';
+    closeBtn.onclick = dismissOverlay;
+    node.insertBefore(closeBtn, node.firstChild);
+
+    document.body.appendChild(node);
+
+    // Auto-dismiss when the app eventually boots
+    dismissInterval = setInterval(function () {
+      if (window.__tguiAppBooted__) {
+        dismissOverlay();
+      }
+    }, 500);
+  };
+
+  render();
+};
+
+// Early initialization
+window.__updateQueue__ = [];
+window.__recordIncomingTguiMessage__ = function (message) {
+  if (window.__tguiDebug__) {
+    var debug = window.__tguiDebug__;
+    debug.hasAnyMessage = true;
+    debug.lastMessageAt = Date.now ? Date.now() : +new Date();
+    debug.incomingCount = (debug.incomingCount || 0) + 1;
+    var incomingType = '<parse_error>';
+    try {
+      var parsed = Byond.parseJson(message);
+      incomingType = parsed && parsed.type || '<no_type>';
+    }
+    catch (err) {
+      incomingType = '<parse_error>';
+    }
+    if (window.__pushTguiDebugEvent__ && debug.incomingCount <= 8) {
+      window.__pushTguiDebugEvent__('incoming', {
+        index: debug.incomingCount,
+        type: incomingType,
+        messageLength: message && message.length || 0,
+      });
+    }
+    if (incomingType === 'update') {
+      if (!debug.hasBackendUpdate && window.__pushTguiDebugEvent__) {
+        window.__pushTguiDebugEvent__('firstBackendUpdate', {
+          index: debug.incomingCount,
+        });
+      }
+      debug.hasBackendUpdate = true;
+      debug.hasUpdate = true;
+      debug.lastUpdateAt = Date.now ? Date.now() : +new Date();
+    }
+  }
+};
+window.update = function (message) {
+  window.__recordIncomingTguiMessage__(message);
+  window.__updateQueue__.push(message);
+};
+var sendReady = function (reason) {
+  if (window.__tguiDebug__) {
+    var now = Date.now ? Date.now() : +new Date();
+    if (!window.__tguiDebug__.readySentAt) {
+      window.__tguiDebug__.readySentAt = now;
+    }
+    window.__tguiDebug__.lastReadyAt = now;
+    window.__tguiDebug__.readySentCount = (window.__tguiDebug__.readySentCount || 0) + 1;
+  }
+  if (window.__pushTguiDebugEvent__) {
+    window.__pushTguiDebugEvent__('sendReady', {
+      windowId: window.__windowId__,
+      reason: reason || 'unknown',
+      readyState: document.readyState,
+    });
+  }
+  Byond.topic({
+    tgui: 1,
+    window_id: window.__windowId__,
+    type: 'ready',
+  });
+};
+
+var onDomContentLoaded = function () {
+  if (window.__pushTguiDebugEvent__) {
+    window.__pushTguiDebugEvent__('domContentLoaded', {
+      hasBody: !!document.body,
+      readyState: document.readyState,
+    });
+  }
+  sendReady('domContentLoaded');
+};
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', onDomContentLoaded);
+}
+else {
+  onDomContentLoaded();
+}
+
+// Retry ready every 2s until backend responds.
+// location.href transport can be unreliable in WebView2 during connection burst,
+// and DM rate limiting may drop the first attempt.
+var readyRetryTimer = setInterval(function () {
+  var debug = window.__tguiDebug__;
+  if (debug && debug.hasAnyMessage) {
+    clearInterval(readyRetryTimer);
+    return;
+  }
+  sendReady('retry');
+}, 2000);
+// Stop retrying after 30s
+setTimeout(function () {
+  clearInterval(readyRetryTimer);
+}, 30000);
+// Watchdog: show debug overlay if no backend update after 8s (informational only, retries continue)
+setTimeout(function () {
+  var debug = window.__tguiDebug__;
+  if (debug && !debug.hasAnyMessage) {
+    if (window.__pushTguiDebugEvent__) {
+      window.__pushTguiDebugEvent__('watchdog/noBackendUpdate', {
+        waitedMs: 8000,
+        hasAnyMessage: !!debug.hasAnyMessage,
+        incomingCount: debug.incomingCount || 0,
+      });
+    }
+    window.__showTguiDebugOverlay__('No backend update within 8 seconds after ready (retrying...)');
+    try {
+      Byond.topic({
+        tgui: 1,
+        window_id: window.__windowId__,
+        type: 'log',
+        message: 'TGUI watchdog: no backend update. Debug=' + window.__stringifyTguiDebug__(),
+      });
+    }
+    catch (err) {}
+  }
+}, 8000);
+setTimeout(function () {
+  var debug = window.__tguiDebug__;
+  // Separate watchdog: backend updates may be arriving, but bundle bootstrap can still fail.
+  if (debug && !window.__tguiAppBooted__) {
+    if (window.__pushTguiDebugEvent__) {
+      window.__pushTguiDebugEvent__('watchdog/appNotBooted', {
+        waitedMs: 8000,
+        hasAnyMessage: !!debug.hasAnyMessage,
+        hasBackendUpdate: !!debug.hasBackendUpdate,
+        incomingCount: debug.incomingCount || 0,
+      });
+    }
+    window.__showTguiDebugOverlay__('Frontend bundle did not boot within 8 seconds');
+    try {
+      Byond.topic({
+        tgui: 1,
+        window_id: window.__windowId__,
+        type: 'log',
+        message: 'TGUI watchdog: app not booted. Debug=' + window.__stringifyTguiDebug__(),
+      });
+    }
+    catch (err) {}
+  }
+}, 8000);

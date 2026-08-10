@@ -30,6 +30,7 @@ import './styles/themes/pact.scss';
 import { perf } from 'common/perf';
 import { setupHotReloading } from 'tgui-dev-server/link/client.cjs';
 
+import { BrowserEventDispatcher } from './browserEvents';
 import { FindBar } from './components/FindBar';
 import { isDragOrResizeActive } from './drag';
 import { setupGlobalEvents } from './events';
@@ -106,25 +107,16 @@ const setupApp = () => {
   // Subscribe for state updates
   store.subscribe(renderAppIfIdle);
 
-  // Dispatch incoming messages
-  const dispatchIncomingMessage = msg => {
-    window.__recordIncomingTguiMessage__?.(msg);
-    store.dispatch(Byond.parseJson(msg));
-  };
-  window.update = dispatchIncomingMessage;
+  // Dispatch incoming messages through one typed browser boundary.
+  const browserEvents = new BrowserEventDispatcher(store.dispatch);
+  window.update = browserEvents.dispatchLive;
 
   // Process the early update queue
   window.__pushTguiDebugEvent__?.('appSetupBegin', {
     bundle: 'tgui',
     queuedBeforeDrain: window.__updateQueue__?.length || 0,
   });
-  while (true) {
-    const msg = window.__updateQueue__.shift();
-    if (!msg) {
-      break;
-    }
-    store.dispatch(Byond.parseJson(msg));
-  }
+  browserEvents.drain(window.__updateQueue__);
   window.__tguiAppBooted__ = true;
   window.__pushTguiDebugEvent__?.('appBooted', {
     bundle: 'tgui',

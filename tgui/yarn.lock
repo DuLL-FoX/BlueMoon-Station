@@ -10526,6 +10526,12 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"tgui-setup@workspace:packages/tgui-setup":
+  version: 0.0.0-use.local
+  resolution: "tgui-setup@workspace:packages/tgui-setup"
+  languageName: unknown
+  linkType: soft
+
 "tgui-workspace@workspace:.":
   version: 0.0.0-use.local
   resolution: "tgui-workspace@workspace:."

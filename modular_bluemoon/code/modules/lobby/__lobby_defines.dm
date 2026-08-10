@@ -13,6 +13,17 @@
 
 #define BM_LOBBY_LOADING_GIF "config/title_screens/cyberpunk_cityscape.gif"
 
+/// Generated atomically by tools/rsc_deploy after publishing content-addressed
+/// copies of lobby backgrounds and music to nginx.
+#define BM_LOBBY_MEDIA_MANIFEST "config/lobby_media.json"
+
+#define BM_LOBBY_MEDIA_FALLBACK_COOLDOWN (10 SECONDS)
+
+/// Сколько РАЗНЫХ игроков должны свалиться на локальную раздачу одного и того же
+/// вида медиа, прежде чем админам скажут, что дело во внешней раздаче. Считаем
+/// игроков, а не срабатывания: один игрок с плохой сетью - это не упавший nginx.
+#define BM_LOBBY_MEDIA_FALLBACK_ALERT_PLAYERS 5
+
 #define BM_DEFAULT_LOBBY_HTML_PREAMBLE {"<!DOCTYPE html>
 <html lang='ru'>
 <head>

@@ -220,7 +220,10 @@ function draw_interviews() {
 	var header = el("h3", null, "Interviews");
 	body.appendChild(header);
 	var manLink = el("a", null, "Open Interview Manager Panel");
-	manLink.href = "?_src_=holder;admin_token=" + State.hrefToken + ";interview_man=1;statpanel_item_click=left";
+	manLink.href = "#";
+	manLink.onclick = (function(h) {
+		return function(e) { e.preventDefault(); byond_topic(h); return false; };
+	})("?_src_=holder;admin_token=" + State.hrefToken + ";interview_man=1;statpanel_item_click=left");
 	body.appendChild(manLink);
 
 	var statsTable = el("table", "data-table");
@@ -237,7 +240,10 @@ function draw_interviews() {
 			var part = State.interviewManager.interviews[i];
 			var card = el("div", "ticket-card");
 			var a = el("a", null, part["status"]);
-			a.href = "?_src_=holder;admin_token=" + State.hrefToken + ";interview=" + part["ref"] + ";statpanel_item_click=left";
+			a.href = "#";
+			a.onclick = (function(h) {
+				return function(e) { e.preventDefault(); byond_topic(h); return false; };
+			})("?_src_=holder;admin_token=" + State.hrefToken + ";interview=" + part["ref"] + ";statpanel_item_click=left");
 			card.appendChild(a);
 			body.appendChild(card);
 		}

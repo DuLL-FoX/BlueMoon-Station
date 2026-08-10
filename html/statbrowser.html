@@ -3072,7 +3072,13 @@ function draw_spells(cat) {
 		card.appendChild(el("span", "spell-name", part[1]));
 		if (part[3]) {
 			var a = el("a", "spell-status");
-			a.href = "?src=" + part[3] + ";statpanel_item_click=left";
+			// Must go through byond_topic: this document can be served from the
+			// asset CDN, where a relative href navigates the web server instead
+			// of reaching DreamDaemon.
+			a.href = "#";
+			a.onclick = (function(h) {
+				return function(e) { e.preventDefault(); byond_topic(h); return false; };
+			})("?src=" + part[3] + ";statpanel_item_click=left");
 			a.textContent = part[2];
 			var statusLower = ("" + part[2]).toLowerCase();
 			if (statusLower.indexOf("ready") !== -1 || statusLower.indexOf("готов") !== -1) {
@@ -3423,7 +3429,10 @@ function draw_sdql2() {
 
 		if (part[2]) {
 			var a = el("a");
-			a.href = "?src=_statpanel_;statpanel_item_target=" + part[2] + ";statpanel_item_click=left";
+			a.href = "#";
+			a.onclick = (function(h) {
+				return function(e) { e.preventDefault(); byond_topic(h); return false; };
+			})("?src=_statpanel_;statpanel_item_target=" + part[2] + ";statpanel_item_click=left");
 			a.textContent = part[1];
 			card.appendChild(a);
 		} else {
@@ -3870,7 +3879,10 @@ function draw_interviews() {
 	var header = el("h3", null, "Interviews");
 	body.appendChild(header);
 	var manLink = el("a", null, "Open Interview Manager Panel");
-	manLink.href = "?_src_=holder;admin_token=" + State.hrefToken + ";interview_man=1;statpanel_item_click=left";
+	manLink.href = "#";
+	manLink.onclick = (function(h) {
+		return function(e) { e.preventDefault(); byond_topic(h); return false; };
+	})("?_src_=holder;admin_token=" + State.hrefToken + ";interview_man=1;statpanel_item_click=left");
 	body.appendChild(manLink);
 
 	var statsTable = el("table", "data-table");
@@ -3887,7 +3899,10 @@ function draw_interviews() {
 			var part = State.interviewManager.interviews[i];
 			var card = el("div", "ticket-card");
 			var a = el("a", null, part["status"]);
-			a.href = "?_src_=holder;admin_token=" + State.hrefToken + ";interview=" + part["ref"] + ";statpanel_item_click=left";
+			a.href = "#";
+			a.onclick = (function(h) {
+				return function(e) { e.preventDefault(); byond_topic(h); return false; };
+			})("?_src_=holder;admin_token=" + State.hrefToken + ";interview=" + part["ref"] + ";statpanel_item_click=left");
 			card.appendChild(a);
 			body.appendChild(card);
 		}
@@ -4865,6 +4880,42 @@ function draw_settings() {
 }
 
 ;
+// === src/latency-diagnostics.js ===
+// Lightweight WebView event-loop watchdog. It sends nothing during normal play;
+// only a >=100ms scheduling gap crosses the BYOND bridge, at most once per 10s.
+// This lets client_latency.jsonl distinguish a busy statbrowser/WebView from a
+// native DreamSeeker command-queue delay without polling winget from the server.
+var CLIENT_LATENCY_WATCH_INTERVAL_MS = 1000;
+var CLIENT_LATENCY_WATCH_THRESHOLD_MS = 100;
+var CLIENT_LATENCY_WATCH_REPORT_COOLDOWN_MS = 10000;
+
+function client_latency_now() {
+	if (window.performance && typeof window.performance.now === "function") {
+		return window.performance.now();
+	}
+	return Date.now();
+}
+
+function start_client_latency_watchdog() {
+	var lastTickAt = client_latency_now();
+	var lastReportAt = -CLIENT_LATENCY_WATCH_REPORT_COOLDOWN_MS;
+	setInterval(function() {
+		var now = client_latency_now();
+		var drift = Math.max(0, now - lastTickAt - CLIENT_LATENCY_WATCH_INTERVAL_MS);
+		lastTickAt = now;
+		if (drift < CLIENT_LATENCY_WATCH_THRESHOLD_MS ||
+			now - lastReportAt < CLIENT_LATENCY_WATCH_REPORT_COOLDOWN_MS) {
+			return;
+		}
+		lastReportAt = now;
+		var hidden = document.hidden ? 1 : 0;
+		var focused = typeof document.hasFocus === "function" && document.hasFocus() ? 1 : 0;
+		send_byond_command(".client-latency-report statbrowser_event_loop " +
+			Math.round(drift) + " " + hidden + " " + focused);
+	}, CLIENT_LATENCY_WATCH_INTERVAL_MS);
+}
+
+;
 // === src/init.js ===
 var tabBarSpacer = document.createElement("div");
 tabBarSpacer.id = "tab-bar-spacer";
@@ -4910,6 +4961,7 @@ document.addEventListener("mouseup", restoreFocus);
 document.addEventListener("keyup", restoreFocus);
 
 loadFavorites();
+start_client_latency_watchdog();
 
 if (!State.currentTab) {
 	addPermanentTab("Status");
