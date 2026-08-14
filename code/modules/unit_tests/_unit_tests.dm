@@ -273,6 +273,7 @@
 #include "phobia_preference.dm"
 #include "psychosis_pools.dm"
 #include "preload_size_budgets.dm"
+#include "preferences_save_debounce.dm"
 #include "preferences_save_deferral.dm"
 #include "image_leak_audit.dm"
 #include "radiation_contamination.dm"
