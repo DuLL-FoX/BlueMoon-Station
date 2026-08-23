@@ -1,0 +1,16 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><base href="../../../"><link rel="stylesheet" href="dmdoc.css"><title>code/modules/lighting/lighting_setup.dm - Space Station 13</title></head><body><header><a href="index.html">Space Station 13</a> - <a href="index.html#modules">Modules</a> - <a href="index.html#types">Types</a></header><main><h1>code/modules/lighting/lighting_setup.dm <a href="https://github.com/DuLL-FoX/BlueMoon-Station/blob/50312753a7aa7eebccebe25b7376434c1665eadf/code/modules/lighting/lighting_setup.dm"><img src="git.png" width="16" height="16" title="code/modules/lighting/lighting_setup.dm"></a></h1><table class="summary" cellspacing="0"><tr><th>/proc/<a href="global.html#proc/drain_lighting_queues_snapshot">drain_lighting_queues_snapshot</a></th><td>Drains the three lighting work queues (sources -&gt; corners -&gt; objects) synchronously, in order.
+Each queue is claimed atomically (Copy + Cut with no yield between) and processed from the private
+snapshot. This is interleave-safe: the drain sleeps in CHECK_TICK on an async stack, and a
+concurrent SSlighting.fire() (or second drain) only ever sees entries it owns - unlike an
+index/prefix-cut over the SHARED list, where a fire() Cut during the yield shifts elements under
+the saved cursor and the closing Cut discards sources nobody processed (needs_update stays
+non-NO_UPDATE, so the EFFECT_UPDATE re-append guard then refuses to re-enqueue them - permanently
+stale lights). A source dirtied DURING the drain either sits later in the snapshot (we process it)
+or re-enters the live queue for fire() (its needs_update was already reset). Each queue fully
+drains before the next is claimed, so the cascade lights-&gt;corners-&gt;objects is covered.</td></tr><tr><th>/proc/<a href="global.html#proc/zlevel_has_deferred_lighting">zlevel_has_deferred_lighting</a></th><td>TRUE if any parked deferred light atom still belongs to z_level. An interrupted on-demand init
+can leave the level flagged lighting_initialized with its sources never flushed; this lets
+create_lighting_for_zlevel detect and recover that stuck state instead of staying black forever.</td></tr><tr><th>/proc/<a href="global.html#proc/should_ondemand_init_zlevel">should_ondemand_init_zlevel</a></th><td>Synchronous gate shared by /mob/living and /mob/dead update_z: should a client entering new_z
+schedule on-demand lighting init? TRUE only when lighting/mapping are ready, no bulk op owns
+lighting, and the level exists but is not yet initialized. Bounds-guards the z_list index instead
+of SSmapping.get_level() (which CRASHes on an unmanaged z).</td></tr><tr><th>/proc/<a href="global.html#proc/create_lighting_for_zlevel">create_lighting_for_zlevel</a></th><td>Creates lighting infrastructure for a single z-level on demand (synchronous fallback).
+Called when a player enters a z-level before background init reaches it.</td></tr></table></main><footer>tgstation.dme <a href="https://github.com/DuLL-FoX/BlueMoon-Station/tree/50312753a7aa7eebccebe25b7376434c1665eadf">5031275</a> (master) — <a href="https://github.com/SpaceManiac/SpacemanDMM/blob/master/crates/dmdoc/README.md">dmdoc 1.11.0</a></footer></body></html>
