@@ -98,6 +98,21 @@
 		required_modpart = null
 	return
 
+/**
+ * Вернуть модуль в рабочее состояние после того, как его часть МОДа развернули обратно.
+ *
+ * Отдельным проком, а не голым on_activation(), потому что зовётся ОТЛОЖЕННО (см.
+ * toggle_all_linked_modules): между постановкой в очередь и запуском успевает пройти
+ * finish_activation(), и у модуля с startup_with_suit его on_suit_activation() уже
+ * позовёт on_activation(). Повторный заход по MODULE_ACTIVE снял бы выбранный модуль
+ * через on_deactivation() и выбрал заново, выдав лишний balloon_alert - поэтому проверка
+ * стоит здесь, в момент запуска, а не у постановки в очередь, где модуль ещё погашен.
+ */
+/obj/item/mod/module/proc/restore_linked_activation()
+	if(active)
+		return FALSE
+	return on_activation()
+
 /// Called when the MODsuit is activated
 /obj/item/mod/module/proc/on_suit_activation()
 	return startup_with_suit ? on_activation() : FALSE

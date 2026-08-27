@@ -60,7 +60,12 @@
 			// сигнала нельзя, и линтер это ловит. Возвращаемое значение здесь никем не читается,
 			// а оба вызывающих (deploy и conceal) после этой строки только возвращают результат
 			// либо играют звук - порядок для них не меняется.
-			INVOKE_ASYNC(module, TYPE_PROC_REF(/obj/item/mod/module, on_activation))
+			//
+			// Зовётся restore_linked_activation(), а не on_activation(): отсрочка пропускает
+			// вперёд finish_activation() из quick_activation(), и модуль с startup_with_suit
+			// к моменту запуска уже поднят своим on_suit_activation(). Гард живёт внутри
+			// целевого прока, потому что здесь, у постановки в очередь, модуль ещё погашен.
+			INVOKE_ASYNC(module, TYPE_PROC_REF(/obj/item/mod/module, restore_linked_activation))
 
 /obj/item/clothing/mod_part/proc/check_module_ready()
 	return mod.is_active() && mod.wearer.get_item_by_slot(src.slot_flags) == src

@@ -83,3 +83,26 @@
 	kit.afterattack(coat, user, TRUE)
 
 	TEST_ASSERT(coat.reinforced, "An armor kit must still reinforce ordinary outer clothing")
+
+// "Развернул часть МОДа обратно - выбранный модуль моргнул и выдал лишнее
+// сообщение"
+//
+// toggle_all_linked_modules() поднимает связанные модули ОТЛОЖЕННО: оба его
+// вызывающих приходят из обработчиков сигнала, а on_activation() у модуля с
+// устройством доходит до put_in_hands() и дальше до сна. Отсрочка пропускает
+// вперёд finish_activation() из quick_activation(), и модуль с
+// startup_with_suit к моменту запуска уже поднят своим on_suit_activation().
+// Повторный заход по MODULE_ACTIVE снял бы выбранный модуль через
+// on_deactivation() и выбрал заново, выдав лишний balloon_alert.
+//
+// Гард проверяется на модуле БЕЗ костюма нарочно: сорвись он, следующей
+// строкой пойдёт on_activation() с разыменованием mod.get_cell() и тест
+// упадёт рантаймом, а не молча.
+/datum/unit_test/mod_linked_module_restore_is_idempotent/Run()
+	var/obj/item/mod/module/module = allocate(/obj/item/mod/module)
+
+	module.active = TRUE
+	TEST_ASSERT_EQUAL(module.restore_linked_activation(), FALSE, \
+		"Уже поднятый модуль обязан выйти из восстановления, ничего не трогая")
+	TEST_ASSERT(module.active, \
+		"Восстановление не должно гасить уже поднятый модуль")
