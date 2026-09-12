@@ -77,6 +77,31 @@
 	knowledge.on_eldritch_blade(attacker, user, TRUE)
 	TEST_ASSERT_EQUAL(attacker.getBruteLoss(), riposte_damage, "Открытие для ответного удара используется один раз.")
 
+/// Выпад проводит единственный ответ по парированному противнику; преграды сохраняют открытие.
+/datum/unit_test/heretic_blade_lunge_riposte/Run()
+	var/list/fixture = make_blade_fixture()
+	var/mob/living/user = fixture["user"]
+	var/mob/living/attacker = fixture["attacker"]
+	var/datum/antagonist/heretic/heretic = fixture["heretic"]
+	var/datum/eldritch_knowledge/base_blade/knowledge = fixture["knowledge"]
+	heretic.gain_knowledge(/datum/eldritch_knowledge/spell/blade_lunge)
+	var/obj/effect/proc_holder/spell/pointed/heretic_lunge/lunge = allocate(/obj/effect/proc_holder/spell/pointed/heretic_lunge)
+	attacker.forceMove(get_step(get_step(get_step(user, EAST), EAST), EAST))
+	knowledge.record_parry(user, attacker)
+	var/obj/barrier = allocate(/obj, get_step(user, EAST))
+	barrier.density = TRUE
+	lunge.cast(list(attacker), user)
+	TEST_ASSERT_EQUAL(attacker.getBruteLoss(), 0, "Ответ не проходит через преграду.")
+	TEST_ASSERT_EQUAL(knowledge.riposte_target?.resolve(), attacker, "Заблокированное сближение сохраняет ответ.")
+	qdel(barrier)
+	lunge.cast(list(attacker), user)
+	TEST_ASSERT(user.Adjacent(attacker), "После снятия преграды выпад сближается с противником.")
+	TEST_ASSERT(abs(attacker.getBruteLoss() - 38) <= DAMAGE_PRECISION, "Выпад и базовый ответ вместе наносят 38 ушибов.")
+	TEST_ASSERT_EQUAL(knowledge.combat_resource, 0, "Выпад расходует только один Темп, полученный от парирования.")
+	TEST_ASSERT_NULL(knowledge.opening_effect, "Успешный ответ снимает видимое открытие.")
+	knowledge.on_eldritch_blade(attacker, user, TRUE)
+	TEST_ASSERT(abs(attacker.getBruteLoss() - 38) <= DAMAGE_PRECISION, "Следующий удар не повторяет уже проведённый ответ.")
+
 /datum/unit_test/heretic_blade_parry_cleanup/Run()
 	var/list/fixture = make_blade_fixture()
 	var/mob/living/user = fixture["user"]

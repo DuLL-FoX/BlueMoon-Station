@@ -261,20 +261,19 @@
 
 /mob/living/simple_animal/hostile/illusion/heretic_moon/proc/count_witness(mob/living/carbon/human/witness, delta_time)
 	var/datum/mind/witness_mind = witness.mind
-	if(!witness_mind || witness == parent_mob || witness.stat != CONSCIOUS || IS_HERETIC(witness) || IS_HERETIC_MONSTER(witness))
+	if(!witness_mind || witness == parent_mob || witness.stat != CONSCIOUS || witness.is_blind() || IS_HERETIC(witness) || IS_HERETIC_MONSTER(witness))
+		return
+	var/datum/antagonist/heretic/heretic = IS_HERETIC(parent_mob)
+	var/witness_key = "[REF(witness_mind)]"
+	if(!heretic?.deed || heretic.deed.complete() || (witness_key in heretic.deed.counted_keys))
 		return
 	var/seen = LAZYACCESS(witness_time, witness_mind)
-	if(seen >= HERETIC_MOON_WITNESS_TIME)
-		return
-	seen += delta_time
+	seen = min(HERETIC_MOON_WITNESS_TIME, seen + delta_time)
 	LAZYSET(witness_time, witness_mind, seen)
 	if(seen < HERETIC_MOON_WITNESS_TIME)
 		return
-	var/datum/antagonist/heretic/heretic = IS_HERETIC(parent_mob)
-	if(!heretic)
-		return
-	to_chat(witness, span_warning("Отражение моргнуло не в такт."))
-	heretic.advance_deed("[REF(witness_mind)]", get_turf(witness), silent = TRUE)
+	if(heretic.advance_deed(witness_key, get_turf(witness), silent = TRUE))
+		to_chat(witness, span_warning("Отражение моргнуло не в такт."))
 
 /mob/living/simple_animal/hostile/illusion/heretic_moon/CanAttack(atom/the_target)
 	if(!..() || !isturf(the_target.loc) || QDELETED(parent_mob) || parent_mob.stat == DEAD)

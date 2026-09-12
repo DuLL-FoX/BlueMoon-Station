@@ -4,6 +4,13 @@
 #define HERETIC_ECHO_RECOVERY_TIME (8 SECONDS)
 #define HERETIC_ECHO_RELEASE_DAMAGE 24
 #define HERETIC_ECHO_RELEASE_STAMINA 25
+#define HERETIC_ECHO_OPENING_DAMAGE 12
+#define HERETIC_ECHO_OPENING_STAMINA 10
+#define HERETIC_ECHO_OPENING_RADIUS 2
+#define HERETIC_ECHO_RELEASE_RADIUS 3
+#define HERETIC_ECHO_REFRAIN_RADIUS 1
+#define HERETIC_ECHO_REPEAT_RADIUS 2
+#define HERETIC_ECHO_CRESCENDO_RADIUS 3
 #define HERETIC_ECHO_REFRAIN_DAMAGE 18
 #define HERETIC_ECHO_REFRAIN_STAMINA 15
 #define HERETIC_ECHO_REPEAT_DAMAGE 22
@@ -16,15 +23,17 @@
 #define HERETIC_ECHO_CROSS 1
 #define HERETIC_ECHO_DIAGONALS 2
 #define HERETIC_ECHO_RING 3
+#define HERETIC_ECHO_WAVE 4
 #define HERETIC_ECHO_DEED_WHISPER_RANGE 5
+#define HERETIC_ECHO_DISSONANCE_DURATION (1.5 SECONDS)
 
 /datum/heretic_path/echo
 	id = PATH_ECHO
 	deed_type = /datum/heretic_deed/echo
 	name = "Эхо"
-	desc = "Ударьте звуком и заставьте врага отступить перед повтором. Каждое попадание возвращает силу для нового залпа."
-	strengths = "Быстрый первый удар, сильные повторы и давление на стрелков в проходах. Резонаторы расширяют охват."
-	weaknesses = "Звон поражает прежние клетки: из них можно уйти. Преграды глушат волны, резонаторы можно разбить."
+	desc = "Накройте врагов широкой звуковой волной и поймайте их сильным повтором. Ближняя и средняя дистанция, без обязательной подготовки."
+	strengths = "Сплошной первый удар по площади, дальние отзвуки и короткая контузия за два попадания одной последовательности. Резонаторы расширяют охват повторов."
+	weaknesses = "Сильный повтор поражает отмеченные клетки: из них можно уйти. Преграды глушат даже первую волну, резонаторы можно разбить."
 	knowledge = list(
 		/datum/eldritch_knowledge/base_echo,
 		/datum/eldritch_knowledge/echo_grasp,
@@ -40,7 +49,7 @@
 
 /datum/eldritch_knowledge/base_echo
 	name = "Звук за закрытой дверью"
-	desc = "Нож и металлический прут создают звенящий клинок. «Последний удар» отмечает крест вокруг вас и вскоре поражает оставшихся в нём врагов. Попадания клинком и волнами возвращают резонанс для следующих атак; пустой запас медленно восстанавливается. Стены гасят звук, а выход с отмеченного пола позволяет уклониться."
+	desc = "Нож и металлический прут создают звенящий клинок. «Последний удар» сразу накрывает всю область в двух клетках вокруг вас, затем повторяет звук отмеченным крестом до трёх клеток. Попадания возвращают резонанс. Первый удар не требует ловушек; от сильного повтора можно уйти, стены гасят оба такта."
 	gain_text = "За дверью спели последнюю ноту. Она прозвучала снова, когда я перестал слушать."
 	route = PATH_ECHO
 	required_atoms = list(/obj/item/kitchen/knife, /obj/item/stack/rods)
@@ -56,6 +65,7 @@
 	var/list/obj/structure/heretic_echo_resonator/resonators = list()
 	var/list/datum/status_effect/eldritch/echo/marks = list()
 	var/list/datum/status_effect/heretic_echo_ringing/ringing = list()
+	var/list/datum/status_effect/heretic_echo_dissonance/dissonances = list()
 	var/echo_generation = 0
 	var/diagonal_echo = FALSE
 	var/ascension_active = FALSE
@@ -102,6 +112,7 @@
 	QDEL_LIST(resonators)
 	QDEL_LIST(marks)
 	QDEL_LIST(ringing)
+	QDEL_LIST(dissonances)
 
 /datum/eldritch_knowledge/base_echo/proc/clear_knowledge_effects(datum/eldritch_knowledge/knowledge)
 	for(var/datum/heretic_echo_attack/attack as anything in attacks.Copy())
@@ -128,7 +139,7 @@
 
 /datum/eldritch_knowledge/base_echo/get_combat_resource_data()
 	var/list/data = ..()
-	data["description"] = "[combat_resource_desc] Рисунок: [diagonal_echo ? "диагонали" : "крест"]. Резонаторов: [length(resonators)] из [HERETIC_ECHO_RESONATOR_LIMIT]."
+	data["description"] = "[combat_resource_desc] Рисунок повторов: [diagonal_echo ? "диагонали" : "крест"]. Резонаторов: [length(resonators)] из [HERETIC_ECHO_RESONATOR_LIMIT]."
 	return data
 
 /datum/eldritch_knowledge/base_echo/proc/harvest(mob/living/user)
@@ -216,10 +227,13 @@
 /datum/eldritch_knowledge/base_echo/proc/release(mob/living/user)
 	if(!can_use(user) || combat_resource < 1 || length(attacks) >= HERETIC_ECHO_ATTACK_LIMIT || !tile_open(get_turf(user)))
 		return FALSE
-	var/list/pattern = make_pattern(get_turf(user), 2, diagonal_echo ? HERETIC_ECHO_DIAGONALS : HERETIC_ECHO_CROSS, HERETIC_ECHO_RELEASE_DAMAGE, HERETIC_ECHO_RELEASE_STAMINA, TRUE)
-	if(!length(pattern) || !start_attack(user, list(pattern), src))
+	var/list/opening = make_pattern(get_turf(user), HERETIC_ECHO_OPENING_RADIUS, HERETIC_ECHO_WAVE, HERETIC_ECHO_OPENING_DAMAGE, HERETIC_ECHO_OPENING_STAMINA)
+	var/list/repeat = make_pattern(get_turf(user), HERETIC_ECHO_RELEASE_RADIUS, diagonal_echo ? HERETIC_ECHO_DIAGONALS : HERETIC_ECHO_CROSS, HERETIC_ECHO_RELEASE_DAMAGE, HERETIC_ECHO_RELEASE_STAMINA, TRUE)
+	if(!length(opening) || !length(repeat) || !spend_combat_resource())
 		return FALSE
-	spend_combat_resource()
+	if(!start_attack(user, list(opening, repeat), src, immediate_first = TRUE))
+		gain_combat_resource()
+		return FALSE
 	return TRUE
 
 /datum/eldritch_knowledge/base_echo/proc/refrain(mob/living/user, turf/center)
@@ -227,8 +241,8 @@
 	var/datum/eldritch_knowledge/required = heretic?.get_knowledge(/datum/eldritch_knowledge/spell/echo_refrain)
 	if(!can_use(user) || !line_clear(user, center))
 		return FALSE
-	var/list/opening = make_pattern(center, 0, HERETIC_ECHO_CROSS, HERETIC_ECHO_REFRAIN_DAMAGE, HERETIC_ECHO_REFRAIN_STAMINA)
-	var/list/repeat = make_pattern(center, 1, diagonal_echo ? HERETIC_ECHO_DIAGONALS : HERETIC_ECHO_CROSS, HERETIC_ECHO_REPEAT_DAMAGE, HERETIC_ECHO_REPEAT_STAMINA, TRUE)
+	var/list/opening = make_pattern(center, HERETIC_ECHO_REFRAIN_RADIUS, HERETIC_ECHO_WAVE, HERETIC_ECHO_REFRAIN_DAMAGE, HERETIC_ECHO_REFRAIN_STAMINA)
+	var/list/repeat = make_pattern(center, HERETIC_ECHO_REPEAT_RADIUS, diagonal_echo ? HERETIC_ECHO_DIAGONALS : HERETIC_ECHO_CROSS, HERETIC_ECHO_REPEAT_DAMAGE, HERETIC_ECHO_REPEAT_STAMINA, TRUE)
 	return length(opening) && length(repeat) && start_attack(user, list(opening, repeat), required, immediate_first = TRUE)
 
 /datum/eldritch_knowledge/base_echo/proc/create_resonator(mob/living/user, turf/place)
@@ -253,7 +267,7 @@
 	var/resonance = combat_resource
 	var/list/patterns = list()
 	for(var/shape in list(HERETIC_ECHO_CROSS, HERETIC_ECHO_DIAGONALS, HERETIC_ECHO_RING))
-		patterns += list(make_pattern(center, 2, shape, 18 + 2 * resonance, 18 + 2 * resonance))
+		patterns += list(make_pattern(center, HERETIC_ECHO_CRESCENDO_RADIUS, shape, 18 + 2 * resonance, 18 + 2 * resonance))
 	if(!start_attack(user, patterns, required))
 		return FALSE
 	spend_combat_resource(resonance)
@@ -284,6 +298,7 @@
 	var/list/obj/effect/temp_visual/heretic_echo/warnings = list()
 	var/generation
 	var/pulse_index = 1
+	var/list/mob/living/sounded = list()
 	var/release_timer
 	var/resolving = FALSE
 
@@ -390,6 +405,10 @@
 			return FALSE
 		if(QDELETED(victim) || victim.loc != hit_tiles[victim])
 			continue
+		if(victim in sounded)
+			victim.apply_status_effect(/datum/status_effect/heretic_echo_dissonance, echo)
+		else
+			sounded += victim
 		echo.set_ringing(victim)
 		if(!valid_source())
 			qdel(src)
@@ -420,6 +439,7 @@
 		UnregisterSignal(required, COMSIG_PARENT_QDELETING)
 	QDEL_LIST(warnings)
 	patterns = null
+	sounded = null
 	origin = null
 	echo_ref = null
 	knowledge_ref = null
@@ -428,7 +448,7 @@
 
 /obj/structure/heretic_echo_resonator
 	name = "sepulchral resonator"
-	desc = "Три латунные трубы поют чужими голосами. Повторяют слабым звоном Последний удар и Припев хозяина. Разбейте резонатор или коснитесь его нулевым жезлом, чтобы оборвать повтор."
+	desc = "Три латунные трубы поют чужими голосами. Повторяют Последний удар и Припев хозяина с полным уроном. Разбейте резонатор или коснитесь его нулевым жезлом, чтобы оборвать повтор."
 	icon = 'modular_bluemoon/icons/obj/heretic_echo.dmi'
 	icon_state = "echo_resonator"
 	anchored = TRUE
@@ -544,7 +564,53 @@
 
 /atom/movable/screen/alert/status_effect/heretic_echo_ringing
 	name = "Остаточный звон"
-	desc = "Чужая нота держится за ваше тело. Усиленный клинок её владельца наносит ещё 5 ушибов. Звон исчезнет через 12 секунд после последнего попадания магии."
+	desc = "Чужая нота держится за ваше тело. Усиленный клинок её владельца наносит ещё 10 ушибов. Второе попадание одной последовательности на 1,5 секунды блокирует стрельбу и удары предметами: уходите с отмеченного пола. Звон исчезнет через 12 секунд после последнего попадания магии."
+	icon = 'modular_bluemoon/icons/obj/heretic_alerts.dmi'
+	icon_state = "sigil_echo"
+
+/datum/status_effect/heretic_echo_dissonance
+	id = "heretic_echo_dissonance"
+	duration = HERETIC_ECHO_DISSONANCE_DURATION
+	tick_interval = -1
+	status_type = STATUS_EFFECT_UNIQUE
+	alert_type = /atom/movable/screen/alert/status_effect/heretic_echo_dissonance
+	on_remove_on_mob_delete = TRUE
+	var/datum/weakref/echo_ref
+
+/datum/status_effect/heretic_echo_dissonance/on_creation(mob/living/new_owner, datum/eldritch_knowledge/base_echo/echo)
+	if(QDELETED(echo))
+		qdel(src)
+		return
+	echo_ref = WEAKREF(echo)
+	return ..()
+
+/datum/status_effect/heretic_echo_dissonance/on_apply()
+	var/datum/eldritch_knowledge/base_echo/echo = echo_ref?.resolve()
+	if(!..() || QDELETED(echo) || !echo.can_use(echo.echo_body) || owner.stat == DEAD)
+		return FALSE
+	var/blocked = SEND_SIGNAL(owner, COMSIG_LIVING_STATUS_DAZE, HERETIC_ECHO_DISSONANCE_DURATION, TRUE, FALSE)
+	if((blocked & COMPONENT_NO_STUN) || QDELETED(src) || QDELETED(owner) || QDELETED(echo) || !echo.can_use(echo.echo_body) || owner.stat == DEAD)
+		return FALSE
+	if(!(owner.status_flags & CANKNOCKDOWN) || HAS_TRAIT(owner, TRAIT_STUNIMMUNE) || owner.absorb_stun(HERETIC_ECHO_DISSONANCE_DURATION, FALSE))
+		return FALSE
+	if(QDELETED(src) || QDELETED(owner) || QDELETED(echo) || !echo.can_use(echo.echo_body) || owner.stat == DEAD)
+		return FALSE
+	echo.dissonances += src
+	ADD_TRAIT(owner, TRAIT_MOBILITY_NOUSE, REF(src))
+	if(QDELETED(src) || QDELETED(owner) || QDELETED(echo) || !echo.can_use(echo.echo_body))
+		return FALSE
+	to_chat(owner, span_userdanger("Ударная волна сбивает координацию! Вы можете двигаться, но 1,5 секунды не можете стрелять или бить предметами."))
+	return TRUE
+
+/datum/status_effect/heretic_echo_dissonance/on_remove()
+	var/datum/eldritch_knowledge/base_echo/echo = echo_ref?.resolve()
+	echo?.dissonances.Remove(src)
+	REMOVE_TRAIT(owner, TRAIT_MOBILITY_NOUSE, REF(src))
+	return ..()
+
+/atom/movable/screen/alert/status_effect/heretic_echo_dissonance
+	name = "Звуковая контузия"
+	desc = "Повторная волна на 1,5 секунды блокирует стрельбу и удары предметами. Вы можете двигаться и говорить; оружие остаётся в руках."
 	icon = 'modular_bluemoon/icons/obj/heretic_alerts.dmi'
 	icon_state = "sigil_echo"
 
@@ -599,7 +665,7 @@
 
 /obj/item/heretic_path_relic/echo_fork
 	name = "mourning lyre"
-	desc = "Ручная лира на колоколе-резонаторе: асимметричная бронзовая рама, три струны и подвесной язычок. В руке создателя меняет рисунок Последнего удара, Припева и их повторов: крест или диагонали. Уже начавшийся звон сохраняет прежний рисунок. Перезарядка — 10 секунд."
+	desc = "Ручная лира на колоколе-резонаторе: асимметричная бронзовая рама, три струны и подвесной язычок. В руке создателя меняет рисунок повторов Последнего удара и Припева: крест или диагонали. Уже начавшийся звон сохраняет прежний рисунок. Перезарядка — 10 секунд."
 	icon = 'modular_bluemoon/icons/obj/heretic_echo.dmi'
 	icon_state = "echo_fork"
 
@@ -614,7 +680,7 @@
 	echo.diagonal_echo = !echo.diagonal_echo
 	echo.notify_resource_changed()
 	COOLDOWN_START(src, relic_cooldown, 10 SECONDS)
-	to_chat(user, span_eldritch("Вы касаетесь струн лиры. Следующие удары расходятся [echo.diagonal_echo ? "по диагоналям" : "крестом"]."))
+	to_chat(user, span_eldritch("Вы касаетесь струн лиры. Следующие повторы расходятся [echo.diagonal_echo ? "по диагоналям" : "крестом"]."))
 	new /obj/effect/temp_visual/heretic_echo/wave(get_turf(user))
 	playsound(user, 'modular_bluemoon/sound/heretic/echo_grasp.ogg', 40, FALSE)
 	return TRUE
@@ -675,7 +741,7 @@
 
 /datum/eldritch_knowledge/spell/echo_refrain
 	name = "Припев"
-	desc = "Ударьте по выбранной клетке в пяти клетках: 18 ушибов и 15 урона выносливости сразу. Через 0,8 секунды крест вокруг неё повторит удар на 22 ушиба и 25 выносливости. От повтора можно уклониться. Не требует резонанса, перезарядка — 14 секунд. Лира меняет рисунок повтора; резонаторы расширяют его охват."
+	desc = "Выберите точку в пяти клетках: вся область 3×3 вокруг неё сразу получает 18 ушибов и 15 урона выносливости. Через 0,8 секунды отмеченный крест радиусом две клетки повторит удар на 22 ушиба и 25 выносливости. От повтора можно уклониться. Попадание обоих тактов на 1,5 секунды блокирует стрельбу и удары предметами, сохраняя движение. Не требует резонанса, перезарядка — 14 секунд. Лира меняет рисунок повтора; резонаторы расширяют его охват."
 	gain_text = "Я вычеркнул строку. Хор пропел её ещё раз."
 	cost = 1
 	route = PATH_ECHO
@@ -712,7 +778,7 @@
 
 /datum/eldritch_knowledge/echo_fork
 	name = "Поминальная лира"
-	desc = "Лист золота и металлический прут создают лиру. В руке создателя она переключает крест и диагонали у Последнего удара, Припева и их резонаторных повторов. Уже начатый звон не меняется. Перезарядка — 10 секунд, ресурс не расходуется. Можно иметь одну лиру."
+	desc = "Лист золота и металлический прут создают лиру. В руке создателя она переключает крест и диагонали у повторов Последнего удара и Припева, в том числе резонаторных. Сплошная первая волна и уже начатый звон не меняются. Перезарядка — 10 секунд, ресурс не расходуется. Можно иметь одну лиру."
 	gain_text = "Я отпустил струны. Третья продолжала звучать, хотя я её не касался."
 	cost = 1
 	route = PATH_ECHO
@@ -788,7 +854,7 @@
 
 /datum/eldritch_knowledge/spell/echo_crescendo
 	name = "Крещендо"
-	desc = "Расходует весь резонанс, минимум 2. Вокруг выбранной точки звучат крест, диагонали и кольцо радиусом две клетки. Каждый рисунок предупреждает за 0,8 секунды. Такт наносит по 18 ушибов и урона выносливости плюс по 2 за единицу резонанса: при запасе 4 — по 26. Двигайтесь между рисунками, чтобы уклониться. Перезарядка — 40 секунд."
+	desc = "Расходует весь резонанс, минимум 2. Вокруг выбранной точки звучат крест, диагонали и кольцо радиусом три клетки. Каждый рисунок предупреждает за 0,8 секунды. Такт наносит по 18 ушибов и урона выносливости плюс по 2 за единицу резонанса: при запасе 4 — по 26. Повторное попадание одной последовательности на 1,5 секунды блокирует стрельбу и удары предметами, сохраняя движение. Двигайтесь между рисунками, чтобы уклониться. Перезарядка — 40 секунд."
 	gain_text = "Первым вступил один голос. Последним — хор, которому не хватало места под небом."
 	cost = 2
 	sacs_needed = HERETIC_PENULTIMATE_SACRIFICES
@@ -850,7 +916,7 @@
 
 /obj/effect/proc_holder/spell/self/heretic_echo/release
 	name = "Последний удар"
-	desc = "За единицу резонанса отметьте крест радиусом две клетки вокруг себя. Через 0,8 секунды он нанесёт 24 ушиба и 25 урона выносливости. Лира меняет рисунок; резонаторы повторяют его с полным уроном. Из отмеченного пола можно выйти."
+	desc = "За единицу резонанса сразу ударьте по всей области 5×5 вокруг себя: 12 ушибов и 10 урона выносливости. Через 0,8 секунды отмеченный крест радиусом три клетки нанесёт 24 ушиба и 25 выносливости. Лира меняет рисунок повтора, резонаторы расширяют его. От повтора можно уйти; два попадания на 1,5 секунды блокируют стрельбу и удары предметами, сохраняя движение."
 	charge_max = 12 SECONDS
 	action_icon_state = "echo_release"
 
@@ -895,7 +961,7 @@
 
 /obj/effect/proc_holder/spell/pointed/heretic_echo/refrain
 	name = "Припев"
-	desc = "Выбранная клетка сразу получает удар на 18 ушибов и 15 выносливости. Через 0,8 секунды крест вокруг неё нанесёт 22 ушиба и 25 выносливости. От повтора можно уклониться. Не требует резонанса."
+	desc = "Вся область 3×3 вокруг выбранной точки сразу получает 18 ушибов и 15 урона выносливости. Через 0,8 секунды отмеченный крест радиусом две клетки нанесёт 22 ушиба и 25 выносливости. От повтора можно уклониться. Попадание обоих тактов на 1,5 секунды блокирует стрельбу и удары предметами, сохраняя движение. Не требует резонанса."
 	charge_max = 14 SECONDS
 	action_icon_state = "echo_refrain"
 
@@ -919,7 +985,7 @@
 
 /obj/effect/proc_holder/spell/pointed/heretic_echo/crescendo
 	name = "Крещендо"
-	desc = "Вокруг выбранной точки звучат крест, диагонали и кольцо. Каждый рисунок предупреждает за 0,8 секунды и наносит по 18 ушибов и урона выносливости плюс по 2 за единицу резонанса. Расходует весь запас, минимум 2."
+	desc = "Вокруг выбранной точки звучат крест, диагонали и кольцо радиусом три клетки. Каждый рисунок предупреждает за 0,8 секунды и наносит по 18 ушибов и урона выносливости плюс по 2 за единицу резонанса. Повторное попадание этой последовательности на 1,5 секунды блокирует стрельбу и удары предметами, сохраняя движение. Расходует весь запас, минимум 2."
 	charge_max = 40 SECONDS
 	action_icon_state = "echo_crescendo"
 
@@ -935,6 +1001,13 @@
 #undef HERETIC_ECHO_RECOVERY_TIME
 #undef HERETIC_ECHO_RELEASE_DAMAGE
 #undef HERETIC_ECHO_RELEASE_STAMINA
+#undef HERETIC_ECHO_OPENING_DAMAGE
+#undef HERETIC_ECHO_OPENING_STAMINA
+#undef HERETIC_ECHO_OPENING_RADIUS
+#undef HERETIC_ECHO_RELEASE_RADIUS
+#undef HERETIC_ECHO_REFRAIN_RADIUS
+#undef HERETIC_ECHO_REPEAT_RADIUS
+#undef HERETIC_ECHO_CRESCENDO_RADIUS
 #undef HERETIC_ECHO_REFRAIN_DAMAGE
 #undef HERETIC_ECHO_REFRAIN_STAMINA
 #undef HERETIC_ECHO_REPEAT_DAMAGE
@@ -947,4 +1020,6 @@
 #undef HERETIC_ECHO_CROSS
 #undef HERETIC_ECHO_DIAGONALS
 #undef HERETIC_ECHO_RING
+#undef HERETIC_ECHO_WAVE
 #undef HERETIC_ECHO_DEED_WHISPER_RANGE
+#undef HERETIC_ECHO_DISSONANCE_DURATION

@@ -278,3 +278,132 @@
 	TEST_ASSERT_NOTNULL(expiring, "Короткая печать создана.")
 	TEST_ASSERT(wait_for_qdeleted(expiring), "По истечении срока печать удаляется сама.")
 	TEST_ASSERT_EQUAL(length(knowledge.seals), 0, "Истечение срока освобождает общий предел.")
+
+/datum/unit_test/proc/allocate_lock_passage()
+	var/turf/first_place = get_step(get_step(run_loc_floor_bottom_left, EAST), NORTH)
+	var/turf/second_place = get_step(get_step(get_step(get_step(first_place, EAST), EAST), EAST), EAST)
+	var/datum/antagonist/heretic/heretic = allocate_heretic(first_place)
+	heretic.selected_path = PATH_LOCK
+	heretic.gain_knowledge(/datum/eldritch_knowledge/base_lock)
+	heretic.gain_knowledge(/datum/eldritch_knowledge/lock_key)
+	var/mob/living/user = heretic.owner.current
+	var/datum/eldritch_knowledge/lock_key/recipe = heretic.get_knowledge(/datum/eldritch_knowledge/lock_key)
+	recipe.on_finished_recipe(user, list(), first_place)
+	var/obj/item/heretic_path_relic/lock_key/key = recipe.new_path_relic_ref.resolve()
+	allocated += key
+	user.put_in_hands(key)
+	key.passage_time = 0
+	var/obj/machinery/door/airlock/first_door = allocate(/obj/machinery/door/airlock, get_step(first_place, NORTH))
+	var/obj/machinery/door/airlock/second_door = allocate(/obj/machinery/door/airlock, get_step(second_place, NORTH))
+	user.a_intent = INTENT_HELP
+	key.afterattack(first_door, user, TRUE, null)
+	user.forceMove(second_place)
+	key.afterattack(second_door, user, TRUE, null)
+	user.forceMove(first_place)
+	return list("heretic" = heretic, "key" = key, "first_door" = first_door, "second_door" = second_door, "first_place" = first_place, "second_place" = second_place)
+
+/// Связанные шлюзы переносят владельца между выбранными сторонами без открытия дверей и сквозь помещения.
+/datum/unit_test/heretic_lock_threshold_passage/Run()
+	var/list/fixture = allocate_lock_passage()
+	var/datum/antagonist/heretic/heretic = fixture["heretic"]
+	var/mob/living/user = heretic.owner.current
+	var/datum/eldritch_knowledge/base_lock/knowledge = heretic.get_knowledge(/datum/eldritch_knowledge/base_lock)
+	var/obj/item/heretic_path_relic/lock_key/key = fixture["key"]
+	var/obj/machinery/door/airlock/first_door = fixture["first_door"]
+	var/obj/machinery/door/airlock/second_door = fixture["second_door"]
+	TEST_ASSERT_EQUAL(length(knowledge.thresholds), 2, "Касание ключом создаёт два порога.")
+	var/obj/structure/blocker = allocate(/obj/structure, get_step(fixture["first_place"], EAST))
+	blocker.density = TRUE
+	blocker.opacity = TRUE
+	first_door.bolt()
+	second_door.bolt()
+	var/keys_before = knowledge.combat_resource
+	TEST_ASSERT(key.traverse(user, first_door), "Порог позволяет обойти стены между заранее связанными шлюзами.")
+	TEST_ASSERT_EQUAL(get_turf(user), fixture["second_place"], "Выход ведёт на выбранную при связывании сторону.")
+	TEST_ASSERT_EQUAL(knowledge.combat_resource, keys_before - 1, "Успешный переход тратит один ключ.")
+	TEST_ASSERT(first_door.locked && first_door.density && second_door.locked && second_door.density, "Переход не открывает и не отпирает обычные шлюзы.")
+	TEST_ASSERT(!key.traverse(user, second_door), "Обратный переход соблюдает общий интервал.")
+	COOLDOWN_RESET(key, passage_cooldown)
+	TEST_ASSERT(key.traverse(user, second_door), "После интервала пара работает в обратную сторону.")
+	TEST_ASSERT_EQUAL(get_turf(user), fixture["first_place"], "Обратный переход возвращает на исходную сторону шлюза.")
+	TEST_ASSERT_EQUAL(length(knowledge.thresholds), 2, "Переход не расходует сами пороги.")
+
+/// Сварка, занятый выход, запрет телепортации, чужой ключ и перенос двери блокируют проход без оплаты.
+/datum/unit_test/heretic_lock_threshold_safety/Run()
+	var/list/fixture = allocate_lock_passage()
+	var/datum/antagonist/heretic/heretic = fixture["heretic"]
+	var/mob/living/user = heretic.owner.current
+	var/datum/eldritch_knowledge/base_lock/knowledge = heretic.get_knowledge(/datum/eldritch_knowledge/base_lock)
+	var/obj/item/heretic_path_relic/lock_key/key = fixture["key"]
+	var/obj/machinery/door/airlock/first_door = fixture["first_door"]
+	var/obj/machinery/door/airlock/second_door = fixture["second_door"]
+	TEST_ASSERT_EQUAL(length(knowledge.thresholds), 2, "Для проверки нужны два порога.")
+	var/keys_before = knowledge.combat_resource
+	second_door.welded = TRUE
+	TEST_ASSERT(!key.traverse(user, first_door), "Сварка выходного шлюза запирает проход.")
+	second_door.welded = FALSE
+	var/obj/structure/blocker = allocate(/obj/structure, fixture["second_place"])
+	blocker.density = TRUE
+	TEST_ASSERT(!key.traverse(user, first_door), "Плотный предмет на выходе запирает проход.")
+	qdel(blocker)
+	ADD_TRAIT(user, TRAIT_NO_TELEPORT, "unit_test")
+	TEST_ASSERT(!key.traverse(user, first_door), "Запрет телепортации на владельце сохраняется.")
+	REMOVE_TRAIT(user, TRAIT_NO_TELEPORT, "unit_test")
+	var/area/place_area = get_area(user)
+	var/original_flags = place_area.area_flags
+	place_area.area_flags |= NOTELEPORT
+	var/blocked_by_area = !key.traverse(user, first_door)
+	place_area.area_flags = original_flags
+	TEST_ASSERT(blocked_by_area, "Запрет телепортации области сохраняется.")
+	var/turf/door_place = get_turf(second_door)
+	second_door.forceMove(get_step(door_place, EAST))
+	TEST_ASSERT(!key.traverse(user, first_door), "Перемещённый шлюз не оставляет работающий выход на прежнем месте.")
+	second_door.forceMove(door_place)
+	heretic.selected_path = PATH_TIDE
+	TEST_ASSERT(!key.traverse(user, first_door), "Выбор другого пути отключает проход.")
+	heretic.selected_path = PATH_LOCK
+	heretic.role_removed = TRUE
+	TEST_ASSERT(!key.traverse(user, first_door), "Снятая роль отключает проход.")
+	heretic.role_removed = FALSE
+	user.dropItemToGround(key)
+	TEST_ASSERT(!key.traverse(user, first_door), "Ключ на полу не открывает проход.")
+	var/datum/antagonist/heretic/other = allocate_heretic(get_step(user, SOUTH))
+	other.selected_path = PATH_LOCK
+	other.owner.current.put_in_hands(key)
+	TEST_ASSERT(!key.traverse(other.owner.current, first_door), "Чужой разум не может воспользоваться ключом.")
+	other.owner.current.dropItemToGround(key)
+	user.put_in_hands(key)
+	TEST_ASSERT_EQUAL(knowledge.combat_resource, keys_before, "Отклонённые переходы не расходуют ключи.")
+	TEST_ASSERT_EQUAL(get_turf(user), fixture["first_place"], "Отклонённые переходы не перемещают владельца.")
+	TEST_ASSERT(key.traverse(user, first_door), "После снятия помех подготовленная пара снова работает.")
+
+/// Разрушение порога во время подготовки отменяет переход; удаление знания и смерть очищают якоря.
+/datum/unit_test/heretic_lock_threshold_cleanup/Run()
+	var/list/fixture = allocate_lock_passage()
+	var/datum/antagonist/heretic/heretic = fixture["heretic"]
+	var/mob/living/user = heretic.owner.current
+	var/datum/eldritch_knowledge/base_lock/knowledge = heretic.get_knowledge(/datum/eldritch_knowledge/base_lock)
+	var/obj/item/heretic_path_relic/lock_key/key = fixture["key"]
+	var/obj/machinery/door/airlock/first_door = fixture["first_door"]
+	var/obj/machinery/door/airlock/second_door = fixture["second_door"]
+	TEST_ASSERT_EQUAL(length(knowledge.thresholds), 2, "Для проверки нужны два порога.")
+	var/obj/structure/heretic_lock_threshold/destination = knowledge.threshold_destination(user, first_door)
+	var/keys_before = knowledge.combat_resource
+	key.passage_time = 1 SECONDS
+	QDEL_IN(destination, 0.1 SECONDS)
+	TEST_ASSERT(!key.traverse(user, first_door), "Разрушение выхода во время подготовки отменяет переход.")
+	TEST_ASSERT_EQUAL(knowledge.combat_resource, keys_before, "Отмена подготовки не расходует ключ.")
+	TEST_ASSERT_EQUAL(get_turf(user), fixture["first_place"], "Отмена оставляет владельца у входа.")
+	TEST_ASSERT(!key.busy, "После отмены ключ освобождается для следующего действия.")
+	user.forceMove(fixture["second_place"])
+	TEST_ASSERT(knowledge.bind_threshold(user, second_door), "Вместо разрушенного порога можно создать новый.")
+	var/obj/structure/heretic_lock_threshold/first = knowledge.thresholds[1]
+	var/obj/structure/heretic_lock_threshold/second = knowledge.thresholds[2]
+	knowledge.on_death(user)
+	TEST_ASSERT(QDELETED(first) && QDELETED(second), "Смерть удаляет оба порога.")
+	TEST_ASSERT_EQUAL(length(knowledge.thresholds), 0, "Смерть освобождает список якорей.")
+	TEST_ASSERT(knowledge.bind_threshold(user, second_door), "После очистки можно начать новую пару.")
+	var/datum/eldritch_knowledge/lock_key/recipe = heretic.get_knowledge(/datum/eldritch_knowledge/lock_key)
+	qdel(recipe)
+	TEST_ASSERT_EQUAL(length(knowledge.thresholds), 0, "Удаление Ключницы убирает оставшийся порог.")
+	TEST_ASSERT(!key.authorized(user), "Потеря знания отключает ритуальный ключ.")

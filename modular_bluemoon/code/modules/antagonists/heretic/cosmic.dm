@@ -3,6 +3,7 @@
 #define HERETIC_STAR_BASE_LIMIT 2
 #define HERETIC_STAR_EXPANDED_LIMIT 3
 #define HERETIC_STAR_ASCENDED_LIMIT 5
+#define HERETIC_STAR_ARRIVAL_RADIUS 1
 
 /datum/eldritch_knowledge/base_cosmic
 	name = "Карта без неба"
@@ -255,7 +256,7 @@
 	new /obj/effect/temp_visual/heretic_path_feedback(get_turf(victim), "cosmic_ring", "#96d7ed", 6)
 	playsound(victim, 'modular_bluemoon/sound/heretic/cosmic_energy.ogg', 25, TRUE)
 	if(heretic.get_knowledge(/datum/eldritch_knowledge/cosmic_mark))
-		victim.apply_status_effect(/datum/status_effect/eldritch/cosmic)
+		victim.apply_status_effect(/datum/status_effect/eldritch/cosmic, src)
 	if(heretic.ascended)
 		victim.adjustFireLoss(10)
 	to_chat(victim, span_warning("Нить созвездия натягивается и вытягивает из вас силы!"))
@@ -273,7 +274,28 @@
 	new /obj/effect/temp_visual/heretic_spell/star_step(origin)
 	new /obj/effect/temp_visual/heretic_spell/star_step(landing)
 	playsound(landing, 'sound/magic/blink.ogg', 40, TRUE)
+	if(get_turf(user) == landing)
+		discharge_arrival(user, destination)
 	return TRUE
+
+/datum/eldritch_knowledge/base_cosmic/proc/discharge_arrival(mob/living/user, obj/structure/heretic_star/destination)
+	if(QDELETED(destination) || !(destination in stars) || user?.mind != astronomer || user.incapacitated() || get_turf(user) != get_turf(destination))
+		return FALSE
+	var/discharged = FALSE
+	var/datum/antagonist/heretic/heretic = IS_HERETIC(user)
+	for(var/mob/living/victim in range(HERETIC_STAR_ARRIVAL_RADIUS, destination))
+		var/datum/status_effect/eldritch/cosmic/mark = victim.has_status_effect(/datum/status_effect/eldritch/cosmic)
+		if(mark?.constellation_ref?.resolve() != src || !isturf(victim.loc) || !star_line_clear(destination, victim) || !can_affect(victim, chargecost = 1))
+			continue
+		mark.on_effect()
+		var/list/knowledge = heretic.get_all_knowledge()
+		for(var/knowledge_type in knowledge)
+			var/datum/eldritch_knowledge/entry = knowledge[knowledge_type]
+			if(entry.route == PATH_COSMIC)
+				entry.on_mark_detonated(user, victim)
+		discharged = TRUE
+		log_combat(user, victim, "активировал метку прибытием по Звёздной дороге")
+	return discharged
 
 /datum/eldritch_knowledge/base_cosmic/proc/pulse(mob/living/user, collapse = FALSE, list/telegraphed_turfs)
 	if(user?.mind != astronomer || user.incapacitated() || !length(stars))
@@ -305,7 +327,7 @@
 			victim.apply_status_effect(/datum/status_effect/cosmic_tether)
 			step_towards(victim, star)
 			step_towards(victim, star)
-			victim.apply_status_effect(/datum/status_effect/eldritch/cosmic)
+			victim.apply_status_effect(/datum/status_effect/eldritch/cosmic, src)
 		if(user)
 			log_combat(user, victim, collapse ? "обрушил созвездие на" : "притянул пульсом созвездия")
 	if(collapse)
@@ -414,6 +436,14 @@
 	effect_sprite = "emark7"
 	detonation_sound = 'modular_bluemoon/sound/heretic/cosmic_expansion.ogg'
 	detonation_visual = /obj/effect/temp_visual/heretic_path_feedback/cosmic_mark
+	var/datum/weakref/constellation_ref
+
+/datum/status_effect/eldritch/cosmic/on_creation(mob/living/new_owner, datum/eldritch_knowledge/base_cosmic/constellation)
+	if(!QDELETED(constellation))
+		constellation_ref = WEAKREF(constellation)
+	. = ..()
+	if(linked_alert)
+		linked_alert.desc = "Клинок Космоса или прибытие хозяина метки по Звёздной дороге активируют её: 10 ожогов и 15 урона выносливости. Держитесь дальше одной клетки от его звёзд. Метка исчезнет через 15 секунд."
 
 /datum/status_effect/eldritch/cosmic/on_effect()
 	owner.adjustStaminaLoss(15)
@@ -476,7 +506,7 @@
 /obj/effect/proc_holder/spell/self/cosmic/step
 	parent_type = /obj/effect/proc_holder/spell/pointed
 	name = "Звёздная дорога"
-	desc = "Стоя рядом со своей звездой, нажмите способность и щёлкните по другой видимой звезде своего созвездия. Заблокированная точка не принимает путешественника."
+	desc = "Стоя рядом со своей звездой, переместитесь к другой видимой звезде созвездия. Прибытие активирует ваши метки Космоса на врагах в одной клетке от выхода: 10 ожогов и 15 урона выносливости. Заблокированная точка не принимает путешественника."
 	clothes_req = FALSE
 	range = HERETIC_STAR_RANGE
 	action_icon = 'modular_bluemoon/icons/obj/heretic_actions.dmi'
@@ -591,24 +621,26 @@
 
 /datum/eldritch_knowledge/spell/cosmic_step
 	name = "Звёздная дорога"
-	desc = "Перемещайтесь от одной своей звезды к другой. Для входа нужно стоять не дальше одной клетки от звезды; выход должен быть свободен."
+	desc = "Перемещайтесь от одной своей звезды к другой. Для входа нужно стоять не дальше одной клетки от звезды; выход должен быть свободен. После изучения метки Космоса прибытие также активирует ваши метки на врагах в одной клетке от выхода."
 	cost = 1
 	route = PATH_COSMIC
 	spell_to_add = /obj/effect/proc_holder/spell/self/cosmic/step
 
 /datum/eldritch_knowledge/cosmic_mark
 	name = "Метка Космоса"
-	desc = "Хватка Мансуса и нити созвездия накладывают метку Космоса. Ваш клинок взрывает её, нанося 10 ожогов и 15 урона выносливости."
+	desc = "Хватка Мансуса и нити созвездия накладывают метку Космоса. Клинок или ваше прибытие по Звёздной дороге в одной клетке от жертвы взрывают метку: 10 ожогов и 15 урона выносливости. Уходите вдоль созвездия и возвращайтесь к отмеченным целям."
 	cost = 2
 	route = PATH_COSMIC
 
 /datum/eldritch_knowledge/cosmic_mark/on_mansus_grasp(atom/target, mob/user, proximity_flag, click_parameters)
-	if(!isliving(target))
+	var/datum/antagonist/heretic/heretic = IS_HERETIC(user)
+	var/datum/eldritch_knowledge/base_cosmic/knowledge = heretic?.get_knowledge(/datum/eldritch_knowledge/base_cosmic)
+	if(!proximity_flag || !knowledge || !isliving(target))
 		return FALSE
 	var/mob/living/victim = target
 	if(IS_HERETIC(victim) || IS_HERETIC_MONSTER(victim) || victim.check_magic_resistance())
 		return FALSE
-	victim.apply_status_effect(/datum/status_effect/eldritch/cosmic)
+	victim.apply_status_effect(/datum/status_effect/eldritch/cosmic, knowledge)
 	return TRUE
 
 /datum/eldritch_knowledge/cosmic_expansion
@@ -683,3 +715,4 @@
 #undef HERETIC_STAR_BASE_LIMIT
 #undef HERETIC_STAR_EXPANDED_LIMIT
 #undef HERETIC_STAR_ASCENDED_LIMIT
+#undef HERETIC_STAR_ARRIVAL_RADIUS

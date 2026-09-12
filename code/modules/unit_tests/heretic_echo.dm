@@ -9,8 +9,8 @@
 	var/mob/living/staying = allocate(/mob/living/carbon/human, get_step(center, EAST))
 	var/mob/living/dodging = allocate(/mob/living/carbon/human, get_step(center, NORTH))
 	TEST_ASSERT(echo.release(user), "Начального резонанса хватает на первую волну.")
-	TEST_ASSERT_EQUAL(echo.combat_resource, initial(echo.combat_resource) - 1, "Волна расходует единицу резонанса.")
-	TEST_ASSERT_EQUAL(staying.getBruteLoss(), 0, "Предупреждение само по себе не ранит.")
+	TEST_ASSERT_EQUAL(echo.combat_resource, initial(echo.combat_resource), "Первый удар возвращает потраченную единицу резонанса.")
+	TEST_ASSERT(abs(staying.getBruteLoss() - 12) <= DAMAGE_PRECISION, "Сплошная первая волна поражает цель сразу.")
 	TEST_ASSERT_EQUAL(length(echo.attacks), 1, "Волна хранится как одна отложенная атака.")
 	var/datum/heretic_echo_attack/attack = echo.attacks[1]
 	TEST_ASSERT(length(attack.warnings), "Каждая запланированная волна имеет видимое предупреждение.")
@@ -18,8 +18,8 @@
 	dodging.forceMove(get_step(center, NORTHEAST))
 	user.forceMove(get_step(center, SOUTHWEST))
 	attack.resolve()
-	TEST_ASSERT(staying.getBruteLoss() > 0, "Оставшийся на прежней клетке противник получает удар.")
-	TEST_ASSERT_EQUAL(dodging.getBruteLoss(), 0, "Ушедший на диагональ противник уклоняется.")
+	TEST_ASSERT(abs(staying.getBruteLoss() - 36) <= DAMAGE_PRECISION, "Оставшийся на прежней клетке получает первый удар и сильный повтор.")
+	TEST_ASSERT(abs(dodging.getBruteLoss() - 12) <= DAMAGE_PRECISION, "Ушедший на диагональ избегает сильного повтора.")
 	TEST_ASSERT_EQUAL(user.getBruteLoss(), 0, "Собственная волна не ранит создателя.")
 	TEST_ASSERT(QDELETED(attack), "Одиночная волна освобождает отложенную атаку.")
 	TEST_ASSERT_EQUAL(length(echo.attacks), 0, "Завершённая волна освобождает место в лимите.")
@@ -40,8 +40,8 @@
 	var/obj/structure/closet/crate/blocker = allocate(/obj/structure/closet/crate, get_step(center, EAST))
 	TEST_ASSERT(blocker.density, "Закрытый ящик перекрывает линию.")
 	attack.resolve()
-	TEST_ASSERT_EQUAL(victim.getBruteLoss(), 0, "Закрытая после предупреждения линия блокирует удар.")
-	TEST_ASSERT_EQUAL(victim.getStaminaLoss(), 0, "За преградой нет скрытого урона выносливости.")
+	TEST_ASSERT(abs(victim.getBruteLoss() - 12) <= DAMAGE_PRECISION, "Закрытая после первого удара линия блокирует сильный повтор.")
+	TEST_ASSERT(abs(victim.getStaminaLoss() - 10) <= DAMAGE_PRECISION, "Преграда блокирует урон выносливости повторного такта.")
 
 /// Открытая после предупреждения линия не добавляет в удар непомеченные клетки.
 /datum/unit_test/heretic_echo_opening_obstacle/Run()
@@ -75,12 +75,12 @@
 	var/mob/living/dead = allocate(/mob/living/carbon/human, get_step(center, NORTH))
 	dead.stat = DEAD
 	TEST_ASSERT(echo.release(user), "Волна может быть подготовлена рядом с защищёнными целями.")
-	TEST_ASSERT_EQUAL(protection.charges, 5, "Предупреждение не расходует антимагию.")
+	TEST_ASSERT_EQUAL(protection.charges, 4, "Первая волна тратит один заряд; предупреждение повтора не тратит следующий.")
 	var/datum/heretic_echo_attack/attack = echo.attacks[1]
 	attack.resolve()
 	TEST_ASSERT_EQUAL(protected.getBruteLoss(), 0, "Антимагия блокирует ушибы.")
 	TEST_ASSERT_EQUAL(protected.getStaminaLoss(), 0, "Антимагия блокирует урон выносливости.")
-	TEST_ASSERT_EQUAL(protection.charges, 4, "Удар расходует ровно один заряд.")
+	TEST_ASSERT_EQUAL(protection.charges, 3, "Каждый из двух тактов расходует ровно один заряд.")
 	TEST_ASSERT_EQUAL(ally.owner.current.getBruteLoss(), 0, "Другой еретик защищён от волны.")
 	TEST_ASSERT_EQUAL(hidden.getBruteLoss(), 0, "Волна не поражает содержимое контейнера.")
 	TEST_ASSERT_EQUAL(dead.getBruteLoss(), 0, "Волна не атакует трупы.")
@@ -147,9 +147,9 @@
 	TEST_ASSERT(echo.release(user), "Один залп захватывает прямую волну и повторы резонаторов.")
 	var/datum/heretic_echo_attack/attack = echo.attacks[1]
 	attack.resolve()
-	TEST_ASSERT_EQUAL(protection.charges, 4, "Три перекрывающиеся зоны расходуют один заряд защиты.")
+	TEST_ASSERT_EQUAL(protection.charges, 3, "Три перекрывающиеся зоны повтора расходуют один заряд после заряда первой волны.")
 	TEST_ASSERT_EQUAL(protected.getBruteLoss(), 0, "Все составляющие залпа заблокированы одной проверкой защиты.")
-	TEST_ASSERT(abs(victim.getBruteLoss() - 24) < 0.001, "Попадания одного залпа выбирают сильнейший урон вместо сложения.")
+	TEST_ASSERT(abs(victim.getBruteLoss() - 36) <= DAMAGE_PRECISION, "Первый удар и повтор наносят 36; перекрытия повторов не складываются.")
 
 /// Смена тела удаляет старые волны и конструкции, сохраняя прогресс знания.
 /datum/unit_test/heretic_echo_body_transfer_cleanup/Run()
@@ -225,9 +225,9 @@
 	TEST_ASSERT(echo.release(user), "Волна запускается обычным игровым вызовом.")
 	var/datum/heretic_echo_attack/attack = echo.attacks[1]
 	var/list/warnings = attack.warnings.Copy()
-	TEST_ASSERT_EQUAL(victim.getBruteLoss(), 0, "Урон не предшествует предупреждению.")
+	TEST_ASSERT(abs(victim.getBruteLoss() - 12) <= DAMAGE_PRECISION, "Первый такт ударяет сразу, пока сильный повтор ещё предупреждает.")
 	TEST_ASSERT(wait_for_qdeleted(attack, 4 SECONDS), "Настоящий таймер завершает одиночный удар.")
-	TEST_ASSERT(victim.getBruteLoss() > 0, "Таймер действительно наносит урон оставшейся цели.")
+	TEST_ASSERT(abs(victim.getBruteLoss() - 36) <= DAMAGE_PRECISION, "Таймер действительно добавляет сильный повтор к первому удару.")
 	TEST_ASSERT_EQUAL(length(echo.attacks), 0, "В списке не остаётся завершённая атака.")
 	for(var/obj/effect/warning as anything in warnings)
 		TEST_ASSERT(QDELETED(warning), "Таймер снимает предупреждения после удара.")
@@ -314,8 +314,8 @@
 	TEST_ASSERT(echo.release(user), "Следующая волна использует новый рисунок.")
 	var/datum/heretic_echo_attack/second_attack = echo.attacks[1]
 	second_attack.resolve()
-	TEST_ASSERT(diagonal.getBruteLoss() > 0, "Новая волна поражает диагональную клетку.")
-	TEST_ASSERT_EQUAL(cardinal.getBruteLoss(), cardinal_damage, "Новая волна не поражает прежний крест.")
+	TEST_ASSERT(abs(diagonal.getBruteLoss() - 36) <= DAMAGE_PRECISION, "После настройки диагональная цель получает и первую волну, и сильный повтор.")
+	TEST_ASSERT(abs(cardinal.getBruteLoss() - cardinal_damage - 12) <= DAMAGE_PRECISION, "После настройки сплошной первый такт остаётся, но диагональный повтор не поражает прежний крест.")
 	var/datum/antagonist/heretic/other = allocate_heretic(get_step(center, SOUTH))
 	other.selected_path = PATH_ECHO
 	other.gain_knowledge(/datum/eldritch_knowledge/base_echo)
@@ -347,7 +347,7 @@
 	TEST_ASSERT(warned_victim, "Точка резонатора действительно была включена в предупреждение.")
 	qdel(resonator)
 	attack.resolve()
-	TEST_ASSERT_EQUAL(victim.getBruteLoss(), 0, "Разрушение отменяет подготовленный повтор, не оставляя невидимого урона.")
+	TEST_ASSERT(abs(victim.getBruteLoss() - 12) <= DAMAGE_PRECISION, "Разрушение отменяет подготовленный повтор; остаётся только урон первой волны.")
 
 /// Крещендо чередует три предупреждённых рисунка вокруг неизменной точки.
 /datum/unit_test/heretic_echo_crescendo_sequence/Run()
@@ -365,9 +365,11 @@
 	var/list/warnings = attack.warnings.Copy()
 	var/mob/living/victim = allocate(/mob/living/carbon/human, get_step(center, NORTHEAST))
 	var/mob/living/staying = allocate(/mob/living/carbon/human, get_step(center, EAST))
+	var/mob/living/outer = allocate(/mob/living/carbon/human, get_step(get_step(get_step(center, EAST), EAST), EAST))
 	user.forceMove(get_step(center, SOUTHWEST))
 	attack.resolve()
 	TEST_ASSERT(abs(staying.getBruteLoss() - 26) < 0.001, "Оставшаяся на кресте цель получает рассчитанный урон первого такта.")
+	TEST_ASSERT(abs(outer.getBruteLoss() - 26) <= DAMAGE_PRECISION, "Крещендо достигает третьей клетки первым тактом.")
 	TEST_ASSERT_EQUAL(victim.getBruteLoss(), 0, "На первом такте безопасна диагональ.")
 	TEST_ASSERT_EQUAL(attack.pulse_index, 2, "После креста начинается предупреждение диагоналей.")
 	for(var/obj/effect/warning as anything in warnings)
@@ -380,6 +382,7 @@
 	victim.forceMove(center)
 	attack.resolve()
 	TEST_ASSERT_EQUAL(victim.getBruteLoss(), 0, "Центр безопасен от внешнего кольца.")
+	TEST_ASSERT(abs(outer.getBruteLoss() - 52) <= DAMAGE_PRECISION, "Последнее кольцо Крещендо проходит по третьему радиусу.")
 	TEST_ASSERT(QDELETED(attack), "Три такта завершают последовательность.")
 
 /// Полный запас пассивки и вознесения сохраняется при переносе разума.
@@ -422,26 +425,35 @@
 	QDEL_NULL(role_to_remove)
 
 /datum/unit_test/heretic_echo_damage_cleanup/Run()
-	var/datum/antagonist/heretic/heretic = allocate_heretic()
-	heretic.selected_path = PATH_ECHO
-	heretic.gain_knowledge(/datum/eldritch_knowledge/base_echo)
-	role_to_remove = heretic
-	var/mob/living/user = heretic.owner.current
-	var/datum/eldritch_knowledge/base_echo/echo = heretic.get_knowledge(/datum/eldritch_knowledge/base_echo)
-	var/turf/target_tile = get_step(user, EAST)
-	var/mob/living/victim = allocate(/mob/living/carbon/human, target_tile)
-	victim.setToxLoss(victim.health - (HEALTH_THRESHOLD_DEAD + 5), forced = TRUE)
-	TEST_ASSERT(victim.stat != DEAD, "Первая жертва пока жива.")
-	RegisterSignal(victim, COMSIG_MOB_DEATH, PROC_REF(on_victim_death))
-	var/mob/living/bystander = allocate(/mob/living/carbon/human, target_tile)
-	TEST_ASSERT(echo.release(user), "Перед снятием роли подготовлен настоящий залп.")
-	var/datum/heretic_echo_attack/attack = echo.attacks[1]
-	attack.resolve()
-	TEST_ASSERT_EQUAL(victim.stat, DEAD, "Урон первой цели запускает обработчик смерти.")
-	TEST_ASSERT(QDELETED(heretic) && QDELETED(attack), "Обработчик удаляет роль вместе с атакой.")
-	TEST_ASSERT_EQUAL(bystander.getBruteLoss(), 0, "После удаления источника залп не ранит следующую цель.")
-	TEST_ASSERT(!victim.has_status_effect(/datum/status_effect/heretic_echo_ringing), "Удалённый источник не оставляет новый статус после урона.")
-	UnregisterSignal(victim, COMSIG_MOB_DEATH)
+	for(var/immediate in list(TRUE, FALSE))
+		var/datum/antagonist/heretic/heretic = allocate_heretic()
+		heretic.selected_path = PATH_ECHO
+		heretic.gain_knowledge(/datum/eldritch_knowledge/base_echo)
+		role_to_remove = heretic
+		var/mob/living/user = heretic.owner.current
+		var/datum/eldritch_knowledge/base_echo/echo = heretic.get_knowledge(/datum/eldritch_knowledge/base_echo)
+		var/turf/target_tile = get_step(user, EAST)
+		var/mob/living/victim = allocate(/mob/living/carbon/human, target_tile)
+		var/mob/living/bystander = allocate(/mob/living/carbon/human, target_tile)
+		if(immediate)
+			victim.setToxLoss(victim.health - (HEALTH_THRESHOLD_DEAD + 5), forced = TRUE)
+		RegisterSignal(victim, COMSIG_MOB_DEATH, PROC_REF(on_victim_death))
+		TEST_ASSERT(echo.release(user), "Запускается настоящая звуковая волна.")
+		var/datum/heretic_echo_attack/attack
+		if(!immediate)
+			attack = echo.attacks[1]
+			victim.setToxLoss(victim.getToxLoss() + victim.health - (HEALTH_THRESHOLD_DEAD + 5), forced = TRUE)
+			attack.resolve()
+		TEST_ASSERT_EQUAL(victim.stat, DEAD, "Урон первой цели запускает обработчик смерти.")
+		TEST_ASSERT(QDELETED(heretic), "Обработчик удаляет роль.")
+		TEST_ASSERT_EQUAL(length(echo.attacks), 0, "Удалённый источник не оставляет ни текущий, ни отложенный такт.")
+		if(attack)
+			TEST_ASSERT(QDELETED(attack), "Удаление роли отменяет уже подготовленный повтор.")
+		TEST_ASSERT(abs(bystander.getBruteLoss() - (immediate ? 0 : 12)) <= DAMAGE_PRECISION, "После удаления источника текущий такт не ранит следующую цель.")
+		TEST_ASSERT(!victim.has_status_effect(/datum/status_effect/heretic_echo_ringing), "Удалённый источник не оставляет новый статус после урона.")
+		UnregisterSignal(victim, COMSIG_MOB_DEATH)
+		qdel(victim)
+		qdel(bystander)
 
 /// Знания безопасно снимаются без тела после удаления разума.
 /datum/unit_test/heretic_echo_unbound_cleanup/Run()
@@ -463,10 +475,12 @@
 	var/turf/center = get_step(user, EAST)
 	var/mob/living/victim = allocate(/mob/living/carbon/human, center)
 	var/mob/living/nearby = allocate(/mob/living/carbon/human, get_step(center, EAST))
+	var/mob/living/diagonal = allocate(/mob/living/carbon/human, get_step(center, NORTHEAST))
 	echo.combat_resource = 0
 	TEST_ASSERT(echo.refrain(user, center), "Припев работает без резонанса и предварительной метки.")
 	TEST_ASSERT(abs(victim.getBruteLoss() - 18) < 0.01, "Цель получает первый удар сразу.")
-	TEST_ASSERT_EQUAL(nearby.getBruteLoss(), 0, "Соседняя клетка получает только предупреждение.")
+	TEST_ASSERT(abs(nearby.getBruteLoss() - 18) <= DAMAGE_PRECISION, "Широкий первый такт поражает и соседнюю клетку.")
+	TEST_ASSERT(abs(diagonal.getBruteLoss() - 18) <= DAMAGE_PRECISION, "Припев покрывает и диагонали выбранной области 3×3.")
 	TEST_ASSERT_EQUAL(echo.combat_resource, 1, "Первый удар возвращает резонанс для базовой волны.")
 	var/datum/heretic_echo_attack/attack = echo.attacks[1]
 	TEST_ASSERT_EQUAL(attack.pulse_index, 2, "После первого удара остаётся отдельный повтор.")
@@ -474,7 +488,7 @@
 	victim.forceMove(get_step(center, NORTHEAST))
 	attack.resolve()
 	TEST_ASSERT(abs(victim.getBruteLoss() - 18) < 0.01, "Выход на диагональ позволяет избежать повтора.")
-	TEST_ASSERT(abs(nearby.getBruteLoss() - 22) < 0.01, "Оставшийся в кресте противник получает полный повтор.")
+	TEST_ASSERT(abs(nearby.getBruteLoss() - 40) <= DAMAGE_PRECISION, "Оставшийся в кресте получает первый удар и полный повтор.")
 	TEST_ASSERT(QDELETED(attack), "Два такта полностью освобождают атаку.")
 
 /// Первый удар и повтор отдельно проверяют антимагию и исключают союзников.
@@ -517,3 +531,89 @@
 	COOLDOWN_RESET(echo, ascended_resonance)
 	echo.on_life(user)
 	TEST_ASSERT_EQUAL(echo.combat_resource, 0, "Недееспособный владелец не восстанавливает боевой запас.")
+
+/// Сплошной первый такт покрывает края области, а расширенный повтор наказывает оставшегося в трёх клетках.
+/datum/unit_test/heretic_echo_wide_opening/Run()
+	var/turf/center = get_step(get_step(run_loc_floor_bottom_left, NORTHEAST), NORTHEAST)
+	var/datum/antagonist/heretic/heretic = allocate_heretic(center)
+	heretic.selected_path = PATH_ECHO
+	heretic.gain_knowledge(/datum/eldritch_knowledge/base_echo)
+	var/mob/living/user = heretic.owner.current
+	var/datum/eldritch_knowledge/base_echo/echo = heretic.get_knowledge(/datum/eldritch_knowledge/base_echo)
+	var/mob/living/side = allocate(/mob/living/carbon/human, get_step(get_step(center, EAST), NORTHEAST))
+	var/mob/living/corner = allocate(/mob/living/carbon/human, get_step(get_step(center, NORTHEAST), NORTHEAST))
+	var/mob/living/outer = allocate(/mob/living/carbon/human, get_step(get_step(get_step(center, EAST), EAST), EAST))
+	TEST_ASSERT(echo.release(user), "Звуковая волна работает без резонаторов и лиры.")
+	TEST_ASSERT(abs(side.getBruteLoss() - 12) <= DAMAGE_PRECISION, "Первый такт покрывает край вне креста и диагоналей.")
+	TEST_ASSERT(abs(corner.getBruteLoss() - 12) <= DAMAGE_PRECISION, "Первый такт покрывает угол области 5×5.")
+	TEST_ASSERT_EQUAL(outer.getBruteLoss(), 0, "Сильный дальний отзвук ещё не ударил.")
+	TEST_ASSERT_EQUAL(echo.combat_resource, 2, "Несколько целей возвращают только одну потраченную единицу.")
+	side.forceMove(get_step(center, SOUTHEAST))
+	var/datum/heretic_echo_attack/attack = echo.attacks[1]
+	attack.resolve()
+	TEST_ASSERT(abs(side.getBruteLoss() - 12) <= DAMAGE_PRECISION, "Подвижная цель может избежать сильного повтора.")
+	TEST_ASSERT(abs(outer.getBruteLoss() - 24) <= DAMAGE_PRECISION, "Отзвук достигает третьей клетки.")
+	TEST_ASSERT(!HAS_TRAIT(outer, TRAIT_MOBILITY_NOUSE), "Попадание только отзвука не вызывает контузию.")
+
+/// Стена и закрытый диагональный угол гасят широкую первую волну без утечки на край области.
+/datum/unit_test/heretic_echo_wide_opening_walls/Run()
+	var/turf/center = get_step(get_step(run_loc_floor_bottom_left, NORTHEAST), NORTHEAST)
+	var/datum/antagonist/heretic/heretic = allocate_heretic(center)
+	heretic.selected_path = PATH_ECHO
+	heretic.gain_knowledge(/datum/eldritch_knowledge/base_echo)
+	var/mob/living/user = heretic.owner.current
+	var/datum/eldritch_knowledge/base_echo/echo = heretic.get_knowledge(/datum/eldritch_knowledge/base_echo)
+	var/obj/blocker = allocate(/obj, get_step(center, EAST))
+	blocker.density = TRUE
+	var/mob/living/behind = allocate(/mob/living/carbon/human, get_step(get_step(center, EAST), EAST))
+	var/mob/living/corner = allocate(/mob/living/carbon/human, get_step(get_step(center, NORTHEAST), NORTHEAST))
+	var/mob/living/open = allocate(/mob/living/carbon/human, get_step(get_step(center, NORTH), NORTH))
+	TEST_ASSERT(echo.release(user), "Свободная часть области принимает звуковую волну.")
+	TEST_ASSERT_EQUAL(behind.getBruteLoss(), 0, "Плотная преграда блокирует прямой участок первой волны.")
+	TEST_ASSERT_EQUAL(corner.getBruteLoss(), 0, "Первая волна не просачивается через закрытый диагональный угол.")
+	TEST_ASSERT(abs(open.getBruteLoss() - 12) <= DAMAGE_PRECISION, "Открытая часть области получает полезный первый удар.")
+	TEST_ASSERT(!corner.has_status_effect(/datum/status_effect/heretic_echo_ringing), "За закрытым углом нет скрытого Остаточного звона.")
+
+/// Контузия останавливает одиночный выстрел, продолжение очереди и автоогонь без расхода патронов.
+/datum/unit_test/heretic_echo_gun_interruption/Run()
+	var/datum/antagonist/heretic/heretic = allocate_heretic()
+	heretic.selected_path = PATH_ECHO
+	heretic.gain_knowledge(/datum/eldritch_knowledge/base_echo)
+	var/mob/living/user = heretic.owner.current
+	var/datum/eldritch_knowledge/base_echo/echo = heretic.get_knowledge(/datum/eldritch_knowledge/base_echo)
+	var/mob/living/shooter = allocate(/mob/living/carbon/human, get_step(user, EAST))
+	var/obj/item/gun/ballistic/automatic/c20r/unrestricted/gun = allocate(/obj/item/gun/ballistic/automatic/c20r/unrestricted, get_turf(shooter))
+	TEST_ASSERT(shooter.put_in_active_hand(gun), "Стрелок держит заряженное оружие.")
+	gun.burst_size = 1
+	var/turf/target = get_step(get_step(shooter, EAST), EAST)
+	var/ammo_before = gun.get_ammo()
+	TEST_ASSERT(ammo_before > 2, "Оружие действительно заряжено.")
+	gun.last_fire = world.time - gun.fire_delay - 1
+	gun.process_fire(target, shooter)
+	TEST_ASSERT_EQUAL(gun.get_ammo(), ammo_before - 1, "Без контузии настоящий выстрел расходует патрон.")
+	ammo_before = gun.get_ammo()
+	var/datum/status_effect/heretic_echo_dissonance/dissonance = shooter.apply_status_effect(/datum/status_effect/heretic_echo_dissonance, echo)
+	TEST_ASSERT(!QDELETED(dissonance), "Стрелок получает контузию.")
+	gun.last_fire = world.time - gun.fire_delay - 1
+	gun.process_fire(target, shooter)
+	TEST_ASSERT_EQUAL(gun.get_ammo(), ammo_before, "Контузия останавливает прямой вызов стрельбы, включая отложенный выстрел второй руки.")
+	gun.firing = TRUE
+	TEST_ASSERT(!gun.do_burst_shot(shooter, target, iteration = 2), "Контузия обрывает уже начатую очередь.")
+	TEST_ASSERT(!gun.firing, "Очередь не остаётся активной.")
+	TEST_ASSERT_EQUAL(gun.get_ammo(), ammo_before, "Прерванная очередь сохраняет патроны.")
+	var/datum/component/automatic_fire/automatic = gun.GetComponent(/datum/component/automatic_fire)
+	if(!automatic)
+		automatic = gun.AddComponent(/datum/component/automatic_fire)
+	automatic.shooter = shooter
+	automatic.target = target
+	automatic.target_loc = target
+	automatic.autofire_stat = AUTOFIRE_STAT_FIRING
+	var/shot_result = automatic.process_shot()
+	automatic.autofire_stat = AUTOFIRE_STAT_IDLE
+	TEST_ASSERT(!shot_result, "Автоогонь приостанавливает выстрелы на время контузии.")
+	TEST_ASSERT_EQUAL(gun.get_ammo(), ammo_before, "Автоогонь не расходует патроны во время контузии.")
+	TEST_ASSERT(shooter.is_holding(gun), "Прерывание стрельбы не выбивает оружие из рук.")
+	qdel(dissonance)
+	shot_result = gun.do_autofire(gun, target, shooter, null)
+	TEST_ASSERT(shot_result, "После контузии автоогонь снова выпускает выстрел.")
+	TEST_ASSERT_EQUAL(gun.get_ammo(), ammo_before - 1, "После восстановления настоящий выстрел расходует патрон.")

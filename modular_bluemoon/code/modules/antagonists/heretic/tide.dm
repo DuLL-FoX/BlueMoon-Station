@@ -8,6 +8,8 @@
 #define HERETIC_TIDE_PUDDLE_TIME (15 SECONDS)
 #define HERETIC_TIDE_PRESSURE_INTERVAL (12 SECONDS)
 #define HERETIC_TIDE_COLLISION_DAMAGE 8
+#define HERETIC_TIDE_HARPOON_STAMINA 10
+#define HERETIC_TIDE_HARPOON_DAMAGE 5
 
 /datum/heretic_path/tide
 	id = PATH_TIDE
@@ -50,6 +52,7 @@
 	var/tide_generation = 0
 	var/static/list/water_sources = typecacheof(list(/obj/structure/sink, /obj/machinery/shower, /obj/structure/reagent_dispensers/watertank))
 	COOLDOWN_DECLARE(ascended_pressure)
+	COOLDOWN_DECLARE(harpoon_recovery)
 
 /datum/eldritch_knowledge/base_tide/on_body_gain(mob/living/user)
 	if(!user?.mind || tide_body == user)
@@ -311,7 +314,7 @@
 
 /atom/movable/screen/alert/status_effect/heretic_drenched
 	name = "Вода Пучины"
-	desc = "Чужая вода стекает с одежды. Усиленный клинок Пучины наносит вам ещё 5 ушибов. Вода исчезнет через 8 секунд после последнего попадания магии."
+	desc = "Чужая вода стекает с одежды. Усиленный гарпун наносит вам ещё 5 ушибов, а хозяин воды может вернуть себе давление и немного выносливости. Вода исчезнет через 8 секунд после последнего попадания магии."
 	icon = 'modular_bluemoon/icons/obj/heretic_alerts.dmi'
 	icon_state = "sigil_tide"
 
@@ -634,7 +637,7 @@
 
 /datum/eldritch_knowledge/tide_upgrade
 	name = "Гарпун утопленника"
-	desc = "Попадания гарпунным клинком по противнику, покрытому водой Пучины, дополнительно наносят 5 ушибов. Вода остаётся после хватки, Отлива, волн и водоворота."
+	desc = "Гарпун наносит ещё 5 ушибов при каждом попадании по намокшему противнику. Раз в 6 секунд удар по цели с вашей водой Пучины дополнительно возвращает 1 давление и восстанавливает вам 10 выносливости. Намокание и обычный сбор давления от клинка сохраняются."
 	gain_text = "Лезвие узнало тех, кого однажды коснулось море."
 	cost = 2
 	route = PATH_TIDE
@@ -645,8 +648,18 @@
 	if(!proximity_flag || !tide?.can_use(user) || !heretic_can_affect(user, target, chargecost = 0))
 		return
 	var/mob/living/victim = target
-	if(victim.has_status_effect(/datum/status_effect/heretic_drenched))
-		victim.adjustBruteLoss(5)
+	var/datum/status_effect/heretic_drenched/water = victim.has_status_effect(/datum/status_effect/heretic_drenched)
+	if(!water)
+		return
+	victim.adjustBruteLoss(HERETIC_TIDE_HARPOON_DAMAGE)
+	if(!COOLDOWN_FINISHED(tide, harpoon_recovery) || water.tide_ref?.resolve() != tide)
+		return
+	COOLDOWN_START(tide, harpoon_recovery, HERETIC_TIDE_HARVEST_TIME)
+	tide.gain_combat_resource()
+	var/mob/living/wielder = user
+	wielder.adjustStaminaLoss(-HERETIC_TIDE_HARPOON_STAMINA)
+	new /obj/effect/temp_visual/heretic_tide/grasp(get_turf(victim))
+	playsound(victim, 'modular_bluemoon/sound/heretic/tide_grasp.ogg', 30, TRUE)
 
 /datum/eldritch_knowledge/spell/tide_well
 	name = "Чёрный водоворот"
@@ -716,3 +729,5 @@
 #undef HERETIC_TIDE_PUDDLE_TIME
 #undef HERETIC_TIDE_PRESSURE_INTERVAL
 #undef HERETIC_TIDE_COLLISION_DAMAGE
+#undef HERETIC_TIDE_HARPOON_STAMINA
+#undef HERETIC_TIDE_HARPOON_DAMAGE

@@ -134,8 +134,13 @@
 	if(world.time >= next_strike_tempo)
 		gain_combat_resource()
 		next_strike_tempo = world.time + 4 SECONDS
+	try_riposte(target, user)
+
+/datum/eldritch_knowledge/base_blade/proc/try_riposte(mob/living/target, mob/living/user)
+	if(!held_blade(user) || !user.Adjacent(target) || !heretic_can_affect(user, target, chargecost = 0))
+		return FALSE
 	if(world.time >= riposte_until || riposte_target?.resolve() != target)
-		return
+		return FALSE
 	riposte_target = null
 	riposte_until = 0
 	QDEL_NULL(opening_effect)
@@ -156,6 +161,7 @@
 	new /obj/effect/temp_visual/dir_setting/heretic_slash(get_turf(user), get_dir(user, victim), TRUE)
 	playsound(victim, 'sound/weapons/rapierhit.ogg', 55, TRUE)
 	user.visible_message(span_danger("[user] отвечает точным выпадом по [victim]!"))
+	return TRUE
 
 /datum/status_effect/heretic_parry
 	id = "heretic_parry"
@@ -292,7 +298,7 @@
 
 /datum/eldritch_knowledge/spell/blade_lunge
 	name = "Шаг между ударами"
-	desc = "Открывает выпад: за 1 Темп сблизьтесь с видимой целью на расстоянии до пяти клеток и нанесите 20 ушибов и 20 урона выносливости. Стены и закрытые двери преграждают путь. Перезарядка 10 секунд."
+	desc = "Открывает выпад: за 1 Темп сблизьтесь с видимой целью на расстоянии до пяти клеток и нанесите 20 ушибов и 20 урона выносливости. По противнику, чью атаку вы только что парировали, выпад также проводит ответный удар. Стены и закрытые двери преграждают путь. Перезарядка 10 секунд."
 	route = PATH_BLADE
 	cost = 1
 	spell_to_add = /obj/effect/proc_holder/spell/pointed/heretic_lunge
@@ -332,7 +338,7 @@
 
 /datum/eldritch_knowledge/blade_upgrade
 	name = "Точная линия"
-	desc = "Ответный удар после парирования наносит 28 дополнительных ушибов вместо 18. Темп не расходуется; ответ действует против последнего нападавшего в течение пяти секунд."
+	desc = "Ответный удар после парирования наносит 28 дополнительных ушибов вместо 18. Его проводит следующее попадание клинком или Выпад по последнему нападавшему в течение пяти секунд. Бонус не расходует Темп; сам Выпад по-прежнему стоит 1 Темп."
 	route = PATH_BLADE
 	cost = 2
 
@@ -501,7 +507,7 @@
 
 /obj/effect/proc_holder/spell/pointed/heretic_lunge
 	name = "Выпад"
-	desc = "За 1 Темп сблизьтесь с противником до пяти клеток по свободному пути: 20 ушибов и 20 урона выносливости. Требуется собственный тёмный клинок в руке."
+	desc = "За 1 Темп сблизьтесь с противником до пяти клеток по свободному пути: 20 ушибов и 20 урона выносливости. Выпад по только что парированному противнику также расходует и проводит ответный удар. Требуется собственный тёмный клинок в руке."
 	clothes_req = FALSE
 	charge_max = 10 SECONDS
 	range = 5
@@ -554,5 +560,6 @@
 	knowledge.duel_target = WEAKREF(victim)
 	victim.adjustBruteLoss(20)
 	victim.adjustStaminaLoss(20)
+	knowledge.try_riposte(victim, user)
 	new /obj/effect/temp_visual/dir_setting/heretic_slash(get_turf(user), get_dir(user, victim))
 	playsound(victim, 'sound/weapons/rapierhit.ogg', 50, TRUE)

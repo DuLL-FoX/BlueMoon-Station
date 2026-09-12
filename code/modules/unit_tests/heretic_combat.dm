@@ -136,7 +136,8 @@
 	qdel(protection)
 	hand = allocate(/obj/item/melee/touch_attack/grasp_of_decay)
 	hand.afterattack(protected, user, TRUE)
-	TEST_ASSERT(protected.AmountKnockdown() > 0 && protected.AmountKnockdown() <= 2 SECONDS, "Успешное касание сбивает не дольше двух секунд.")
+	var/datum/status_effect/incapacitating/knockdown/knockdown = protected.IsKnockdown()
+	TEST_ASSERT(knockdown && knockdown.duration > world.time && knockdown.duration <= world.time + 2 SECONDS, "Успешное касание сбивает не дольше двух секунд.")
 	TEST_ASSERT(protected.has_status_effect(/datum/status_effect/corrosion_curse/lesser), "После падения остаётся распад.")
 
 /mob/living/carbon/human/heretic_decay_probe
