@@ -146,6 +146,100 @@
 	TEST_ASSERT(QDELETED(second), "Обычный урон тоже разрушает преграду.")
 	TEST_ASSERT_EQUAL(length(glass.barriers), 0, "Разрушенные преграды освобождают предел.")
 
+/// Отражения расходуют прочность даже без урона и не восстанавливаются закалкой.
+/datum/unit_test/heretic_glass_reflection_budget/Run()
+	var/datum/antagonist/heretic/heretic = allocate_heretic()
+	heretic.selected_path = PATH_GLASS
+	heretic.gain_knowledge(/datum/eldritch_knowledge/base_glass)
+	heretic.gain_knowledge(/datum/eldritch_knowledge/spell/glass_barrier)
+	var/mob/living/user = heretic.owner.current
+	var/datum/eldritch_knowledge/base_glass/glass = heretic.get_knowledge(/datum/eldritch_knowledge/base_glass)
+	var/obj/structure/heretic_glass_barrier/barrier = glass.create_barrier(user, get_step(user, EAST))
+	var/obj/item/projectile/energy/shot = allocate(/obj/item/projectile/energy, get_turf(barrier))
+	shot.setAngle(37)
+	shot.range = 12
+	shot.decayedRange = 50
+	TEST_ASSERT_EQUAL(barrier.bullet_act(shot), BULLET_ACT_FORCE_PIERCE, "Энергетический выстрел продолжает полёт после отражения.")
+	TEST_ASSERT_EQUAL(shot.Angle, 217, "Возврат сохраняет обратное направление между сторонами света.")
+	TEST_ASSERT_EQUAL(shot.range, 7, "Отражение сокращает оставшуюся дальность, не восстанавливая её.")
+	TEST_ASSERT_EQUAL(shot.decayedRange, 7, "Следующее отражение не вернёт исходную дальность.")
+	TEST_ASSERT_EQUAL(barrier.obj_integrity, 30, "Даже безвредный выстрел снимает 15 прочности.")
+	TEST_ASSERT_EQUAL(barrier.reflections_left, 1, "Первый возврат расходует одно отражение.")
+	heretic.gain_knowledge(/datum/eldritch_knowledge/glass_temper)
+	TEST_ASSERT_EQUAL(barrier.reflections_left, 1, "Закалка не восстанавливает отражения.")
+	TEST_ASSERT_EQUAL(barrier.obj_integrity, 45, "Закалка сохраняет полученный износ.")
+	shot = allocate(/obj/item/projectile/energy, get_turf(barrier))
+	TEST_ASSERT_EQUAL(barrier.bullet_act(shot), BULLET_ACT_FORCE_PIERCE, "Второй выстрел тоже отражается.")
+	TEST_ASSERT_EQUAL(barrier.reflections_left, 0, "Бюджет отражений исчерпан.")
+	shot = allocate(/obj/item/projectile/energy, get_turf(barrier))
+	TEST_ASSERT_NOTEQUAL(barrier.bullet_act(shot), BULLET_ACT_FORCE_PIERCE, "Третий выстрел обрабатывается обычной преградой.")
+	TEST_ASSERT(!shot.ignore_source_check, "Третий выстрел не получает свойства отражённого.")
+
+/// Пули, запрет отражения и истёкший срок преграды сохраняют обычное попадание.
+/datum/unit_test/heretic_glass_reflection_exclusions/Run()
+	var/datum/antagonist/heretic/heretic = allocate_heretic()
+	heretic.selected_path = PATH_GLASS
+	heretic.gain_knowledge(/datum/eldritch_knowledge/base_glass)
+	heretic.gain_knowledge(/datum/eldritch_knowledge/spell/glass_barrier)
+	var/mob/living/user = heretic.owner.current
+	var/datum/eldritch_knowledge/base_glass/glass = heretic.get_knowledge(/datum/eldritch_knowledge/base_glass)
+	var/obj/structure/heretic_glass_barrier/barrier = glass.create_barrier(user, get_step(user, EAST))
+	var/obj/item/projectile/bullet/bullet = allocate(/obj/item/projectile/bullet, get_turf(barrier))
+	bullet.damage = 10
+	bullet.is_reflectable = TRUE
+	TEST_ASSERT_NOTEQUAL(barrier.bullet_act(bullet), BULLET_ACT_FORCE_PIERCE, "Даже отражаемая пуля не возвращается стеклом.")
+	TEST_ASSERT_EQUAL(barrier.obj_integrity, 35, "Пуля наносит обычный урон преграде.")
+	var/obj/item/projectile/beam/beam = allocate(/obj/item/projectile/beam, get_turf(barrier))
+	beam.is_reflectable = FALSE
+	TEST_ASSERT_NOTEQUAL(barrier.bullet_act(beam), BULLET_ACT_FORCE_PIERCE, "Явный запрет отражения соблюдается.")
+	TEST_ASSERT_EQUAL(barrier.obj_integrity, 15, "Неотражаемый луч повреждает стекло.")
+	barrier.expires_at = world.time
+	var/obj/item/projectile/energy/shot = allocate(/obj/item/projectile/energy, get_turf(barrier))
+	TEST_ASSERT_NOTEQUAL(barrier.bullet_act(shot), BULLET_ACT_FORCE_PIERCE, "Истёкшая преграда не отражает до следующего process.")
+	TEST_ASSERT_EQUAL(barrier.reflections_left, 2, "Обычные попадания не расходуют отражения.")
+
+/datum/unit_test/heretic_glass_reflection_flight
+	var/instant_shot = FALSE
+	var/fragile_barrier = FALSE
+
+/// Реальный выстрел возвращается стрелку, теряет наведение и не задевает укрытого еретика.
+/datum/unit_test/heretic_glass_reflection_flight/Run()
+	var/datum/antagonist/heretic/heretic = allocate_heretic()
+	heretic.selected_path = PATH_GLASS
+	heretic.gain_knowledge(/datum/eldritch_knowledge/base_glass)
+	heretic.gain_knowledge(/datum/eldritch_knowledge/spell/glass_barrier)
+	var/mob/living/user = heretic.owner.current
+	var/datum/eldritch_knowledge/base_glass/glass = heretic.get_knowledge(/datum/eldritch_knowledge/base_glass)
+	var/obj/structure/heretic_glass_barrier/barrier = glass.create_barrier(user, get_step(get_step(user, EAST), EAST))
+	if(fragile_barrier)
+		barrier.take_damage(40, BRUTE, sound_effect = FALSE)
+	var/mob/living/carbon/human/shooter = allocate(/mob/living/carbon/human, get_step(get_step(barrier, EAST), EAST))
+	var/obj/item/projectile/beam/shot = allocate(/obj/item/projectile/beam, get_turf(shooter))
+	shot.firer = shooter
+	shot.hitscan = instant_shot
+	shot.ricochet_chance = 0
+	shot.preparePixelProjectile(user, shooter)
+	shot.set_homing_target(user)
+	shot.fire()
+	for(var/step_index in 1 to 8)
+		if(QDELETED(shot))
+			break
+		shot.process(1)
+	TEST_ASSERT(QDELETED(shot), "Выстрел завершает полёт после обратного попадания.")
+	TEST_ASSERT(abs(shooter.getFireLoss() - 20) < DAMAGE_PRECISION, "Исходный стрелок получает полный урон отражённого луча.")
+	TEST_ASSERT_EQUAL(user.getFireLoss(), 0, "Преграда защищает еретика за собой.")
+	if(fragile_barrier)
+		TEST_ASSERT(QDELETED(barrier), "Смертельный износ разрушает преграду, сохраняя последний возврат.")
+	else
+		TEST_ASSERT_EQUAL(barrier.obj_integrity, 25, "Отражение снимает прочность в размере урона луча.")
+		TEST_ASSERT_EQUAL(barrier.reflections_left, 1, "Реальное столкновение расходует только одно отражение.")
+
+/datum/unit_test/heretic_glass_reflection_flight/hitscan
+	instant_shot = TRUE
+
+/datum/unit_test/heretic_glass_reflection_flight/shattering
+	fragile_barrier = TRUE
+
 /// Заклинание размещает и поворачивает реальные узлы, а линза расщепляет ближайший собственный луч.
 /datum/unit_test/heretic_glass_prism/Run()
 	var/turf/center = get_step(get_step(run_loc_floor_bottom_left, EAST), NORTH)

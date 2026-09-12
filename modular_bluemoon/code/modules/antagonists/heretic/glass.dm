@@ -6,13 +6,15 @@
 #define HERETIC_GLASS_BEAM_DAMAGE 30
 #define HERETIC_GLASS_SPLIT_DAMAGE 24
 #define HERETIC_GLASS_REFRACTION_BONUS 6
+#define HERETIC_GLASS_BARRIER_REFLECTIONS 2
+#define HERETIC_GLASS_REFLECTION_WEAR 15
 
 /datum/heretic_path/glass
 	id = PATH_GLASS
 	deed_type = /datum/heretic_deed/glass
 	name = "Стекло"
 	desc = "Прожигайте линию стеклянным светом. Призмы усиливают луч и позволяют стрелять из-за угла."
-	strengths = "Дальний удар без подготовки, расходящиеся лучи, преломление за углы и защитные преграды."
+	strengths = "Дальний удар без подготовки, расходящиеся лучи, преломление за углы и преграды, отражающие энергетические выстрелы."
 	weaknesses = "Призмы можно разбить. Лучи заранее отмечают клетки, а стены и перестройка сети прерывают трассу."
 	knowledge = list(
 		/datum/eldritch_knowledge/base_glass,
@@ -728,13 +730,14 @@
 
 /obj/structure/heretic_glass_barrier
 	name = "refracted pane"
-	desc = "Острое стекло застыло поперёк прохода. Оно задерживает всех, включая создателя, но пропускает его стеклянные лучи. Разбейте преграду или коснитесь её нулевым жезлом. Создатель может убрать её рукой."
+	desc = "Острое стекло застыло поперёк прохода. Оно задерживает всех, включая создателя, но пропускает его стеклянные лучи. Первые два отражаемых энергетических выстрела возвращаются по обратной траектории, повреждая стекло. Пули не отражаются. Разбейте преграду или коснитесь её нулевым жезлом. Создатель может убрать её рукой."
 	icon = 'modular_bluemoon/icons/obj/heretic_glass_effects.dmi'
 	icon_state = "glass_barrier"
 	anchored = TRUE
 	density = TRUE
 	opacity = FALSE
 	max_integrity = 45
+	var/reflections_left = HERETIC_GLASS_BARRIER_REFLECTIONS
 	var/datum/weakref/glass_ref
 	var/datum/weakref/knowledge_ref
 	var/expires_at
@@ -757,6 +760,29 @@
 /obj/structure/heretic_glass_barrier/proc/on_knowledge_deleted(datum/source)
 	SIGNAL_HANDLER
 	qdel(src)
+
+/obj/structure/heretic_glass_barrier/examine(mob/user)
+	. = ..()
+	. += span_notice("Осталось отражений: [reflections_left].")
+
+/obj/structure/heretic_glass_barrier/bullet_act(obj/item/projectile/projectile)
+	var/datum/eldritch_knowledge/base_glass/glass = glass_ref?.resolve()
+	if(!reflections_left || !glass || QDELETED(glass.glass_body) || glass.glass_body.stat == DEAD || world.time >= expires_at || !is_energy_reflectable_projectile(projectile) || istype(projectile, /obj/item/projectile/bullet))
+		return ..()
+	reflections_left--
+	projectile.setAngle(projectile.Angle + 180)
+	projectile.ignore_source_check = TRUE
+	projectile.homing = FALSE
+	if(projectile.homing_target && projectile.homing_target != projectile.firer && projectile.homing_target != projectile.fired_from && projectile.homing_target != projectile.original)
+		projectile.UnregisterSignal(projectile.homing_target, COMSIG_PARENT_QDELETING)
+	projectile.homing_target = null
+	projectile.range = max(0, min(projectile.range, projectile.decayedRange) - projectile.reflect_range_decrease)
+	projectile.decayedRange = projectile.range
+	new /obj/effect/temp_visual/heretic_glass/burst(get_turf(src), glass)
+	playsound(src, 'modular_bluemoon/sound/heretic/glass_release.ogg', 55, TRUE)
+	visible_message(span_warning("[src] вспыхивает и отражает [projectile]!"))
+	take_damage(max(HERETIC_GLASS_REFLECTION_WEAR, projectile.damage), BRUTE, sound_effect = FALSE)
+	return BULLET_ACT_FORCE_PIERCE
 
 /obj/structure/heretic_glass_barrier/process()
 	var/datum/eldritch_knowledge/base_glass/glass = glass_ref?.resolve()
@@ -980,7 +1006,7 @@
 
 /datum/eldritch_knowledge/spell/glass_barrier
 	name = "Хрупкая преграда"
-	desc = "За одну грань поднимите на свободном полу в пяти клетках прозрачную преграду на 12 секунд. Она имеет 45 прочности и задерживает всех, включая вас, но пропускает ваши стеклянные лучи. Можно держать две преграды; уберите свою рукой или разбейте. Нулевой жезл разрушает её сразу. Перезарядка 8 секунд."
+	desc = "За одну грань поднимите на свободном полу в пяти клетках прозрачную преграду на 12 секунд. Она имеет 45 прочности и задерживает всех, включая вас, но пропускает ваши стеклянные лучи. Возвращает до двух лазерных или энергетических выстрелов по обратной траектории, если их можно отразить. Каждый возврат снимает прочность в размере урона выстрела, но не менее 15. Пули не отражает. Можно держать две преграды; уберите свою рукой или разбейте. Нулевой жезл разрушает её сразу. Перезарядка 8 секунд."
 	gain_text = "Достаточно одной тонкой плоскости, чтобы разлучить протянутые руки."
 	cost = 1
 	route = PATH_GLASS
@@ -999,7 +1025,7 @@
 	cost = 2
 	route = PATH_GLASS
 	passive_values = list(5, 6, 7)
-	passive_desc = "Вместимость составляет 5 / 6 / 7 граней, прочность преград — 60 / 75 / 90. Вознесение даёт вместимость 8. Улучшение не заполняет запас и не чинит прежний урон."
+	passive_desc = "Вместимость составляет 5 / 6 / 7 граней, прочность преград — 60 / 75 / 90. Вознесение даёт вместимость 8. Улучшение не заполняет запас, не чинит прежний урон и не восстанавливает отражения."
 	var/datum/weakref/glass_ref
 
 /datum/eldritch_knowledge/glass_temper/on_body_gain(mob/living/user)
@@ -1138,7 +1164,7 @@
 
 /obj/effect/proc_holder/spell/pointed/heretic_glass/barrier
 	name = "Хрупкая преграда"
-	desc = "За грань создайте прозрачную преграду на свободном полу в пяти клетках. Она задерживает всех, но пропускает ваши стеклянные лучи; имеет 45 прочности и исчезает через 12 секунд. Одновременно можно держать две. Свою преграду можно убрать рукой."
+	desc = "За грань создайте прозрачную преграду на свободном полу в пяти клетках. Она задерживает всех, но пропускает ваши стеклянные лучи; имеет 45 прочности и исчезает через 12 секунд. Возвращает до двух отражаемых энергетических выстрелов по обратной траектории, теряя прочность в размере их урона, но не менее 15 за возврат. Пули не отражает. Одновременно можно держать две. Свою преграду можно убрать рукой."
 	action_icon_state = "glass_barrier"
 	charge_max = 8 SECONDS
 
@@ -1196,3 +1222,5 @@
 #undef HERETIC_GLASS_BEAM_DAMAGE
 #undef HERETIC_GLASS_SPLIT_DAMAGE
 #undef HERETIC_GLASS_REFRACTION_BONUS
+#undef HERETIC_GLASS_BARRIER_REFLECTIONS
+#undef HERETIC_GLASS_REFLECTION_WEAR
