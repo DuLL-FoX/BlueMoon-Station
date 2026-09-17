@@ -90,9 +90,7 @@ test.each([
 ])('подготовка отправляет выбранный путь и ступень %s', (stage, label) => {
   const ui = setup();
   fireEvent.click(ui.getByText('Моя роль'));
-  fireEvent.click(ui.container.querySelectorAll('.Dropdown__control')[0]);
   fireEvent.click(ui.getByText('Пепел'));
-  fireEvent.click(ui.container.querySelectorAll('.Dropdown__control')[1]);
   fireEvent.click(ui.getByText(label));
   fireEvent.click(ui.getByText('Изучить до ступени'));
   const call = ui.topic.mock.calls.find(([message]) => message.type === 'act/prepare_path');

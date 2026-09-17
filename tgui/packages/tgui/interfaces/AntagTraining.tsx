@@ -206,6 +206,12 @@ const TrainingStart = ({ navigate }: { navigate: (tab: string) => void }) => {
   );
 };
 
+const pathStages = [
+  { value: '1', label: 'Начало: ступень 1' },
+  { value: '4', label: 'Основы: ступень 4' },
+  { value: '9', label: 'Полный путь: ступень 9' },
+];
+
 const TrainingRecipes = () => {
   const { act, data } = useBackend<AntagTrainingData>();
   const [path, setPath] = useState(data.selected_path || data.paths[0]?.id || '');
@@ -216,11 +222,17 @@ const TrainingRecipes = () => {
   return (
     <>
       <Section title="Подготовить путь">
-        <Stack wrap align="center">
-          <Stack.Item><Dropdown width={15} selected={data.selected_path || path} disabled={!!data.selected_path} options={data.paths.map((entry) => ({ value: entry.id, displayText: entry.name }))} onSelected={setPath} /></Stack.Item>
-          <Stack.Item><Dropdown width={19} selected={stage} options={[{ value: '1', displayText: 'Начало: ступень 1' }, { value: '4', displayText: 'Основы: ступень 4' }, { value: '9', displayText: 'Полный путь: ступень 9' }]} onSelected={setStage} /></Stack.Item>
-          <Stack.Item><Button disabled={blocked || !path} onClick={() => act('prepare_path', { id: data.selected_path || path, stage })}>Изучить до ступени</Button></Stack.Item>
-        </Stack>
+        <Box mb={1}>
+          {data.paths.map((entry) => (
+            <Button key={entry.id} tooltip={entry.desc} selected={(data.selected_path || path) === entry.id} disabled={!!data.selected_path && data.selected_path !== entry.id} onClick={() => setPath(entry.id)}>{entry.name}</Button>
+          ))}
+        </Box>
+        <Box>
+          {pathStages.map((entry) => (
+            <Button key={entry.value} selected={stage === entry.value} onClick={() => setStage(entry.value)}>{entry.label}</Button>
+          ))}
+          <Button icon="book-open" color="good" disabled={blocked || !path} onClick={() => act('prepare_path', { id: data.selected_path || path, stage })}>Изучить до ступени</Button>
+        </Box>
         <Box color="label" mt={1}>Сейчас: ступень {data.path_stage}. Подготовка выдаёт нужные знания и учебные души. Вознесение проводится отдельно. Для смены пути начните новым персонажем ниже.</Box>
       </Section>
       {!!data.resource && <Section title={`${data.resource.name}: ${data.resource.value} / ${data.resource.max}`}><Box>{data.resource.description}</Box></Section>}
