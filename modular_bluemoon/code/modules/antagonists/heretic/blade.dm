@@ -1,4 +1,5 @@
 #define HERETIC_BLADE_LIMIT 3
+#define HERETIC_BLADE_TEMPO_RECOVERY (15 SECONDS)
 #define HERETIC_BLADE_LUNGE_KNOCKDOWN (1.5 SECONDS)
 #define HERETIC_BLADE_FEINT_WINDUP (0.6 SECONDS)
 #define HERETIC_BLADE_FEINT_WINDOW (3 SECONDS)
@@ -26,7 +27,7 @@
 	required_atoms = list(/obj/item/kitchen/knife, /obj/item/stack/sheet/metal)
 	result_atoms = list(/obj/item/melee/sickly_blade/duelist)
 	combat_resource_name = "Темп"
-	combat_resource_desc = "Начальный запас — 2 Темпа. Удар тёмным клинком даёт 1 Темп раз в 4 секунды; парирование, изученная хватка и активация метки также дают Темп. Выпад, финт, танец и круговой разрез стоят по 1 Темпу. Ответ после парирования бесплатен."
+	combat_resource_desc = "Начальный запас — 2 Темпа; пока их меньше, единица возвращается через 15 секунд после последней траты. Удар тёмным клинком даёт 1 Темп раз в 4 секунды; парирование, изученная хватка и активация метки также дают Темп. Выпад, финт, танец и круговой разрез стоят по 1 Темпу. Ответ после парирования бесплатен."
 	combat_resource = 2
 	combat_resource_max = 3
 	combat_resource_action = /obj/effect/proc_holder/spell/self/heretic_blade/parry
@@ -41,9 +42,23 @@
 	var/datum/status_effect/heretic_parry/active_parry
 	var/datum/status_effect/heretic_blade_opening/opening_effect
 	var/next_strike_tempo = 0
+	COOLDOWN_DECLARE(tempo_recovery)
 
 /datum/eldritch_knowledge/base_blade/on_body_gain(mob/living/user)
 	grant_combat_power(user)
+	COOLDOWN_START(src, tempo_recovery, HERETIC_BLADE_TEMPO_RECOVERY)
+
+/datum/eldritch_knowledge/base_blade/on_life(mob/user)
+	var/mob/living/body = user
+	if(!istype(body) || body.stat == DEAD || combat_resource >= initial(combat_resource) || !COOLDOWN_FINISHED(src, tempo_recovery))
+		return
+	gain_combat_resource()
+	COOLDOWN_START(src, tempo_recovery, HERETIC_BLADE_TEMPO_RECOVERY)
+
+/datum/eldritch_knowledge/base_blade/spend_combat_resource(amount = 1)
+	. = ..()
+	if(.)
+		COOLDOWN_START(src, tempo_recovery, HERETIC_BLADE_TEMPO_RECOVERY)
 
 /datum/eldritch_knowledge/base_blade/on_body_lose(mob/living/user)
 	remove_combat_power()
@@ -87,10 +102,10 @@
 	for(var/datum/weakref/blade_ref in created_blades.Copy())
 		if(!blade_ref.resolve())
 			created_blades -= blade_ref
-	if(length(created_blades) >= HERETIC_BLADE_LIMIT)
-		to_chat(user, span_warning("У вас уже есть три тёмных клинка. Потерянный клинок можно вернуть изученным зовом."))
-		return FALSE
-	return TRUE
+	return length(created_blades) < HERETIC_BLADE_LIMIT
+
+/datum/eldritch_knowledge/base_blade/special_failure_reason(mob/living/user)
+	return "У вас уже есть три тёмных клинка. Потерянный клинок можно вернуть изученным зовом."
 
 /datum/eldritch_knowledge/base_blade/on_finished_recipe(mob/living/user, list/atoms, loc)
 	if(!recipe_snowflake_check(atoms, loc, list(), user))
@@ -244,6 +259,7 @@
 	var/blocks_left = 1
 	var/master_stance = FALSE
 	var/stance_ready = TRUE
+	var/ally_notice_shown = FALSE
 	var/mutable_appearance/stance_overlay
 
 /datum/status_effect/heretic_parry/on_creation(mob/living/new_owner, datum/eldritch_knowledge/base_blade/knowledge, window, blocks, master = FALSE)
@@ -380,6 +396,11 @@
 	if(!update_stance_feedback())
 		return BLOCK_NONE
 	if(ismob(attacker) && (attacker == source || IS_HERETIC(attacker) || IS_HERETIC_MONSTER(attacker)))
+		if(attacker != source && !ally_notice_shown)
+			ally_notice_shown = TRUE
+			var/datum/antag_training_session/training = GLOB.antag_training_sessions[source.ckey]
+			var/training_hint = training?.current_body == source ? " Для проверки стойки на полигоне соперник должен выбрать роль «Снаряжение и бой»." : ""
+			to_chat(source, span_warning("Стойка не отражает атаки служителей Мансуса.[training_hint]"))
 		return BLOCK_NONE
 	if(!(attack_type & (ATTACK_TYPE_PROJECTILE | ATTACK_TYPE_THROWN)) && !source.Adjacent(attacker))
 		return BLOCK_NONE
@@ -678,12 +699,13 @@
 	clothes_req = FALSE
 	charge_max = 10 SECONDS
 	range = 5
+	aim_assist_radius = 1
 	action_icon = 'modular_bluemoon/icons/obj/heretic_actions.dmi'
 	action_icon_state = "cleave"
 	action_background_icon_state = "bg_ecult"
 
 /obj/effect/proc_holder/spell/pointed/heretic_lunge/can_target(atom/target, mob/user, silent)
-	if(!heretic_check(user, isliving(target), silent, "Укажите самого противника: предметы и пол не подходят для выпада."))
+	if(!heretic_check(user, isliving(target), silent, "Рядом с указанной клеткой нет противника для выпада."))
 		return FALSE
 	var/mob/living/victim = target
 	if(!heretic_check(user, victim.stat != DEAD, silent, "Выпад нельзя направить на мёртвую цель."))
@@ -748,9 +770,10 @@
 
 /obj/effect/proc_holder/spell/pointed/heretic_feint
 	name = "Финт"
-	desc = "За 1 Темп раскройте видимого противника до трёх клеток. Через 0,6 секунды следующее попадание клинком или выпадом в течение трёх секунд нанесёт ещё 10 ушибов. Нужны свой клинок и свободная вторая рука. Стены, стойка и уже открытый ответ мешают финту; усиления парирования на него не действуют."
+	desc = "За 1 Темп сделайте ложный замах по видимому противнику не дальше трёх клеток. Через 0,6 секунды он открывается на три секунды: ваше первое попадание по нему клинком или выпадом нанесёт ещё 10 ушибов. Нужны свой клинок и свободная вторая рука. Стены, стойка и уже открытый ответ мешают финту; усиления парирования на него не действуют."
 	clothes_req = FALSE
 	range = HERETIC_BLADE_FEINT_RANGE
+	aim_assist_radius = 1
 	charge_max = HERETIC_BLADE_FEINT_COOLDOWN
 	action_icon = 'modular_bluemoon/icons/obj/heretic_actions.dmi'
 	action_icon_state = "furious_steel"
@@ -781,6 +804,7 @@
 		heretic_revert_cast(user)
 
 #undef HERETIC_BLADE_LIMIT
+#undef HERETIC_BLADE_TEMPO_RECOVERY
 #undef HERETIC_BLADE_LUNGE_KNOCKDOWN
 #undef HERETIC_BLADE_FEINT_WINDUP
 #undef HERETIC_BLADE_FEINT_WINDOW

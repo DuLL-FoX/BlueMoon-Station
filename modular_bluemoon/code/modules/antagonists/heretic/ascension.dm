@@ -187,10 +187,10 @@
 /// Объявление появляется только после подбора и резервирования настоящих компонентов.
 /datum/eldritch_knowledge/final_eldritch/proc/begin_ascension_ritual(mob/living/user, obj/effect/eldritch/rune)
 	var/datum/heretic_path/path = GLOB.heretic_paths[route]
-	if(!path || finished || !COOLDOWN_FINISHED(src, ascension_warning))
-		return FALSE
 	var/datum/antagonist/heretic/heretic = IS_HERETIC(user)
-	if(!heretic)
+	if(!path || finished || !heretic)
+		return FALSE
+	if(!heretic.simulated && !COOLDOWN_FINISHED(src, ascension_warning))
 		return FALSE
 	heretic.announce_threat()
 	if(world.time < heretic.ascension_ready_at)

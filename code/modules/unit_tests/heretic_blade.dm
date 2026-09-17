@@ -654,3 +654,46 @@
 	UnregisterSignal(source, COMSIG_MOVABLE_MOVED)
 	var/mob/living/target = evading_target.resolve()
 	target.forceMove(escape_turf)
+
+/// Клик мимо противника выбирает ближайшего к клетке клика в пределах одной клетки.
+/datum/unit_test/heretic_blade_aim_assist/Run()
+	var/list/fixture = make_blade_fixture()
+	var/mob/living/user = fixture["user"]
+	var/mob/living/attacker = fixture["attacker"]
+	var/obj/effect/proc_holder/spell/pointed/heretic_lunge/lunge = allocate(/obj/effect/proc_holder/spell/pointed/heretic_lunge)
+	attacker.forceMove(get_step(get_step(user, EAST), EAST))
+	var/turf/beside = get_step(attacker, NORTH)
+	TEST_ASSERT_EQUAL(lunge.nearby_target(user, beside), attacker, "Пустая клетка рядом с противником выбирает его.")
+	TEST_ASSERT_NULL(lunge.nearby_target(user, locate(user.x, user.y + 4, user.z)), "Клик вдали от противника никого не выбирает.")
+	var/mob/living/carbon/human/closer = allocate(/mob/living/carbon/human, beside)
+	TEST_ASSERT_EQUAL(lunge.nearby_target(user, beside), closer, "Из двух противников выбирается стоящий на клетке клика.")
+
+/// Темп возвращается к начальному запасу после паузы и не растёт выше него.
+/datum/unit_test/heretic_blade_tempo_recovery/Run()
+	var/list/fixture = make_blade_fixture()
+	var/mob/living/user = fixture["user"]
+	var/datum/eldritch_knowledge/base_blade/knowledge = fixture["knowledge"]
+	knowledge.combat_resource = initial(knowledge.combat_resource)
+	TEST_ASSERT(knowledge.spend_combat_resource(), "Трата Темпа проходит.")
+	knowledge.on_life(user)
+	TEST_ASSERT_EQUAL(knowledge.combat_resource, 1, "Сразу после траты Темп не возвращается.")
+	COOLDOWN_RESET(knowledge, tempo_recovery)
+	knowledge.on_life(user)
+	TEST_ASSERT_EQUAL(knowledge.combat_resource, 2, "После паузы Темп возвращается.")
+	COOLDOWN_RESET(knowledge, tempo_recovery)
+	knowledge.on_life(user)
+	TEST_ASSERT_EQUAL(knowledge.combat_resource, 2, "Восстановление не поднимает Темп выше начального запаса.")
+
+/// Руна называет лимит клинков вместо общего отказа.
+/datum/unit_test/heretic_blade_limit_reason/Run()
+	var/list/fixture = make_blade_fixture()
+	var/mob/living/user = fixture["user"]
+	var/datum/eldritch_knowledge/base_blade/knowledge = fixture["knowledge"]
+	var/obj/effect/eldritch/big/rune = allocate(/obj/effect/eldritch/big, run_loc_floor_bottom_left)
+	allocate(/obj/item/kitchen/knife, run_loc_floor_bottom_left)
+	allocate(/obj/item/stack/sheet/metal, run_loc_floor_bottom_left)
+	for(var/index in 1 to 2)
+		var/obj/item/melee/sickly_blade/duelist/spare = allocate(/obj/item/melee/sickly_blade/duelist, run_loc_floor_bottom_left)
+		knowledge.created_blades += WEAKREF(spare)
+	TEST_ASSERT(!knowledge.recipe_snowflake_check(list(), rune, list(), user), "Четвёртый клинок не создаётся.")
+	TEST_ASSERT(findtext(rune.recipe_failure_reason(knowledge, user), "три тёмных клинка"), "Отказ руны объясняет лимит клинков.")

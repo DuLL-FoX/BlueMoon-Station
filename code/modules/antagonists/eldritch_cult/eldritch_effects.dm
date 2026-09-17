@@ -313,7 +313,7 @@
 		if(world.time < heretic.ascension_ready_at)
 			return reject_ritual(user, ritual, "Завеса ещё укреплена после предупреждения станции. До начала вознесения: [DisplayTimeText(heretic.ascension_ready_at - world.time)].")
 		else
-			return reject_ritual(user, ritual, "Завеса ещё не успокоилась. Между попытками начать вознесение должно пройти три минуты.")
+			return reject_ritual(user, ritual, "Завеса ещё не успокоилась после прошлой попытки. До следующей: [DisplayTimeText(COOLDOWN_TIMELEFT(ascension_ritual, ascension_warning))].")
 	var/ascension_started_at = world.time
 	if(ascension_announced)
 		show_ascension_body_preview(user)
@@ -405,6 +405,9 @@
 			summon_hint = " Это изготовление запасного сердца. Для своего сердца используйте «Призвать живое сердце»; потерянное вернётся после 5 секунд неподвижности."
 		else if(ritual.type == /datum/eldritch_knowledge/codex_cicatrix)
 			summon_hint = " Это изготовление запасной книги. Уже выданный кодекс можно получить способностью «Призвать кодекс»."
+		var/datum/antagonist/heretic/owner_role = IS_HERETIC(user)
+		if(owner_role?.simulated)
+			summon_hint += " На полигоне компоненты и тела выдаёт вкладка «Моя роль» → «Рецепты и готовые предметы» → «Компоненты»."
 		return "Не хватает свободных компонентов: [jointext(missing, ", ")]. Компоненты другого незавершённого обряда недоступны.[summon_hint]"
 	if(ritual.type == /datum/eldritch_knowledge/base_void)
 		var/turf/open/floor/floor = get_turf(src)
@@ -415,7 +418,7 @@
 		return "Нужны ваше живое сердце и назначенная цель: живая в крите, без сознания, в наручниках, лёжа или оглушённая, либо её труп за меньшую награду."
 	if(istype(ritual, /datum/eldritch_knowledge/final_eldritch))
 		return "Нужны [HERETIC_ASCENSION_SACRIFICES] назначенных душ и [HERETIC_ASCENSION_BODIES] человеческих тела. Тела еретиков и их слуг не подходят."
-	return "Особые условия обряда не выполнены. Проверьте требования выбранного ритуала в кодексе."
+	return ritual.special_failure_reason(user) || "Особые условия обряда не выполнены. Проверьте требования выбранного ритуала в кодексе."
 
 /obj/effect/eldritch/big
 	icon = 'modular_bluemoon/icons/obj/heretic_rune.dmi'

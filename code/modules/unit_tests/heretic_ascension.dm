@@ -395,3 +395,18 @@
 	spell.cast(list(), user)
 	TEST_ASSERT(QDELETED(first_circle), "Повторный такт удаляет предыдущий круг.")
 	TEST_ASSERT_NOTNULL(spell.winter_circle, "После повторного такта остаётся один новый круг.")
+
+/// Учебный еретик не ждёт три минуты между попытками вознесения.
+/datum/unit_test/heretic_ascension_training_retry/Run()
+	var/datum/antagonist/heretic/heretic = allocate_heretic()
+	heretic.simulated = TRUE
+	heretic.ascension_notice_sent = TRUE
+	heretic.selected_path = PATH_BLADE
+	var/mob/living/user = heretic.owner.current
+	var/obj/effect/eldritch/rune = allocate(/obj/effect/eldritch/big, run_loc_floor_bottom_left)
+	var/datum/eldritch_knowledge/final_eldritch/blade_final/final_knowledge = allocate(/datum/eldritch_knowledge/final_eldritch/blade_final)
+	COOLDOWN_START(final_knowledge, ascension_warning, 3 MINUTES)
+	TEST_ASSERT(final_knowledge.begin_ascension_ritual(user, rune), "Задержка повторной попытки не действует на полигоне.")
+	heretic.simulated = FALSE
+	COOLDOWN_START(final_knowledge, ascension_warning, 3 MINUTES)
+	TEST_ASSERT(!final_knowledge.begin_ascension_ritual(user, rune), "В раунде задержка сохраняется.")

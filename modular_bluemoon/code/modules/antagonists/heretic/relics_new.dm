@@ -49,6 +49,11 @@
 /datum/eldritch_knowledge/proc/new_path_relic_available()
 	return !new_path_relic_ref?.resolve()
 
+/// Причина отказа recipe_snowflake_check для сообщения руны.
+/datum/eldritch_knowledge/proc/special_failure_reason(mob/living/user)
+	var/obj/item/relic = new_path_relic_ref?.resolve()
+	return relic ? "[capitalize(relic.name)] уже существует. Новую реликвию можно создать только после утраты прежней." : null
+
 /datum/eldritch_knowledge/proc/make_new_path_relic(mob/living/user, turf/location, relic_type)
 	var/datum/antagonist/heretic/heretic = IS_HERETIC(user)
 	if(!new_path_relic_available() || heretic?.get_knowledge(type) != src)
