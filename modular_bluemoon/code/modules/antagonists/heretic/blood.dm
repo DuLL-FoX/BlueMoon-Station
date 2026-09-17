@@ -857,6 +857,7 @@
 	clothes_req = FALSE
 	invocation_type = "none"
 	range = HERETIC_BLOOD_RANGE
+	aim_assist_radius = 1
 	action_icon = 'modular_bluemoon/icons/obj/heretic_actions.dmi'
 	action_icon_state = "blood_release"
 	action_background_icon_state = "bg_ecult"

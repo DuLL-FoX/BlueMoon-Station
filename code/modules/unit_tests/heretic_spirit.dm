@@ -248,7 +248,8 @@
 	var/mob/living/victim = allocate(/mob/living/carbon/human, get_step(user, EAST))
 	var/datum/status_effect/heretic_spirit/separated/soul = spirit.separate(victim, spirit)
 	TEST_ASSERT(!spell.can_target(soul.anchor, user, TRUE), "Целью выбирается тело, а не душа.")
-	TEST_ASSERT(findtext(spell.heretic_failure_reason, "тело живого противника"), "Подсказка объясняет выбор тела.")
+	TEST_ASSERT(findtext(spell.heretic_failure_reason, "нет живого противника"), "Подсказка объясняет выбор тела.")
+	TEST_ASSERT_EQUAL(spell.nearby_target(user, soul.anchor), victim, "Клик по силуэту души выбирает её тело.")
 	var/obj/item/storage/box/box = allocate(/obj/item/storage/box, get_turf(victim))
 	victim.forceMove(box)
 	TEST_ASSERT(!spell.can_target(victim, user, TRUE), "Контейнер защищает цель.")
@@ -399,7 +400,7 @@
 	TEST_ASSERT_NOTNULL(soul, "Дальняя душа создана.")
 	victim.forceMove(get_step(victim, NORTH))
 	var/obj/structure/heretic_spirit_soul/anchor = soul.anchor
-	TEST_ASSERT(!spirit.cross(user, destination), "Обычная клетка за пределами трёх недоступна.")
+	TEST_ASSERT(spirit.cross_destination(user, destination) != destination, "Обычная клетка за пределами трёх недостижима.")
 	TEST_ASSERT(spirit.cross(user, anchor), "Собственная душа даёт дальнюю переправу.")
 	TEST_ASSERT_EQUAL(get_turf(user), destination, "Перевозчик достигает души.")
 	TEST_ASSERT(QDELETED(soul) && QDELETED(anchor), "Прибытие собирает душу.")
@@ -581,3 +582,25 @@
 	TEST_ASSERT_NOTNULL(trace, "На полу остаётся видимый след.")
 	allocated += trace
 	TEST_ASSERT_EQUAL(trace.icon_state, "sigil_spirit", "След использует символ пути духа.")
+
+/// Клик дальше шага или за преграду переносит на последнюю свободную клетку линии.
+/datum/unit_test/heretic_spirit_crossing_clamp/Run()
+	var/datum/antagonist/heretic/heretic = allocate_heretic(run_loc_floor_bottom_left)
+	heretic.selected_path = PATH_SPIRIT
+	heretic.gain_knowledge(/datum/eldritch_knowledge/base_spirit)
+	heretic.gain_knowledge(/datum/eldritch_knowledge/spell/spirit_step)
+	var/mob/living/user = heretic.owner.current
+	var/datum/eldritch_knowledge/base_spirit/spirit = heretic.get_knowledge(/datum/eldritch_knowledge/base_spirit)
+	var/datum/eldritch_knowledge/spell/spirit_step/knowledge = heretic.get_knowledge(/datum/eldritch_knowledge/spell/spirit_step)
+	var/obj/effect/proc_holder/spell/pointed/heretic_spirit/step/spell = knowledge.granted_spell
+	var/turf/origin = get_turf(user)
+	var/turf/clicked = locate(origin.x, origin.y + 4, origin.z)
+	TEST_ASSERT_EQUAL(spirit.cross_destination(user, clicked), locate(origin.x, origin.y + 3, origin.z), "Дальний клик укорачивается до шага.")
+	var/obj/blocker = allocate(/obj, locate(origin.x, origin.y + 2, origin.z))
+	blocker.density = TRUE
+	var/turf/before_blocker = locate(origin.x, origin.y + 1, origin.z)
+	TEST_ASSERT_EQUAL(spirit.cross_destination(user, clicked), before_blocker, "Преграда останавливает переправу перед собой.")
+	TEST_ASSERT(spell.can_target(clicked, user, TRUE), "Дальняя клетка за преградой принимается как направление.")
+	spell.cast(list(clicked), user)
+	TEST_ASSERT_EQUAL(get_turf(user), before_blocker, "Способность переносит на последнюю свободную клетку.")
+	TEST_ASSERT_EQUAL(spirit.combat_resource, 2, "Укороченная переправа стоит один обол.")

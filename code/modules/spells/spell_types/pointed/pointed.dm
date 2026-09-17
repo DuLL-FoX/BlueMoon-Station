@@ -10,6 +10,8 @@
 	var/self_castable = FALSE
 	/// Variable dictating if the spell will use turf based aim assist
 	var/aim_assist = TRUE
+	/// Промах мимо цели ищет ближайшего подходящего моба в этом радиусе от клика. 0 выключает поиск.
+	var/aim_assist_radius = 0
 
 /obj/effect/proc_holder/spell/pointed/Trigger(mob/user, skip_can_cast = TRUE)
 	if(!istype(user))
@@ -76,6 +78,8 @@
 				possible_targets += A
 		if(possible_targets.len == 1)
 			target = possible_targets[1]
+	if(aim_assist_radius && !intercept_check(caller, target, TRUE))
+		target = nearby_target(caller, target) || target
 	if(!intercept_check(caller, target))
 		return TRUE
 	if(!cast_check(FALSE, caller))
@@ -83,6 +87,22 @@
 	perform(list(target), user = caller)
 	remove_ranged_ability()
 	return TRUE // Do not do any underlying actions after the spell cast
+
+/// Ближайший к клику подходящий моб в aim_assist_radius; при равенстве побеждает ближний к заклинателю.
+/obj/effect/proc_holder/spell/pointed/proc/nearby_target(mob/living/caller, atom/clicked)
+	var/turf/center = get_turf(clicked)
+	if(!center)
+		return null
+	var/mob/living/best
+	var/best_score = INFINITY
+	for(var/mob/living/candidate in range(aim_assist_radius, center))
+		if(!intercept_check(caller, candidate, TRUE))
+			continue
+		var/score = get_dist(candidate, center) * 100 + get_dist(candidate, caller)
+		if(score < best_score)
+			best = candidate
+			best_score = score
+	return best
 
 /**
   * intercept_check: Specific spell checks for InterceptClickOn() targets.

@@ -825,6 +825,7 @@
 	deactive_msg = "Вы отпускаете невидимый ключ."
 	charge_max = 18 SECONDS
 	aim_assist = TRUE
+	aim_assist_radius = 1
 	var/opening_seal = FALSE
 
 /obj/effect/proc_holder/spell/pointed/heretic_lock/bolt/can_cast(mob/user, skipcharge, silent)

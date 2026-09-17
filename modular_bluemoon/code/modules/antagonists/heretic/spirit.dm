@@ -182,14 +182,35 @@
 	playsound(victim, 'modular_bluemoon/sound/heretic/spirit_grasp.ogg', 60, TRUE)
 	return TRUE
 
+/// Клетка переправы: сама цель, а при клике дальше шага или в преграду - последняя свободная клетка на линии к ней.
+/datum/eldritch_knowledge/base_spirit/proc/cross_destination(mob/living/user, atom/target)
+	var/obj/structure/heretic_spirit_soul/anchor = istype(target, /obj/structure/heretic_spirit_soul) ? target : null
+	var/datum/status_effect/heretic_spirit/separated/soul = anchor?.effect_ref?.resolve()
+	var/turf/origin = get_turf(user)
+	var/turf/clicked = get_turf(target)
+	if(!origin || !clicked || origin.z != clicked.z)
+		return null
+	if(soul?.spirit_ref?.resolve() == src && soul.validate_link() && clicked != origin && line_clear(origin, clicked, HERETIC_SPIRIT_RANGE) && !clicked.is_blocked_turf())
+		return clicked
+	var/turf/reached
+	for(var/turf/tile as anything in get_line(origin, clicked))
+		if(tile == origin)
+			continue
+		if(!line_clear(origin, tile, HERETIC_SPIRIT_STEP_RANGE))
+			break
+		if(!tile.is_blocked_turf())
+			reached = tile
+	return reached
+
 /datum/eldritch_knowledge/base_spirit/proc/cross(mob/living/user, atom/target, preserve_soul = FALSE)
 	var/datum/antagonist/heretic/heretic = IS_HERETIC(user)
 	var/datum/eldritch_knowledge/required = heretic?.get_knowledge(/datum/eldritch_knowledge/spell/spirit_step)
 	var/obj/structure/heretic_spirit_soul/anchor = istype(target, /obj/structure/heretic_spirit_soul) ? target : null
 	var/datum/status_effect/heretic_spirit/separated/soul = anchor?.effect_ref?.resolve()
-	var/turf/destination = get_turf(target)
-	var/step_range = soul?.spirit_ref?.resolve() == src && soul.validate_link() ? HERETIC_SPIRIT_RANGE : HERETIC_SPIRIT_STEP_RANGE
-	if(!can_use(user) || QDELETED(required) || combat_resource < 1 || user.buckled || user.anchored || HAS_TRAIT(user, TRAIT_NO_TELEPORT) || !line_clear(user, destination, step_range) || destination == get_turf(user) || destination.is_blocked_turf())
+	var/turf/destination = cross_destination(user, target)
+	if(soul && destination != get_turf(anchor))
+		soul = null
+	if(!can_use(user) || QDELETED(required) || combat_resource < 1 || user.buckled || user.anchored || HAS_TRAIT(user, TRAIT_NO_TELEPORT) || !destination)
 		return FALSE
 	var/turf/origin = get_turf(user)
 	if(!do_teleport(user, destination, channel = TELEPORT_CHANNEL_MAGIC) || get_turf(user) != destination)
@@ -872,7 +893,7 @@
 /obj/effect/proc_holder/spell/pointed/heretic_spirit/can_target(atom/target, mob/user, silent)
 	var/datum/antagonist/heretic/heretic = IS_HERETIC(user)
 	var/datum/eldritch_knowledge/base_spirit/spirit = heretic?.get_knowledge(/datum/eldritch_knowledge/base_spirit)
-	if(!heretic_check(user, isliving(target) && target != user, silent, "Выберите тело живого противника, а не силуэт души."))
+	if(!heretic_check(user, isliving(target) && target != user, silent, "Рядом с указанной клеткой нет живого противника."))
 		return FALSE
 	var/mob/living/victim = target
 	if(!heretic_check(user, !IS_HERETIC(victim) && !IS_HERETIC_MONSTER(victim), silent, "Это союзник Мансуса: еретики и их слуги защищены от этой способности.", target = victim))
@@ -885,8 +906,18 @@
 		return FALSE
 	return heretic_check(user, heretic_can_affect(user, victim, chargecost = 0), silent, "Цель защищена от магии.", target = victim)
 
+/// Клик по силуэту души выбирает её тело.
+/obj/effect/proc_holder/spell/pointed/heretic_spirit/nearby_target(mob/living/caller, atom/clicked)
+	var/obj/structure/heretic_spirit_soul/anchor = clicked
+	if(istype(anchor))
+		var/datum/status_effect/heretic_spirit/separated/soul = anchor.effect_ref?.resolve()
+		if(soul?.owner && intercept_check(caller, soul.owner, TRUE))
+			return soul.owner
+	return ..()
+
 /obj/effect/proc_holder/spell/pointed/heretic_spirit/sever
 	name = "Разлучение"
+	aim_assist_radius = 1
 	desc = "За один обол нанесите 20 ушибов и 15 выносливости и отделите душу врага на 10 секунд."
 	action_icon_state = "spirit_sever"
 	charge_max = 12 SECONDS
@@ -899,18 +930,14 @@
 
 /obj/effect/proc_holder/spell/pointed/heretic_spirit/step
 	name = "Переправа"
-	desc = "За обол переместитесь по открытой линии до трёх клеток и восстановите 15 выносливости. Выбранная собственная душа увеличивает дальность до пяти клеток и собирается по прибытии. В намерении «Разоружить» душа остаётся для дальнейшей охоты: срок и истощение не обновляются, обол за сбор не выдаётся."
+	desc = "За обол переместитесь по открытой линии до трёх клеток и восстановите 15 выносливости. Клик дальше шага или в преграду переносит на последнюю свободную клетку в ту сторону. Выбранная собственная душа увеличивает дальность до пяти клеток и собирается по прибытии. В намерении «Разоружить» душа остаётся для дальнейшей охоты: срок и истощение не обновляются, обол за сбор не выдаётся."
 	action_icon_state = "spirit_step"
 	charge_max = 12 SECONDS
 
 /obj/effect/proc_holder/spell/pointed/heretic_spirit/step/can_target(atom/target, mob/user, silent)
 	var/datum/antagonist/heretic/heretic = IS_HERETIC(user)
 	var/datum/eldritch_knowledge/base_spirit/spirit = heretic?.get_knowledge(/datum/eldritch_knowledge/base_spirit)
-	var/obj/structure/heretic_spirit_soul/anchor = istype(target, /obj/structure/heretic_spirit_soul) ? target : null
-	var/datum/status_effect/heretic_spirit/separated/soul = anchor?.effect_ref?.resolve()
-	var/step_range = soul && soul.spirit_ref?.resolve() == spirit && soul.validate_link() ? HERETIC_SPIRIT_RANGE : HERETIC_SPIRIT_STEP_RANGE
-	var/turf/destination = get_turf(target)
-	return heretic_check(user, target && (isturf(target) || isturf(target.loc)) && spirit?.can_use(user) && spirit.line_clear(user, destination, step_range) && destination != get_turf(user) && !destination.is_blocked_turf(), silent, "Выберите другую свободную клетку в пределах шага и прямой видимости; связанная душа увеличивает дальность.")
+	return heretic_check(user, target && (isturf(target) || isturf(target.loc)) && spirit?.can_use(user) && spirit.cross_destination(user, target), silent, "В эту сторону нет ни одной свободной клетки: путь закрыт сразу.")
 
 /obj/effect/proc_holder/spell/pointed/heretic_spirit/step/cast(list/targets, mob/living/user)
 	var/datum/antagonist/heretic/heretic = IS_HERETIC(user)
@@ -938,6 +965,7 @@
 
 /obj/effect/proc_holder/spell/pointed/heretic_spirit/reap
 	name = "Жатва неприкаянных"
+	aim_assist_radius = 1
 	desc = "Бесплатный удар на 22 ушиба. Душа предупреждает о втором ударе через 2 секунды: ещё 25 ушибов, если жертва окажется дальше одной клетки от неё."
 	action_icon_state = "spirit_reap"
 	charge_max = 18 SECONDS
