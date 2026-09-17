@@ -28,6 +28,9 @@
 		power = lock.seal_spell
 	var/atom/movable/screen/alert/heretic_resource/indicator = body.throw_alert(HERETIC_RESOURCE_ALERT, /atom/movable/screen/alert/heretic_resource, no_anim = TRUE)
 	indicator.update_resource(path, resource, feedback, power)
+	var/reminder = deed_reminder()
+	if(reminder)
+		indicator.desc += " [reminder]"
 	return indicator
 
 /datum/antagonist/heretic/proc/clear_combat_resource_alert(mob/living/body)

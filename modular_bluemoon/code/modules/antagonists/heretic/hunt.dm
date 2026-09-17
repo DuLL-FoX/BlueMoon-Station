@@ -121,6 +121,9 @@ GLOBAL_LIST_EMPTY(heretic_sacrificed_minds)
 			GLOB.reality_smash_track.track_history_mind(new_target)
 		sac_targetted[REF(new_target)] = new_target.current.real_name
 		log_game("[key_name(owner)] получает цель охоты: [key_name(new_target)].")
+		var/reminder = deed_reminder()
+		if(reminder && owner?.current)
+			to_chat(owner.current, span_notice(reminder))
 	refresh_book_ui()
 
 /datum/antagonist/heretic/proc/hunt_target_ready(mob/living/carbon/human/victim)

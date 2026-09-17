@@ -91,6 +91,7 @@
 	if(deed.progress < deed.goal())
 		if(user)
 			to_chat(user, span_notice("[deed.name]: [deed.progress] из [deed.goal()] на ступени [deed.tier + 1]."))
+		update_combat_resource_alert()
 		refresh_book_ui()
 		return TRUE
 	deed.tier++
@@ -104,11 +105,19 @@
 		to_chat(user, span_eldritch("[deed.name]: ступень [deed.tier] из [length(deed.tier_goals)] завершена. Вы получили [reward_text]."))
 		user.playsound_local(get_turf(user), 'sound/effects/magic.ogg', 30, TRUE)
 	log_game("[key_name(owner)] завершает ступень [deed.tier] дела [deed.name] на пути [selected_path].")
+	update_combat_resource_alert()
 	refresh_book_ui()
 	return TRUE
 
 /datum/antagonist/heretic/proc/deed_data()
 	return deed?.get_data()
+
+/// Строка о незавершённом деле для подсказки значка и напоминаний.
+/datum/antagonist/heretic/proc/deed_reminder()
+	if(role_removed || !deed || deed.complete())
+		return null
+	var/reward = deed.tier + 1 >= HERETIC_DEED_SIDE_TIER ? "[HERETIC_DEED_KNOWLEDGE] очко знаний и [HERETIC_DEED_SIDE_KNOWLEDGE] побочное" : "[HERETIC_DEED_KNOWLEDGE] очко знаний"
+	return "Дело пути «[deed.name]»: ступень [deed.tier + 1] из [length(deed.tier_goals)], [deed.progress]/[deed.goal()]. Награда за ступень: [reward]. [deed.next_step]"
 
 /datum/antagonist/heretic/proc/advance_combat_deed(mob/living/victim, path_id)
 	var/mob/living/user = owner?.current

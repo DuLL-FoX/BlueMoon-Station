@@ -97,3 +97,11 @@
 		var/datum/heretic_path/path = GLOB.heretic_paths[path_id]
 		var/datum/eldritch_knowledge/knowledge = heretic.get_knowledge(path.knowledge[1])
 		TEST_ASSERT(knowledge.combat_resource >= 2, "Путь [path_id] начинает хотя бы с двумя единицами запаса.")
+
+/// Напоминание о деле есть, пока оно не завершено, и называет следующий шаг.
+/datum/unit_test/heretic_deed_reminder/Run()
+	var/datum/antagonist/heretic/heretic = allocate_deed_heretic(PATH_BLADE)
+	var/reminder = heretic.deed_reminder()
+	TEST_ASSERT(findtext(reminder, heretic.deed.name) && findtext(reminder, heretic.deed.next_step), "Напоминание называет дело и следующий шаг.")
+	heretic.deed.tier = length(heretic.deed.tier_goals)
+	TEST_ASSERT_NULL(heretic.deed_reminder(), "Завершённое дело не напоминает о себе.")
