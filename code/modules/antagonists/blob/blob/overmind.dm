@@ -283,10 +283,6 @@ GLOBAL_LIST_EMPTY(blob_nodes)
 		forceMove(NewLoc)
 		return TRUE
 
-//forceMove() у /mob/camera не зовёт onTransitZ(): худ разума остался бы на плоскостях прежнего этажа.
-/mob/camera/blob/forceMove(atom/destination)
-	abstract_move(destination)
-
 /mob/camera/blob/move_vertically(direction)
 	var/turf/destination = can_z_move(direction, get_turf(src), null, ZMOVE_IGNORE_OBSTACLES|ZMOVE_FEEDBACK)
 	if(!destination)

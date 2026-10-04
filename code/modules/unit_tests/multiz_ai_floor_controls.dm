@@ -74,3 +74,17 @@
 	changer.Click(null, null, "icon-x=16;icon-y=24")
 	usr = null
 	TEST_ASSERT_EQUAL(ghost.z, lower.z + 1, "Кнопка этажей не подняла госта на уровень выше")
+
+/// ИИ, борг и консоль тревог слышат тревоги со всех этажей своей связки, а не только со своего.
+/datum/unit_test/multiz_alarm_listeners_cover_stack
+
+/datum/unit_test/multiz_alarm_listeners_cover_stack/Run()
+	var/list/levels = multiz_ai_floor_test_levels()
+	var/turf/lower = locate(10, 10, levels[1])
+	var/mob/living/carbon/human/donor = allocate(/mob/living/carbon/human)
+	var/mob/living/silicon/ai/ai = allocate(/mob/living/silicon/ai, lower, null, donor)
+	var/mob/living/silicon/robot/borg = allocate(/mob/living/silicon/robot, lower)
+	var/obj/machinery/computer/station_alert/console = allocate(/obj/machinery/computer/station_alert, lower)
+	for(var/datum/station_alert/alerts as anything in list(ai.alert_control, borg.alert_control, console.alert_control))
+		for(var/level in levels)
+			TEST_ASSERT(level in alerts.listener.allowed_z_levels, "[alerts.holder] на нижнем этаже не слышит тревог z=[level]")
