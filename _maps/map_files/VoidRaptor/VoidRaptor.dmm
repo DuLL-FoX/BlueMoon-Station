@@ -53887,6 +53887,15 @@
 /obj/structure/disposalpipe/segment,
 /turf/open/floor/plasteel/dark/textured/corner,
 /area/security/brig)
+"mkv" = (
+/obj/machinery/atmospherics/pipe/simple/scrubbers/hidden/layer2,
+/obj/machinery/atmospherics/pipe/simple/supply/hidden/layer4,
+/obj/item/hilbertshotel/ghostdojo{
+	pixel_x = 16;
+	pixel_y = 16
+	},
+/turf/open/floor/plasteel/smooth/small,
+/area/commons/dorms)
 "mkA" = (
 /obj/structure/flora/grass/jungle,
 /obj/structure/flora/ausbushes/grassybush,
@@ -133967,7 +133976,7 @@ mVH
 fVY
 oqB
 fHM
-iHD
+mkv
 rXp
 wVZ
 wVZ

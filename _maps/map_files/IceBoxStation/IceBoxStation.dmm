@@ -2497,6 +2497,10 @@
 	},
 /turf/open/floor/plasteel/dark,
 /area/cargo/miningdock)
+"aGs" = (
+/obj/item/hilbertshotel/ghostdojo,
+/turf/open/floor/plasteel/grimy,
+/area/hallway/secondary/entry)
 "aGJ" = (
 /obj/structure/cable/yellow{
 	icon_state = "4-8"
@@ -255245,7 +255249,7 @@ vGI
 oai
 xtK
 xmM
-oai
+aGs
 gAo
 vGI
 xsT
