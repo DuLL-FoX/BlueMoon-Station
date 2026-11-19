@@ -8,6 +8,7 @@ type GameplayData = {
   disable_combat_cursor: boolean;
   disable_combat_mouse_lock: boolean;
   smartlink: boolean;
+  no_tetris_storage: boolean;
   deathrattle: boolean;
   arrivalrattle: boolean;
   intent_style: boolean;
@@ -37,6 +38,7 @@ const GAMEPLAY_TOGGLES: { key: string; label: string; flag: string; invert?: boo
   { key: 'disable_combat_cursor', label: 'Отключить курсор боя', flag: 'disable_combat_cursor', tooltip: 'Не менять курсор при входе в боевой режим (harm intent)' },
   { key: 'disable_combat_mouse_lock', label: 'Отключить захват мыши в бою', flag: 'disable_combat_mouse_lock', tooltip: 'Не блокировать курсор мыши в пределах окна при входе в боевой режим' },
   { key: 'smartlink', label: 'Смартлинк (боевой HUD)', flag: 'smartlink', tooltip: 'Показывать боевой HUD со счётчиком патронов и зарядом энергии при удержании оружия в руках' },
+  { key: 'no_tetris_storage', label: 'Отключить тетрис-инвентарь', flag: 'no_tetris_storage', tooltip: 'Сумки и рюкзаки показывают вещи обычными слотами, а не раскладкой по размеру предметов' },
   { key: 'autostand', label: 'Автоматическое вставание', flag: 'autostand', tooltip: 'Автоматически вставать после падения или когда вас поднимают' },
   { key: 'long_strip_menu', label: 'Длинное меню раздевания', flag: 'long_strip_menu', tooltip: 'Показывать расширенное меню взаимодействия с одеждой' },
   { key: 'shift_invites', label: 'Приглашения в смену', flag: 'shift_invites', tooltip: 'Если на станции не осталось ни одного сотрудника СБ, медика или инженера, наблюдатели, гости гост-кафе и игроки в лобби получают приглашение со ссылкой "Войти в смену". Вход в пустой отдел приносит 3 М$ в конце раунда, если продержаться в смене 30 минут или до эвакуации' },

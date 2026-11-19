@@ -368,7 +368,7 @@
 		"screentip_pref", "screentip_images", "tgui_fancy", "tgui_lock", "chat_on_map", "chat_on_map_looc",
 		"see_chat_non_mob", "see_chat_emotes", "hud_toggle_flash", "mood_vignette", "view_pixelshift",
 		"parallax", "clientfps", "runechat_anim", "windowflash", "windownoise", "examine_headshots", "auto_capitalize_enabled",
-		"action_buttons_hide_on_spawn", "autostand", "long_strip_menu", "shift_invites", "disable_combat_cursor",
+		"action_buttons_hide_on_spawn", "autostand", "long_strip_menu", "shift_invites", "disable_combat_cursor", "no_tetris_storage",
 		"disable_combat_mouse_lock", "ticket_nickname", "adminhelp_windowflash",
 		"screenshake", "damagescreenshake", "recoil_screenshake",
 		"outline_color", "screentip_color", "hud_toggle_color", "max_chat_length", "lighting_blur",
@@ -406,6 +406,17 @@
 		if(!(key in root_keys))
 			orphans += key
 	TEST_ASSERT(!length(orphans), "ключи одиночной записи, которых полный путь не пишет (настройка потеряется при переподключении): [jointext(orphans, ", ")]")
+
+/// Меню настроек отдаёт тумблер тетрис-инвентаря: новый редактор его терял, и переключить настройку было нечем.
+/datum/unit_test/preferences_no_tetris_storage_toggle
+
+/datum/unit_test/preferences_no_tetris_storage_toggle/Run()
+	var/datum/preferences/prefs = new
+	prefs.no_tetris_storage = TRUE
+	var/list/data = prefs.ui_data(null)
+	qdel(prefs)
+	TEST_ASSERT(("no_tetris_storage" in data), "меню настроек не отдаёт тумблер тетрис-инвентаря")
+	TEST_ASSERT_EQUAL(data["no_tetris_storage"], TRUE, "меню настроек показывает не то значение тетрис-инвентаря")
 
 // Проверяем настоящий переход версии, включая повторный вход и перезапись слотов персонажей.
 /datum/unit_test/preferences_version_migration_preserves_modular_settings/Run()

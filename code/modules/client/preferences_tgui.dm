@@ -144,6 +144,7 @@
 	.["disable_combat_cursor"] = disable_combat_cursor
 	.["disable_combat_mouse_lock"] = disable_combat_mouse_lock
 	.["smartlink"] = smartlink
+	.["no_tetris_storage"] = no_tetris_storage
 
 	// Screenshake
 	.["screenshake"] = screenshake
@@ -532,6 +533,11 @@
 				if("disable_combat_mouse_lock")
 					disable_combat_mouse_lock = !disable_combat_mouse_lock
 					dirty_var = "disable_combat_mouse_lock"
+				if("no_tetris_storage")
+					no_tetris_storage = !no_tetris_storage
+					dirty_var = "no_tetris_storage"
+					// Открытая сумка сразу перерисовывается в новом виде.
+					user.active_storage?.ui_show(user)
 				if("smartlink") //BLUEMOON ADD
 					smartlink = !smartlink
 					dirty_var = "smartlink"
